@@ -117,6 +117,7 @@ class ERKGeneric(RungeKuttaTimeIntegrator):
         super(ERKGeneric, self).__init__(equation, solution, fields, dt, solver_parameters)
         self._initialized = False
         V = solution.function_space()
+        assert V==equation.trial_space
         self.solution_old = firedrake.Function(V, name='old solution')
 
         self.tendency = []
@@ -187,6 +188,130 @@ class ERKGeneric(RungeKuttaTimeIntegrator):
         """Solve i-th stage and assign solution to :attr:`self.solution`."""
         self.update_solution(i_stage)
         self.solve_tendency(i_stage, t, update_forcings)
+
+
+class DIRKGeneric(RungeKuttaTimeIntegrator):
+    """
+    Generic implementation of Diagonally Implicit Runge Kutta schemes.
+
+    All derived classes must define the Butcher tableau coefficients :attr:`a`,
+    :attr:`b`, :attr:`c`.
+    """
+    def __init__(self, equation, solution, fields, dt,
+                 bnd_conditions=None, solver_parameters={}, terms_to_add='all'):
+        """
+        :arg equation: the equation to solve
+        :type equation: :class:`Equation` object
+        :arg solution: :class:`Function` where solution will be stored
+        :arg fields: Dictionary of fields that are passed to the equation
+        :type fields: dict of :class:`Function` or :class:`Constant` objects
+        :arg float dt: time step in seconds
+        :kwarg dict bnd_conditions: Dictionary of boundary conditions passed to the equation
+        :kwarg dict solver_parameters: PETSc solver options
+        :kwarg terms_to_add: Defines which terms of the equation are to be
+            added to this solver. Default 'all' implies ['implicit', 'explicit', 'source'].
+        :type terms_to_add: 'all' or list of 'implicit', 'explicit', 'source'.
+        """
+        super(DIRKGeneric, self).__init__(equation, solution, fields, dt, solver_parameters)
+        self.solver_parameters.setdefault('snes_monitor', False)
+        self.solver_parameters.setdefault('snes_type', 'newtonls')
+        self._initialized = False
+
+        fs = solution.function_space()
+        assert fs==equation.trial_space
+        self.solution_old = firedrake.Function(fs, name='old solution')
+
+        test = self.equation.test
+        mixed_space = len(fs) > 1
+
+        # Allocate tendency fields
+        self.k = []
+        for i in range(self.n_stages):
+            fname = '{:}_k{:}'.format(self.name, i)
+            self.k.append(firedrake.Function(fs, name=fname))
+
+        # construct variational problems
+        self.F = []
+        if not mixed_space:
+            for i in range(self.n_stages):
+                for j in range(i+1):
+                    if j == 0:
+                        u = self.solution_old + self.a[i][j]*self.dt_const*self.k[j]
+                    else:
+                        u += self.a[i][j]*self.dt_const*self.k[j]
+                self.F.append(-firedrake.inner(self.k[i], test)*firedrake.dx +
+                              self.equation.residual(u, self.solution_old, fields, bnd_conditions))
+        else:
+            # solution must be split before computing sum
+            # pass components to equation in a list
+            for i in range(self.n_stages):
+                for j in range(i+1):
+                    if j == 0:
+                        u = []  # list of components in the mixed space
+                        for s, k in zip(split(self.solution_old), split(self.k[j])):
+                            u.append(s + self.a[i][j]*self.dt_const*k)
+                    else:
+                        for l, k in enumerate(split(self.k[j])):
+                            u[l] += self.a[i][j]*self.dt_const*k
+                self.F.append(-firedrake.inner(self.k[i], test)*firedrake.dx +
+                              self.equation.residual(u, self.solution_old, fields, bnd_conditions))
+        self.update_solver()
+
+        # construct expressions for stage solutions
+        self.sol_expressions = []
+        for i_stage in range(self.n_stages):
+            sol_expr = sum(map(operator.mul, self.k[:i_stage+1], self.dt_const*self.a[i_stage][:i_stage+1]))
+            self.sol_expressions.append(sol_expr)
+        self.final_sol_expr = self.solution_old + sum(map(operator.mul, self.k, self.dt_const*self.b))
+
+    def update_solver(self):
+        """Create solver objects"""
+        self.solver = []
+        for i in range(self.n_stages):
+            p = firedrake.NonlinearVariationalProblem(self.F[i], self.k[i])
+            sname = '{:}_stage{:}_'.format(self.name, i)
+            self.solver.append(
+                firedrake.NonlinearVariationalSolver(p,
+                                           solver_parameters=self.solver_parameters,
+                                           options_prefix=sname))
+
+    def initialize(self, init_cond):
+        """Assigns initial conditions to all required fields."""
+        self.solution_old.assign(init_cond)
+        self._initialized = True
+
+    def update_solution(self, i_stage):
+        """
+        Updates solution to i_stage sub-stage.
+
+        Tendencies must have been evaluated first.
+        """
+        self.solution.assign(self.solution_old + self.sol_expressions[i_stage])
+
+    def solve_tendency(self, i_stage, t, update_forcings=None):
+        """
+        Evaluates the tendency of i-th stage.
+        """
+        if i_stage == 0:
+            # NOTE solution may have changed in coupled system
+            self.solution_old.assign(self.solution)
+        if not self._initialized:
+            error('Time integrator {:} is not initialized'.format(self.name))
+        if update_forcings is not None:
+            update_forcings(t + self.c[i_stage]*self.dt)
+        self.solver[i_stage].solve()
+
+    def get_final_solution(self):
+        """Assign final solution to :attr:`self.solution`"""
+        self.solution.assign(self.final_sol_expr)
+
+    def solve_stage(self, i_stage, t, update_forcings=None):
+        """Solve i-th stage and assign solution to :attr:`self.solution`."""
+        self.solve_tendency(i_stage, t, update_forcings)
+        self.update_solution(i_stage)
+
+
+CFL_UNCONDITIONALLY_STABLE = -1
 
 
 class AbstractRKScheme(ABC):
@@ -318,6 +443,180 @@ class SSPRK33Abstract(AbstractRKScheme):
     cfl_coeff = 1.0
 
 
+class BackwardEulerAbstract(AbstractRKScheme):
+    """
+    Backward Euler method
+    """
+    a = [[1.0]]
+    b = [1.0]
+    c = [1.0]
+    cfl_coeff = CFL_UNCONDITIONALLY_STABLE
+
+
+class ImplicitMidpointAbstract(AbstractRKScheme):
+    r"""
+    Implicit midpoint method, second order.
+
+    This method has the Butcher tableau
+
+    .. math::
+        \begin{array}{c|c}
+        0.5 & 0.5 \\ \hline
+            & 1.0
+        \end{array}
+
+    """
+    a = [[0.5]]
+    b = [1.0]
+    c = [0.5]
+    cfl_coeff = CFL_UNCONDITIONALLY_STABLE
+
+
+class CrankNicolsonAbstract(AbstractRKScheme):
+    """
+    Crack-Nicolson scheme
+    """
+    a = [[0.0, 0.0],
+         [0.5, 0.5]]
+    b = [0.5, 0.5]
+    c = [0.0, 1.0]
+    cfl_coeff = CFL_UNCONDITIONALLY_STABLE
+
+
+class DIRK22Abstract(AbstractRKScheme):
+    r"""
+    2-stage, 2nd order, L-stable Diagonally Implicit Runge Kutta method
+
+    This method has the Butcher tableau
+
+    .. math::
+        \begin{array}{c|cc}
+        \gamma &   \gamma &       0 \\
+              1 & 1-\gamma & \gamma \\ \hline
+                &       1/2 &     1/2
+        \end{array}
+
+    with :math:`\gamma = (2 + \sqrt{2})/2`.
+
+    From DIRK(2,3,2) IMEX scheme in Ascher et al. (1997)
+
+    Ascher et al. (1997). Implicit-explicit Runge-Kutta methods for
+    time-dependent partial differential equations. Applied Numerical
+    Mathematics, 25:151-167. http://dx.doi.org/10.1137/0732037
+    """
+    gamma = (2.0 + np.sqrt(2.0))/2.0
+    a = [[gamma, 0],
+         [1-gamma, gamma]]
+    b = [1-gamma, gamma]
+    c = [gamma, 1]
+    cfl_coeff = CFL_UNCONDITIONALLY_STABLE
+
+
+class DIRK23Abstract(AbstractRKScheme):
+    r"""
+    2-stage, 3rd order Diagonally Implicit Runge Kutta method
+
+    This method has the Butcher tableau
+
+    .. math::
+        \begin{array}{c|cc}
+          \gamma &    \gamma &       0 \\
+        1-\gamma & 1-2\gamma & \gamma \\ \hline
+                  &        1/2 &     1/2
+        \end{array}
+
+    with :math:`\gamma = (3 + \sqrt{3})/6`.
+
+    From DIRK(2,3,3) IMEX scheme in Ascher et al. (1997)
+
+    Ascher et al. (1997). Implicit-explicit Runge-Kutta methods for
+    time-dependent partial differential equations. Applied Numerical
+    Mathematics, 25:151-167. http://dx.doi.org/10.1137/0732037
+    """
+    gamma = (3 + np.sqrt(3))/6
+    a = [[gamma, 0],
+         [1-2*gamma, gamma]]
+    b = [0.5, 0.5]
+    c = [gamma, 1-gamma]
+    cfl_coeff = CFL_UNCONDITIONALLY_STABLE
+
+
+class DIRK33Abstract(AbstractRKScheme):
+    """
+    3-stage, 3rd order, L-stable Diagonally Implicit Runge Kutta method
+
+    From DIRK(3,4,3) IMEX scheme in Ascher et al. (1997)
+
+    Ascher et al. (1997). Implicit-explicit Runge-Kutta methods for
+    time-dependent partial differential equations. Applied Numerical
+    Mathematics, 25:151-167. http://dx.doi.org/10.1137/0732037
+    """
+    gamma = 0.4358665215
+    b1 = -3.0/2.0*gamma**2 + 4*gamma - 1.0/4.0
+    b2 = 3.0/2.0*gamma**2 - 5*gamma + 5.0/4.0
+    a = [[gamma, 0, 0],
+         [(1-gamma)/2, gamma, 0],
+         [b1, b2, gamma]]
+    b = [b1, b2, gamma]
+    c = [gamma, (1+gamma)/2, 1]
+    cfl_coeff = CFL_UNCONDITIONALLY_STABLE
+
+
+class DIRK43Abstract(AbstractRKScheme):
+    """
+    4-stage, 3rd order, L-stable Diagonally Implicit Runge Kutta method
+
+    From DIRK(4,4,3) IMEX scheme in Ascher et al. (1997)
+
+    Ascher et al. (1997). Implicit-explicit Runge-Kutta methods for
+    time-dependent partial differential equations. Applied Numerical
+    Mathematics, 25:151-167. http://dx.doi.org/10.1137/0732037
+    """
+    a = [[0.5, 0, 0, 0],
+         [1.0/6.0, 0.5, 0, 0],
+         [-0.5, 0.5, 0.5, 0],
+         [3.0/2.0, -3.0/2.0, 0.5, 0.5]]
+    b = [3.0/2.0, -3.0/2.0, 0.5, 0.5]
+    c = [0.5, 2.0/3.0, 0.5, 1.0]
+    cfl_coeff = CFL_UNCONDITIONALLY_STABLE
+
+
+class DIRKLSPUM2Abstract(AbstractRKScheme):
+    """
+    DIRKLSPUM2, 3-stage, 2nd order, L-stable Diagonally Implicit Runge Kutta method
+
+    From IMEX RK scheme (17) in Higureras et al. (2014).
+
+    Higueras et al (2014). Optimized strong stability preserving IMEX
+    Runge-Kutta methods. Journal of Computational and Applied Mathematics
+    272(2014) 116-140. http://dx.doi.org/10.1016/j.cam.2014.05.011
+    """
+    a = [[2.0/11.0, 0, 0],
+         [205.0/462.0, 2.0/11.0, 0],
+         [2033.0/4620.0, 21.0/110.0, 2.0/11.0]]
+    b = [24.0/55.0, 1.0/5.0, 4.0/11.0]
+    c = [2.0/11.0, 289.0/462.0, 751.0/924.0]
+    cfl_coeff = 4.34  # NOTE for linear problems, nonlin => 3.82
+
+
+class DIRKLPUM2Abstract(AbstractRKScheme):
+    """
+    DIRKLPUM2, 3-stage, 2nd order, L-stable Diagonally Implicit Runge Kutta method
+
+    From IMEX RK scheme (20) in Higureras et al. (2014).
+
+    Higueras et al (2014). Optimized strong stability preserving IMEX
+    Runge-Kutta methods. Journal of Computational and Applied Mathematics
+    272(2014) 116-140. http://dx.doi.org/10.1016/j.cam.2014.05.011
+    """
+    a = [[2.0/11.0, 0, 0],
+         [41.0/154.0, 2.0/11.0, 0],
+         [289.0/847.0, 42.0/121.0, 2.0/11.0]]
+    b = [1.0/3.0, 1.0/3.0, 1.0/3.0]
+    c = [2.0/11.0, 69.0/154.0, 67.0/77.0]
+    cfl_coeff = 4.34  # NOTE for linear problems, nonlin => 3.09
+
+
 class ERKLSPUM2(ERKGeneric, ERKLSPUM2Abstract):
     pass
 
@@ -335,4 +634,40 @@ class ERKEuler(ERKGeneric, ForwardEulerAbstract):
 
 
 class SSPRK33(ERKGeneric, SSPRK33Abstract):
+    pass
+
+
+class BackwardEuler(DIRKGeneric, BackwardEulerAbstract):
+    pass
+
+
+class ImplicitMidpoint(DIRKGeneric, ImplicitMidpointAbstract):
+    pass
+
+
+class CrankNicolsonRK(DIRKGeneric, CrankNicolsonAbstract):
+    pass
+
+
+class DIRK22(DIRKGeneric, DIRK22Abstract):
+    pass
+
+
+class DIRK23(DIRKGeneric, DIRK23Abstract):
+    pass
+
+
+class DIRK33(DIRKGeneric, DIRK33Abstract):
+    pass
+
+
+class DIRK43(DIRKGeneric, DIRK43Abstract):
+    pass
+
+
+class DIRKLSPUM2(DIRKGeneric, DIRKLSPUM2Abstract):
+    pass
+
+
+class DIRKLPUM2(DIRKGeneric, DIRKLPUM2Abstract):
     pass

@@ -8,8 +8,13 @@ class BaseEquation(ABC):
     """This should be a list of BaseTerm sub-classes that form the terms of the equation."""
     terms = []
 
-    def __init__(self, test):
+    def __init__(self, test, trial_space):
+        """
+        :arg test: Test function to be used in all terms.
+        :arg trial_space: The trial functionspace; determines the discretisation
+                             depdending on e.g. element continuity."""
         self.test = test
+        self.trial_space = trial_space
 
         # use default quadrature for now
         self.dx = firedrake.dx
@@ -19,7 +24,7 @@ class BaseEquation(ABC):
         # self._terms stores the actual instances of the BaseTerm-classes in self.terms
         self._terms = []
         for TermClass in self.terms:
-            self._terms.append(TermClass(test, self.dx, self.ds, self.dS))
+            self._terms.append(TermClass(test, trial_space, self.dx, self.ds, self.dS))
 
     def mass_term(self, trial):
         """Return the UFL for the mass term \int test * trial * dx typically used in the time term."""
@@ -42,8 +47,9 @@ class BaseEquation(ABC):
 
 class BaseTerm(ABC):
     """A term in an equation, that can produce the UFL expression for its contribution to the FEM residual."""
-    def __init__(self, test, dx, ds, dS):
+    def __init__(self, test, trial_space, dx, ds, dS):
         self.test = test
+        self.trial_space = trial_space
         self.dx = dx
         self.ds = ds
         self.dS = dS
