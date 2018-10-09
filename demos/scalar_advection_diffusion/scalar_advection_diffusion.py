@@ -14,7 +14,6 @@ W = VectorFunctionSpace(mesh, "CG", 1)
 
 x, y = SpatialCoordinate(mesh)
 velocity = as_vector(((0.5 - y)*sin(pi*x), (x - 0.5)*sin(pi*y)))
-velocity = Constant((0.0, 0.0))
 u = Function(W).interpolate(velocity)
 File('u.pvd').write(u)
 
