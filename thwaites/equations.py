@@ -53,7 +53,7 @@ class BaseTerm(ABC):
         self.dx = dx
         self.ds = ds
         self.dS = dS
-        self.mesh = test.function_space().mesh()
+        self.mesh = test.ufl_domain()
         self.n = firedrake.FacetNormal(self.mesh)
 
     @abstractmethod
