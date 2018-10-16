@@ -15,11 +15,12 @@ class BaseEquation(ABC):
                              depdending on e.g. element continuity."""
         self.test = test
         self.trial_space = trial_space
+        self.mesh = trial_space.mesh()
 
         # use default quadrature for now
-        self.dx = firedrake.dx
-        self.ds = firedrake.ds
-        self.dS = firedrake.dS
+        self.dx = firedrake.dx(domain=self.mesh)
+        self.ds = firedrake.ds(domain=self.mesh)
+        self.dS = firedrake.dS(domain=self.mesh)
 
         # self._terms stores the actual instances of the BaseTerm-classes in self.terms
         self._terms = []
