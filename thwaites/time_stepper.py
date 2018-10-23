@@ -55,6 +55,7 @@ class TimeIntegrator(TimeIntegratorBase):
         super(TimeIntegrator, self).__init__()
 
         self.equation = equation
+        self.test = firedrake.TestFunction(solution.function_space())
         self.solution = solution
         self.fields = fields
         self.dt = dt
@@ -127,8 +128,8 @@ class ERKGeneric(RungeKuttaTimeIntegrator):
 
         # fully explicit evaluation
         trial = firedrake.TrialFunction(V)
-        self.a_rk = self.equation.mass_term(trial)
-        self.l_rk = self.dt_const*self.equation.residual(self.solution, self.solution, self.fields, bnd_conditions)
+        self.a_rk = self.equation.mass_term(self.test, trial)
+        self.l_rk = self.dt_const*self.equation.residual(self.test, self.solution, self.solution, self.fields, bnd_conditions)
 
         self._nontrivial = self.l_rk != 0
 
@@ -221,7 +222,6 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
         assert fs==equation.trial_space
         self.solution_old = firedrake.Function(fs, name='old solution')
 
-        test = self.equation.test
         mixed_space = len(fs) > 1
 
         # Allocate tendency fields
@@ -239,8 +239,8 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
                         u = self.solution_old + self.a[i][j]*self.dt_const*self.k[j]
                     else:
                         u += self.a[i][j]*self.dt_const*self.k[j]
-                self.F.append(-firedrake.inner(self.k[i], test)*firedrake.dx +
-                              self.equation.residual(u, self.solution_old, fields, bnd_conditions))
+                self.F.append(self.equation.mass_term(self.test, self.k[i]) -
+                              self.equation.residual(self.test, u, self.solution_old, fields, bnd_conditions))
         else:
             # solution must be split before computing sum
             # pass components to equation in a list
@@ -253,8 +253,8 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
                     else:
                         for l, k in enumerate(split(self.k[j])):
                             u[l] += self.a[i][j]*self.dt_const*k
-                self.F.append(-firedrake.inner(self.k[i], test)*firedrake.dx +
-                              self.equation.residual(u, self.solution_old, fields, bnd_conditions))
+                self.F.append(self.equation.mass_term(self.test, self.k[i]) -
+                              self.equation.residual(self.test, u, self.solution_old, fields, bnd_conditions))
         self.update_solver()
 
         # construct expressions for stage solutions

@@ -55,12 +55,10 @@ d_file.write(rho)
 T = 10.
 dt = T/1000.
 
-u_test, p_test = TestFunctions(Z)
-mom_eq = MomentumEquation(u_test, Z.sub(0))
-cty_eq = ContinuityEquation(p_test, Z.sub(1))
+mom_eq = MomentumEquation(Z.sub(0), Z.sub(0))
+cty_eq = ContinuityEquation(Z.sub(1), Z.sub(1))
 
-rho_test = TestFunction(Q)
-rho_eq = ScalarAdvectionDiffusionEquation(rho_test, Q)
+rho_eq = ScalarAdvectionDiffusionEquation(Q, Q)
 
 u, p = split(z)
 

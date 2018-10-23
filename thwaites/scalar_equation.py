@@ -22,9 +22,9 @@ class ScalarAdvectionTerm(BaseTerm):
     r"""
     Scalar advection term (non-conservative): u \dot \div(q)
     """
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         u = fields['velocity']
-        phi = self.test
+        phi = test
         n = self.n
         q = trial
 
@@ -68,16 +68,16 @@ class ScalarDiffusionTerm(BaseTerm):
     Mathematics, 206(2):843-872. http://dx.doi.org/10.1016/j.cam.2006.08.029
 
     """
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         kappa = fields['diffusivity']
-        phi = self.test
+        phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
         q = trial
 
         diff_tensor = as_matrix([[kappa, 0, ],
                                  [0, kappa, ]])
-        grad_test = grad(self.test)
+        grad_test = grad(phi)
         diff_flux = dot(diff_tensor, grad(q))
 
         F = 0

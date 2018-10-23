@@ -43,8 +43,7 @@ outfile.write(q)
 T = 10.
 dt = T/600.0
 
-test = TestFunction(V)
-eq = ScalarAdvectionDiffusionEquation(test, V)
+eq = ScalarAdvectionDiffusionEquation(V, V)
 fields = {'velocity': u, 'diffusivity': kappa}
 # weakly applied dirichlet bcs on top and bottom
 q_top = 1.0
