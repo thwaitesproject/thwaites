@@ -1,5 +1,6 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, CellDiameter, as_matrix, avg
+from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional
+from firedrake import CellDiameter, as_vector, as_matrix, avg
 from .utility import is_continuous, normal_is_continuous, tensor_jump
 
 """
@@ -36,7 +37,7 @@ class MomentumAdvectionTerm(BaseTerm):
             elif 'un' in bc:
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
-                u_in = 0
+                u_in = as_vector((0,0))
             F += conditional(dot(u_adv, n) < 0,
                              dot(phi, u_in)*dot(u_adv, n),
                              dot(phi, u)*dot(u_adv, n)) * self.ds(id)
