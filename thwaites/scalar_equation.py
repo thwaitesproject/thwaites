@@ -118,6 +118,47 @@ class ScalarDiffusionTerm(BaseTerm):
 
         return -F
 
+class ScalarSourceTerm(BaseTerm):
+    r"""
+        Source term :math:`s_T`
+    """
+
+    def residual(self, trial, trial_lagged, fields, bcs):
+        if 'source' not in fields:
+            return 0
+
+        phi = self.test
+        source = fields['source']
+
+        # NOTE, here source term F is already on the RHS
+        F = dot(phi, source)*self.dx
+
+        return F
+
+
+class ScalarAbsorptionTerm(BaseTerm):
+    r"""
+            Absorption Term :math:`\alpha_T T`
+        """
+
+    def residual(self, trial, trial_lagged, fields, bcs):
+        if 'absorption' not in fields:
+            return 0
+
+        phi = self.test
+        source = fields['absorption']
+
+        # NOTE, here absorption term F is already on the RHS
+        F = -dot(phi, source)*self.dx
+
+        return F
+
+
+
+
+
+
+
 
 class ScalarAdvectionEquation(BaseEquation):
     """
