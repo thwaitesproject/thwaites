@@ -55,12 +55,10 @@ d_file.write(rho)
 T = 10.
 dt = T/1000.
 
-u_test, p_test = TestFunctions(Z)
-mom_eq = MomentumEquation(u_test, Z.sub(0))
-cty_eq = ContinuityEquation(p_test, Z.sub(1))
+mom_eq = MomentumEquation(Z.sub(0), Z.sub(0))
+cty_eq = ContinuityEquation(Z.sub(1), Z.sub(1))
 
-rho_test = TestFunction(Q)
-rho_eq = ScalarAdvectionDiffusionEquation(rho_test, Q)
+rho_eq = ScalarAdvectionDiffusionEquation(Q, Q)
 
 u, p = split(z)
 
@@ -73,7 +71,7 @@ mumps_solver_parameters = {
     'ksp_type': 'preonly',
     'pc_type': 'lu',
     'pc_factor_mat_solver_type': 'mumps',
-    'mat_type': 'aij'
+    'mat_type': 'aij',
 }
 # weakly applied dirichlet bcs on top and bottom for density
 rho_top = 1.0
@@ -82,7 +80,11 @@ rho_bcs = {3: {'q': rho_bottom}, 4: {'q': rho_top}}
 rho_solver_parameters = mumps_solver_parameters
 
 no_normal_flow = {'un': 0.}
-up_bcs = {1: no_normal_flow, 2: no_normal_flow, 3: no_normal_flow}
+# NOTE: in the current implementation of the momentum advection term,
+# there's a subtle difference between not specifying a boundary, and
+# specifying an empty {} boundary - is equivalent to specifying a 
+# (0,0) 'u' value - it only adds a stabilisation on the outflow - need to check correctness
+up_bcs = {1: no_normal_flow, 2: no_normal_flow, 3: no_normal_flow, 4: {}}
 up_solver_parameters = mumps_solver_parameters
 
 up_coupling = [{'pressure': 1}, {'velocity': 0}]

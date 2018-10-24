@@ -1,5 +1,6 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, CellDiameter, as_matrix, avg
+from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional
+from firedrake import CellDiameter, as_vector, as_matrix, avg
 from .utility import is_continuous, normal_is_continuous, tensor_jump
 
 """
@@ -22,9 +23,9 @@ class MomentumAdvectionTerm(BaseTerm):
     r"""
     Momentum advection term (non-conservative): u \dot \grad(u)
     """
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         u_adv = trial_lagged
-        phi = self.test
+        phi = test
         n = self.n
         u = trial
 
@@ -36,7 +37,7 @@ class MomentumAdvectionTerm(BaseTerm):
             elif 'un' in bc:
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
-                u_in = 0
+                u_in = as_vector((0,0))
             F += conditional(dot(u_adv, n) < 0,
                              dot(phi, u_in)*dot(u_adv, n),
                              dot(phi, u)*dot(u_adv, n)) * self.ds(id)
@@ -77,16 +78,16 @@ class ViscosityTerm(BaseTerm):
     Mathematics, 206(2):843-872. http://dx.doi.org/10.1016/j.cam.2006.08.029
 
     """
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         mu = fields['viscosity']
-        phi = self.test
+        phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
         u = trial
 
         diff_tensor = as_matrix([[mu, 0],
                                  [0, mu]])
-        grad_test = nabla_grad(self.test)
+        grad_test = nabla_grad(phi)
         stress = dot(diff_tensor, nabla_grad(u))
         if self.symmetric_stress:
             stress += dot(diff_tensor, grad(u))
@@ -150,8 +151,8 @@ class ViscosityTerm(BaseTerm):
 
 
 class PressureGradientTerm(BaseTerm):
-    def residual(self, trial, trial_lagged, fields, bcs):
-        phi = self.test
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        phi = test
         n = self.n
         p = fields['pressure']
 
@@ -172,8 +173,8 @@ class PressureGradientTerm(BaseTerm):
 
 
 class DivergenceTerm(BaseTerm):
-    def residual(self, trial, trial_lagged, fields, bcs):
-        psi = self.test
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        psi = test
         n = self.n
         u = fields['velocity']
 
@@ -197,11 +198,11 @@ class DivergenceTerm(BaseTerm):
 
 
 class MomentumSourceTerm(BaseTerm):
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         if 'source' not in fields:
             return 0
 
-        phi = self.test
+        phi = test
         source = fields['source']
 
         # NOTE, here source term F is already on the RHS

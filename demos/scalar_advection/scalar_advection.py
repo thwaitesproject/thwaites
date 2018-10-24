@@ -62,8 +62,7 @@ T = 2*math.pi
 dt = T/6000.0
 q_in = Constant(1.0)
 
-test = TestFunction(V)
-eq = ScalarAdvectionEquation(test)
+eq = ScalarAdvectionEquation(V, V)
 fields = {'velocity': u}
 bc_in = {'q': q_in}
 bcs = {1: bc_in, 2: bc_in, 3: bc_in, 4: bc_in}
