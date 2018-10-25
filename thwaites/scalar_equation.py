@@ -142,14 +142,15 @@ class ScalarAbsorptionTerm(BaseTerm):
         """
 
     def residual(self, trial, trial_lagged, fields, bcs):
-        if 'absorption' not in fields:
+        if 'absorption coefficient' not in fields:
             return 0
 
         phi = self.test
-        source = fields['absorption']
+        alpha = fields['absorption coefficient']
 
         # NOTE, here absorption term F is already on the RHS
-        F = -dot(phi, source)*self.dx
+        # implement absorption term implicitly at current time step.
+        F = -dot(phi, alpha*trial)*self.dx
 
         return F
 
