@@ -147,6 +147,17 @@ class ViscosityTerm(BaseTerm):
             if 'u' in bc and 'un' in bc:
                 raise ValueError("Cannot apply both 'u' and 'un' bc on same boundary")
 
+
+            ### added in by Will monday 28th oct
+            # want to have a non-dimensionalised form to test rayleigh-taylor instability
+            # reynolds number completely describes dimensionless problem and is applied as
+            # (1/Re) * viscous term.
+            # Make sure that mu = 1.0 in running script!
+
+            if 'reynolds' in fields:
+                Re = fields['reynolds']
+                F = (1.0/Re)*F
+
         return -F
 
 
