@@ -1,4 +1,5 @@
 from .time_stepper import TimeIntegratorBase
+from .momentum_equation import PressureGradientTerm, DivergenceTerm
 import firedrake
 
 
@@ -55,9 +56,6 @@ class SaddlePointTimeIntegrator(CoupledTimeIntegrator):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         assert(len(equations) == 2)
         assert(len(solution.function_space().split()) == 2)
-        # FIXME:
-        # assert(equations[0].test[0].ufl_element() == equations[1].trial_space.ufl_element())
-        # assert(equations[1].test.ufl_element() == equations[0].trial_space.ufl_element())
 
 
 class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
@@ -97,4 +95,85 @@ class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
         if not self._initialized:
             self.initialize(self.solution)
         self.solution_old.assign(self.solution)
+        self.solver.solve()
+
+
+class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
+    def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}, theta=1.0,
+                 predictor_solver_parameters={}, picard_iterations=1):
+        super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
+        self.theta = firedrake.Constant(theta)
+        self.predictor_solver_parameters = predictor_solver_parameters
+        self.picard_iterations = picard_iterations
+
+        self.solution_old = firedrake.Function(self.solution)
+        self.solution_lag = firedrake.Function(self.solution)
+        self.u_test, self.p_test = firedrake.TestFunctions(self.solution.function_space())
+
+        # the predictor space is the same as the first sub-space of the solution space, but indexed independently
+        mesh = self.solution.function_space().mesh()
+        self.u_space = firedrake.FunctionSpace(mesh, self.solution.split()[0].ufl_element())
+        self.u_star_test = firedrake.TestFunction(self.u_space)
+        self.u_star = firedrake.Function(self.u_space)
+
+        self._initialized = False
+
+    def initialize(self, init_solution):
+        self.solution_old.assign(init_solution)
+        u, p = firedrake.split(self.solution)
+        u_old, p_old = self.solution_old.split()
+        u_star_theta = (1-self.theta)*u_old + self.theta*self.u_star
+        u_theta = (1-self.theta)*u_old + self.theta*u
+        p_theta = (1-self.theta)*p_old + self.theta*p
+        u_lag, p_lag = self.solution_lag.split()
+        u_lag_theta = (1-self.theta)*u_old + self.theta*u_lag
+        p_lag_theta = (1-self.theta)*p_old + self.theta*p_lag
+
+        # setup predictor solve, this solves for u_start only using a fixed p_lag_theta for pressure
+        self.fields_star = self.fields.copy()
+        self.fields_star['pressure'] =  p_lag_theta
+
+        self.Fstar = self.equations[0].mass_term(self.u_star_test, self.u_star-u_old)
+        self.Fstar -= self.dt_const*self.equations[0].residual(self.u_star_test, u_star_theta, u_lag_theta, self.fields_star, bcs=self.bcs)
+        self.predictor_problem = firedrake.NonlinearVariationalProblem(self.Fstar, self.u_star)
+        self.predictor_solver = firedrake.NonlinearVariationalSolver(self.predictor_problem,
+                                                                     solver_parameters=self.predictor_solver_parameters,
+                                                                     options_prefix='predictor_' + self.name)
+
+        # the correction solve, solving the coupled system:
+        #   u1 = u* + G ( p_theta - p_lag_theta)
+        #   div(u1) = 0
+        self.F = self.equations[0].mass_term(self.u_test, u-self.u_star)
+
+        pg_term = [term for term in self.equations[0]._terms if isinstance(term, PressureGradientTerm)][0]
+        pg_fields = self.fields.copy()
+        # note that p_theta-p_lag_theta = theta*(p1-p_lag)
+        pg_fields['pressure'] = self.theta * (p - p_lag)
+        self.F += pg_term.residual(self.u_test, u_theta, u_lag_theta, pg_fields, bcs=self.bcs)
+
+        div_term = [term for term in self.equations[1]._terms if isinstance(term, DivergenceTerm)][0]
+        div_fields = self.fields.copy()
+        div_fields['velocity'] = u
+        self.F += div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
+
+        self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution)
+        self.solver = firedrake.NonlinearVariationalSolver(self.problem,
+                                                           solver_parameters=self.solver_parameters,
+                                                           options_prefix=self.name)
+
+        self._initialized = True
+
+
+    def advance(self, t, update_forcings=None):
+        if not self._initialized:
+            self.initialize(self.solution)
+        self.solution_old.assign(self.solution)
+        for i in range(self.picard_iterations):
+            self.picard_step()
+
+    def picard_step(self):
+        self.solution_lag.assign(self.solution)
+        # solve for self.u_star
+        self.predictor_solver.solve()
+        # pressure correction solve, solves for final solution (corrected velocity and pressure)
         self.solver.solve()
