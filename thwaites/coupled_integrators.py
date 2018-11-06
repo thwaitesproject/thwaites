@@ -100,11 +100,12 @@ class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
 
 class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
     def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}, theta=1.0,
-                 predictor_solver_parameters={}, picard_iterations=1):
+                 predictor_solver_parameters={}, picard_iterations=1, pressure_nullspace=None):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         self.theta = firedrake.Constant(theta)
         self.predictor_solver_parameters = predictor_solver_parameters
         self.picard_iterations = picard_iterations
+        self.pressure_nullspace = pressure_nullspace
 
         self.solution_old = firedrake.Function(self.solution)
         self.solution_lag = firedrake.Function(self.solution)
@@ -159,10 +160,11 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution)
         self.solver = firedrake.NonlinearVariationalSolver(self.problem,
                                                            solver_parameters=self.solver_parameters,
+                                                           appctx = {'a': firedrake.derivative(self.F, self.solution),
+                                                                     'schur_nullspace': self.pressure_nullspace},
                                                            options_prefix=self.name)
 
         self._initialized = True
-
 
     def advance(self, t, update_forcings=None):
         if not self._initialized:
