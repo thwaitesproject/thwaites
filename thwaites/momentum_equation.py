@@ -120,7 +120,7 @@ class ViscosityTerm(BaseTerm):
         for id, bc in bcs.items():
             if 'u' in bc or 'un' in bc:
                 if 'u' in bc:
-                    u_tensor_jump = n*(u-bc['u'])
+                    u_tensor_jump = outer(n,u-bc['u'])
                 else:
                     u_tensor_jump = outer(n, n)*(dot(n, u)-bc['un'])
                 if self.symmetric_stress:
@@ -129,7 +129,7 @@ class ViscosityTerm(BaseTerm):
                 F += sigma*inner(outer(n, phi), dot(diff_tensor, u_tensor_jump))*self.ds(id)
                 F += -inner(dot(diff_tensor, grad(phi)), u_tensor_jump)*self.ds(id)
                 if 'u' in bc:
-                    F += -inner(n*phi, stress) * self.ds(id)
+                    F += -inner(outer(n,phi), stress) * self.ds(id)
                 elif 'un' in bc:
                     # we only keep, the normal part of stress, the tangential
                     # part is assumed to be zero stress (i.e. free slip), or prescribed via 'stress'
