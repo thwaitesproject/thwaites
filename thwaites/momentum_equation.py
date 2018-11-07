@@ -137,7 +137,8 @@ class ViscosityTerm(BaseTerm):
             if 'stress' in bc:  # a momentum flux, a.k.a. "force"
                 # here we need only the third term, because we assume jump_u=0 (u_ext=u)
                 # the provided stress = n.(mu.stress_tensor)
-                F += -phi*bc['stress']*self.ds(id)
+                #F += -phi*bc['stress']*self.ds(id)
+                F += dot(-phi, bc['stress']) * self.ds(id)
 
             # NOTE 1: unspecified boundaries are equivalent to free stress (i.e. free in all directions)
             # NOTE 2: 'un' can be combined with 'stress' provided the stress force is tangential (e.g. no-normal flow with wind)
