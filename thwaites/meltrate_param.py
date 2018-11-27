@@ -19,16 +19,18 @@ class MeltRateParam():
     rho_ice = 920.0
     # h_ice = 1000. # in m
     T_ice = -25.0
-    P_ice = rho_ice * g * h_ice  # hydrostatic pressure just from ice
-
-    rho0 = 1025.0
+    
     g = 9.81
+    rho0 = 1025.0
+
+    
 
 
 
-    def __init__(self,S,T,Pin,z,dz):
+    def __init__(self,S,T,Pin,h_ice,z,dz):
         self.z = z
         self.dz_calc = dz*1.0
+        self.P_ice = self.rho_ice * self.g * h_ice  # hydrostatic pressure just from ice
         self.Pfull = self.rho0 * (Pin - self.g * self.z) + self.P_ice
         self.S = S
         self.T = T
