@@ -112,7 +112,7 @@ class MeltRateParam():
         Bb = self.c_p_i * self.gammaS * self.T_ice - self.c_p_i * self.gammaS * b_plus_cPb + self.c_p_i * self.gammaS * self.S * self.a
         Bb = Bb + self.c_p_m * self.gammaT * b_plus_cPb - self.c_p_m * self.gammaT * self.T - self.gammaS * self.Lf
 
-        Cc = self.c_p_i * self.gammaS * self.S * b_plus_cPb - self.c_p_m * self.gammaS * self.S * self.T + self.gammaS * self.Lf * self.S
+        Cc = self.c_p_i * self.gammaS * self.S * b_plus_cPb - self.c_p_m * self.gammaS * self.S * self.T_ice + self.gammaS * self.Lf * self.S
 
         soln1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)  # this is one value of loc_Sb
         soln2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
