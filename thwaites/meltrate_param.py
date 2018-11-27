@@ -60,7 +60,7 @@ class MeltRateParam():
         Aa = self.c_p_m*self.gammaT*self.a
 
         Bb = self.c_p_m*self.gammaT*self.b - self.c_p_m*self.gammaT*self.T
-        Bb = Bb + self.c_p_m*self.c*self.Pfull*self.gammaT - self.gammaS*Lf
+        Bb = Bb + self.c_p_m*self.c*self.Pfull*self.gammaT - self.gammaS*self.Lf
 
         Cc = self.gammaS*self.Lf*self.S
 
