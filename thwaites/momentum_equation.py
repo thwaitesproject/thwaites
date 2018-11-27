@@ -84,6 +84,7 @@ class ViscosityTerm(BaseTerm):
         n = self.n
         cellsize = CellDiameter(self.mesh)
         u = trial
+        u_lagged = trial_lagged
 
         diff_tensor = as_matrix([[mu, 0],
                                  [0, mu]])
@@ -139,12 +140,19 @@ class ViscosityTerm(BaseTerm):
                 # the provided stress = n.(mu.stress_tensor)
                 #F += -phi*bc['stress']*self.ds(id)
                 F += dot(-phi, bc['stress']) * self.ds(id)
+            if 'drag' in bc:  # (bottom) drag of the form tau = -C_D u |u|
+                C_D = bc['drag']
+                unorm = sqrt(dot(u_lagged, u_lagged))
+                F += dot(-phi, -C_D*unorm*u) * self.ds(id)
+
 
             # NOTE 1: unspecified boundaries are equivalent to free stress (i.e. free in all directions)
             # NOTE 2: 'un' can be combined with 'stress' provided the stress force is tangential (e.g. no-normal flow with wind)
 
             if 'u' in bc and 'stress' in bc:
                 raise ValueError("Cannot apply both 'u' and 'stress' bc on same boundary")
+            if 'u' in bc and 'drag' in bc:
+                raise ValueError("Cannot apply both 'u' and 'drag' bc on same boundary")
             if 'u' in bc and 'un' in bc:
                 raise ValueError("Cannot apply both 'u' and 'un' bc on same boundary")
 
