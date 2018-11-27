@@ -143,7 +143,7 @@ class MeltRateParam():
 
         wb = conditional(self.z > 0 - self.dz_calc, -self.gammaS*(loc_Sb-self.S)/loc_Sb, 0.0)
         # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_i * wb, 0.0)
+        Q_ice = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
         Q_mixed = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
         Q_latent = conditional(self.z > 0 - self.dz_calc, Q_ice - Q_mixed, 0.0)
 
