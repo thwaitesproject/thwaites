@@ -12,6 +12,11 @@ class MeltRateParam():
     c_p_i = 2009.
     gammaT = 1E-4  # roughly thermal exchange velocity
     gammaS = 5.05E-7
+
+    gammaT_fric = 1.1E-2  # from jenkins et al 2010 - fluidity and ben have 1.1E-3 !!!!
+    gammaS_fric = 3.1E-4   # from jenkins et al 2010 - matches fluidity
+    C_d = 0.0097  # drag coefficient for ice...
+
     Lf = 3.34E5  # latent heat of fusion
 
     k_i = 1.14E-6
@@ -22,6 +27,8 @@ class MeltRateParam():
     
     g = 9.81
     rho0 = 1025.0
+
+
 
     
 
@@ -151,5 +158,62 @@ class MeltRateParam():
         Q_mixed_bc = conditional(self.z > 0 - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
                                  0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
         Q_s_bc = conditional(self.z > 0 - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
+
+        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
+
+    def three_eq_param_meltrate_friction_vel(self,u):
+        # solve with two equation param.
+
+        u_star = pow(self.C_d*pow(u,2),0.5)  # + tidal velocity?????
+        u_star = conditional(u_star>1.0E-6, u_star,1.0E-6)
+
+        T_param = self.gammaT_fric * u_star
+        S_param = self.gammaS_fric * u_star
+
+        b_plus_cPb = (self.b + self.c * self.Pfull)  # save calculating this each time...
+
+        Aa = self.c_p_m * T_param * self.a - self.c_p_i * S_param * self.a
+
+        Bb = self.c_p_i * S_param * self.T_ice - self.c_p_i * S_param * b_plus_cPb + self.c_p_i * S_param * self.S * self.a
+        Bb = Bb + self.c_p_m * T_param * b_plus_cPb - self.c_p_m * T_param * self.T - S_param * self.Lf
+
+        Cc = self.c_p_i * S_param * self.S * b_plus_cPb - self.c_p_m * S_param * self.S * self.T_ice + S_param * self.Lf * self.S
+
+        soln1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)  # this is one value of loc_Sb
+        soln2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+
+        loc_Sb = conditional(soln1 > 0.0, soln1, soln2)
+
+        '''try:
+            p = int(typ[1:])
+            if p < 1:
+                raise ValueError
+        except ValueError:
+            raise ValueError("Don't know how to interpret %s-norm" % norm_type)'''
+
+        # need to add in an exception if the salinity falls below zero. ...
+        '''error = conditional(if i in loc_Sb.dat.data < 0.0:
+            print("Melt interface, loc_Sb: ",  i)
+            print("Melt interface, Aa: ",  Aa)
+            print("Melt interface, Bb: ",  Bb)
+            print("Melt interface, Cc: ",  Cc)
+            print("Melt interface, T: ",  T)
+            print("Melt interface, S: ",  S)
+            print("Melt interface, P: ",  Pfull)
+            print("Melt interface, fv: n/a")  # add in friction velocity
+
+            raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
+
+        loc_Tb = conditional(self.z > 0 - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
+
+        wb = conditional(self.z > 0 - self.dz_calc, -S_param * (loc_Sb - self.S) / loc_Sb, 0.0)
+        # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
+        Q_ice = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
+        Q_mixed = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * T_param, 0.0)
+        Q_latent = conditional(self.z > 0 - self.dz_calc, Q_ice - Q_mixed, 0.0)
+
+        Q_mixed_bc = conditional(self.z > 0 - self.dz_calc, -(wb + T_param) * (loc_Tb - self.T),
+                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
+        Q_s_bc = conditional(self.z > 0 - self.dz_calc, -(wb + S_param) * (loc_Sb - self.S), 0.0)
 
         return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
