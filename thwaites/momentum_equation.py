@@ -2,7 +2,7 @@ from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional
 from firedrake import CellDiameter, as_vector, as_matrix, avg
 from .utility import is_continuous, normal_is_continuous, tensor_jump
-
+#import numpy as np
 """
 This module contains the classes for the momentum equation and its terms.
 
@@ -142,7 +142,9 @@ class ViscosityTerm(BaseTerm):
                 F += dot(-phi, bc['stress']) * self.ds(id)
             if 'drag' in bc:  # (bottom) drag of the form tau = -C_D u |u|
                 C_D = bc['drag']
-                unorm = sqrt(dot(u_lagged, u_lagged))
+                unorm = pow(dot(u_lagged, u_lagged),0.5)
+                print("test, unorm=",unorm)
+                print(C_D)
                 F += dot(-phi, -C_D*unorm*u) * self.ds(id)
 
 
