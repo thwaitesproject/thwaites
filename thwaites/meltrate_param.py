@@ -34,11 +34,15 @@ class MeltRateParam():
 
 
 
-    def __init__(self,S,T,Pin,h_ice,z,dz):
-        self.z = z
+    def __init__(self,S,T,Pin,cav_boundary,z,dz):
+        self.z = z  # -1000m at GL to 0 outside domain at surface
         self.dz_calc = dz*1.0
-        self.P_ice = self.rho_ice * self.g * h_ice  # hydrostatic pressure just from ice
-        self.Pfull = self.rho0 * (Pin - self.g * self.z) + self.P_ice
+        self.cav_boundary = cav_boundary
+
+        #self.P_ice = self.rho_ice * self.g * h_ice  # hydrostatic pressure just from ice
+        #self.Pfull = self.rho0 * (Pin - self.g * self.z) + self.P_ice
+        Phydrostatic = -self.rho0*self.g*self.z
+        self.Pfull = Phydrostatic + self.rho0*Pin
         self.S = S
         self.T = T
 
@@ -47,14 +51,14 @@ class MeltRateParam():
 
     def two_eq_param_meltrate(self):
 
-        loc_Tb = conditional(self.z > 0 - self.dz_calc, self.a * self.S + self.b + self.c * self.Pfull, 0.0)
+        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * self.S + self.b + self.c * self.Pfull, 0.0)
         # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
         Q_ice = Constant(0.0)
-        Q_mixed = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > 0 - self.dz_calc, Q_ice - Q_mixed, 0.0)
-        wb = conditional(self.z > 0 - self.dz_calc, -Q_latent / (self.Lf * self.rho0), 0.0)
+        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
+        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
+        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -Q_latent / (self.Lf * self.rho0), 0.0)
 
-        Q_mixed_bc = conditional(self.z > 0 - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
+        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
                                  0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
         Q_s = wb*self.S
 
@@ -96,16 +100,16 @@ class MeltRateParam():
     
             raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
 
-        loc_Tb = conditional(self.z > 0 - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
+        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
         # Q_ice = conditional(self.z > 0-self.dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
         Q_ice = Constant(0.0)
-        Q_mixed = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > 0 - self.dz_calc, Q_ice - Q_mixed, 0.0)
-        wb = conditional(self.z > 0 - self.dz_calc, -Q_latent / (self.Lf * self.rho0), 0.0)
+        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
+        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
+        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -Q_latent / (self.Lf * self.rho0), 0.0)
 
-        Q_mixed_bc = conditional(self.z > 0 - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
+        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
                                  0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > 0 - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
+        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
 
         return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
 
@@ -146,18 +150,18 @@ class MeltRateParam():
     
             raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
 
-        loc_Tb = conditional(self.z > 0 - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
+        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
 
-        wb = conditional(self.z > 0 - self.dz_calc, -self.gammaS*(loc_Sb-self.S)/loc_Sb, 0.0)
+        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -self.gammaS*(loc_Sb-self.S)/loc_Sb, 0.0)
         # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
-        Q_mixed = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > 0 - self.dz_calc, Q_ice - Q_mixed, 0.0)
+        Q_ice = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
+        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
+        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
 
 
-        Q_mixed_bc = conditional(self.z > 0 - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
+        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
                                  0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > 0 - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
+        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
 
         return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
 
@@ -204,16 +208,16 @@ class MeltRateParam():
 
             raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
 
-        loc_Tb = conditional(self.z > 0 - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
+        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
 
-        wb = conditional(self.z > 0 - self.dz_calc, -S_param * (loc_Sb - self.S) / loc_Sb, 0.0)
+        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -S_param * (loc_Sb - self.S) / loc_Sb, 0.0)
         # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
-        Q_mixed = conditional(self.z > 0 - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * T_param, 0.0)
-        Q_latent = conditional(self.z > 0 - self.dz_calc, Q_ice - Q_mixed, 0.0)
+        Q_ice = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
+        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * T_param, 0.0)
+        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
 
-        Q_mixed_bc = conditional(self.z > 0 - self.dz_calc, -(wb + T_param) * (loc_Tb - self.T),
+        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + T_param) * (loc_Tb - self.T),
                                  0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > 0 - self.dz_calc, -(wb + S_param) * (loc_Sb - self.S), 0.0)
+        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + S_param) * (loc_Sb - self.S), 0.0)
 
         return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
