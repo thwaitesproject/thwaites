@@ -5,7 +5,7 @@ from firedrake import Constant
 class MeltRateParam():
     """methods for calculating meltrate parameterisation used in ice-ocean boundary"""
     a = -5.73E-2  # salinity coefficient of freezing eqation
-    b = 9.39E-2  # constant coeff of freezing equation
+    b = 0.0832 # use fluidity value #9.39E-2  # constant coeff of freezing equation
     c = -7.53E-8  # pressure coeff of freezing equation
 
     c_p_m = 3974.  # specific heat capacity of mixed layer
@@ -13,7 +13,7 @@ class MeltRateParam():
     gammaT = 1E-4  # roughly thermal exchange velocity
     gammaS = 5.05E-7
 
-    gammaT_fric = 1.1E-2  # from jenkins et al 2010 - fluidity and ben have 1.1E-3 !!!!
+    gammaT_fric = 1.1E-2  # from jenkins et al 2010 - fluidity and ben have 1.1E-3!!!!
     gammaS_fric = 3.1E-4   # from jenkins et al 2010 - matches fluidity
     C_d = 0.0097  # drag coefficient for ice...
 
