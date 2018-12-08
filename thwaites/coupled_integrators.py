@@ -59,12 +59,14 @@ class SaddlePointTimeIntegrator(CoupledTimeIntegrator):
 
 
 class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
-    def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}, theta=1.0):
+    def __init__(self, equations, solution, fields, coupling, dt, bcs=None,
+                 solver_parameters={}, theta=1.0, strong_bcs=None):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         self.theta = firedrake.Constant(theta)
 
         self.solution_old = firedrake.Function(self.solution)
         self._initialized = False
+        self.strong_bcs = strong_bcs
 
     def initialize(self, init_solution):
         self.solution_old.assign(init_solution)
@@ -85,7 +87,7 @@ class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
         self.F -= self.dt_const*self.equations[0].residual(self.test[0], u_theta, u_theta, self._fields[0], bcs=self.bcs)
         self.F -= self.dt_const*self.equations[1].residual(self.test[1], p_theta, p_theta, self._fields[1], bcs=self.bcs)
 
-        self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution)
+        self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution, self.strong_bcs)
         self.solver = firedrake.NonlinearVariationalSolver(self.problem,
                                                            solver_parameters=self.solver_parameters,
                                                            options_prefix=self.name)
