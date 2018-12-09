@@ -84,7 +84,9 @@ class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
             self._fields.append(cfields)
 
         self.F = self.equations[0].mass_term(self.test[0], u-u_old)
-        self.F -= self.dt_const*self.equations[0].residual(self.test[0], u_theta, u_theta, self._fields[0], bcs=self.bcs)
+        #self.F -= self.dt_const*self.equations[0].residual(self.test[0], u_theta, u_theta, self._fields[0], bcs=self.bcs)
+        self.F -= self.dt_const * self.equations[0].residual(self.test[0], u_theta, u_old, self._fields[0],
+                                                             bcs=self.bcs)  # linearise using u_old
         self.F -= self.dt_const*self.equations[1].residual(self.test[1], p_theta, p_theta, self._fields[1], bcs=self.bcs)
 
         self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution, self.strong_bcs)
