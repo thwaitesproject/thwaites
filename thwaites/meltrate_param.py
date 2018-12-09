@@ -47,7 +47,8 @@ class MeltRateParam():
         self.T = T
 
 
-
+    def freezing_point(self):
+        return self.a * self.S + self.b + self.c * self.Pfull
 
     def two_eq_param_meltrate(self):
 
