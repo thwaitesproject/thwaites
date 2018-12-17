@@ -1,7 +1,8 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional
+from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, Constant
 from firedrake import CellDiameter, as_vector, as_matrix, avg
 from .utility import is_continuous, normal_is_continuous, tensor_jump
+from ufl import tensors, algebra
 #import numpy as np
 """
 This module contains the classes for the momentum equation and its terms.
@@ -80,14 +81,25 @@ class ViscosityTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         mu = fields['viscosity']
+
+        if mu.__class__ == Constant:
+            diff_tensor = as_matrix([[mu, 0],
+                                     [0, mu]])
+        if mu.__class__ == algebra.Sum:
+            diff_tensor = as_matrix([[mu, 0],
+                                     [0, mu]])
+        elif mu.__class__ == tensors.ListTensor:
+            diff_tensor = mu  # predefine matrix as above with different horizontal and vertical viscosities.
+        else:
+            raise Exception(str(mu.__class__)+"is not a valid assigment. Should be Matrix, Sum or Constant.")
+
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
         u = trial
         u_lagged = trial_lagged
 
-        diff_tensor = as_matrix([[mu, 0],
-                                 [0, mu]])
+
         grad_test = nabla_grad(phi)
         stress = dot(diff_tensor, nabla_grad(u))
         if self.symmetric_stress:
@@ -143,8 +155,7 @@ class ViscosityTerm(BaseTerm):
             if 'drag' in bc:  # (bottom) drag of the form tau = -C_D u |u|
                 C_D = bc['drag']
                 unorm = pow(dot(u_lagged, u_lagged),0.5)
-                print("test, unorm=",unorm)
-                print(C_D)
+
                 F += dot(-phi, -C_D*unorm*u) * self.ds(id)
 
 
