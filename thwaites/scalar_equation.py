@@ -1,7 +1,7 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, conditional, CellDiameter, as_matrix, avg, jump
+from firedrake import dot, inner, div, grad, conditional, CellDiameter, as_matrix, avg, jump, Constant
 from .utility import is_continuous, normal_is_continuous
-
+from ufl import tensors, algebra
 """
 This module contains the scalar terms and equations (e.g. for temperature and salinity transport)
 
@@ -70,13 +70,23 @@ class ScalarDiffusionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         kappa = fields['diffusivity']
+        if kappa.__class__ == Constant:
+            diff_tensor = as_matrix([[kappa, 0, ],
+                                     [0, kappa, ]])
+        if kappa.__class__ == algebra.Sum:
+            diff_tensor = as_matrix([[kappa, 0, ],
+                                     [0, kappa, ]])
+        elif kappa.__class__ == tensors.ListTensor:
+            diff_tensor = kappa  # predefine matrix as above with different horizontal and vertical diffusivities
+        else:
+            raise Exception(str(kappa.__class__)+"is not a valid assigment. Should be Matrix or Constant.")
+
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
         q = trial
 
-        diff_tensor = as_matrix([[kappa, 0, ],
-                                 [0, kappa, ]])
+
         grad_test = grad(phi)
         diff_flux = dot(diff_tensor, grad(q))
 
