@@ -164,7 +164,7 @@ class MeltRateParam():
                                  0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
         Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
 
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
+        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, loc_Sb, self.Pfull  # these are all still expressions
 
     def three_eq_param_meltrate_friction_vel(self,u):
         # solve with two equation param.
@@ -221,4 +221,4 @@ class MeltRateParam():
                                  0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
         Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + S_param) * (loc_Sb - self.S), 0.0)
 
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
+        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, loc_Sb, self.Pfull  # these are all still expressions
