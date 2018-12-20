@@ -170,7 +170,7 @@ class MeltRateParam():
         # solve with two equation param.
 
         u_star = pow(self.C_d*pow(u,2),0.5)  # + tidal velocity?????
-        u_star = conditional(u_star>1.0E-9, u_star,1.0E-9)
+        u_star = conditional(u_star>1.0E-3, u_star,1.0E-3)
 
         T_param = self.gammaT_fric * u_star
         S_param = self.gammaS_fric * u_star
