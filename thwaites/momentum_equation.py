@@ -81,8 +81,9 @@ class ViscosityTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         mu = fields['viscosity']
-
-        if mu.__class__ == Constant:
+        diff_tensor = as_matrix([[mu, 0],
+                                 [0, mu]])
+        '''if mu.__class__ == Constant:
             diff_tensor = as_matrix([[mu, 0],
                                      [0, mu]])
         if mu.__class__ == algebra.Sum:
@@ -92,7 +93,7 @@ class ViscosityTerm(BaseTerm):
             diff_tensor = mu  # predefine matrix as above with different horizontal and vertical viscosities.
         else:
             raise Exception(str(mu.__class__)+"is not a valid assigment. Should be Matrix, Sum or Constant.")
-
+        '''
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)

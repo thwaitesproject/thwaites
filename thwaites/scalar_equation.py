@@ -70,7 +70,10 @@ class ScalarDiffusionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         kappa = fields['diffusivity']
-        if kappa.__class__ == Constant:
+        diff_tensor = as_matrix([[kappa, 0, ],
+                                 [0, kappa, ]])
+        #
+        '''if kappa.__class__ == Constant:
             diff_tensor = as_matrix([[kappa, 0, ],
                                      [0, kappa, ]])
         if kappa.__class__ == algebra.Sum:
@@ -80,7 +83,7 @@ class ScalarDiffusionTerm(BaseTerm):
             diff_tensor = kappa  # predefine matrix as above with different horizontal and vertical diffusivities
         else:
             raise Exception(str(kappa.__class__)+"is not a valid assigment. Should be Matrix or Constant.")
-
+            '''
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
