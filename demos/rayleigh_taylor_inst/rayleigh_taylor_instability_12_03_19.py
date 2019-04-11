@@ -6,10 +6,24 @@
 from thwaites import *
 from math import pi
 import sys
-d=1
-nx = 100 # number of points x direction
 
+# set the diffusivity to zero
+kappa = Constant(0)  # no diffusion of density /temp  # grid peclet = 1
 
+# Reynolds number from Guermond test case (2009)
+Reynolds_number = 100.0
+
+# non dimensional form of equations equivalent
+mu = Constant(1/Reynolds_number)
+
+d=1.0
+U=1.0
+Re_delx = 2.0
+delx = Re_delx/(U*Reynolds_number)
+
+nx = d/delx #250 # number of points x direction
+
+print(nx)
 # create a rectangular mesh using inbuilt firedrake.
 mesh = RectangleMesh(nx, nx*4, d, 4*d) # (nx, ny, lx, ly)
 
@@ -45,14 +59,6 @@ y = y - 2
 u_init = Constant((0.0, 0.0))
 u_.assign(u_init)
 
-# set the diffusivity to zero
-kappa = Constant(0)  # no diffusion of density /temp  # grid peclet = 1
-
-# Reynolds number from Guermond test case (2009)
-Reynolds_number = Constant(500.0)
-# non dimensional form of equations equivalent
-mu = Constant(1/Reynolds_number)
-
 
 
 def eta(x,d):
@@ -76,20 +82,22 @@ rho.interpolate(rho_init)
 
 
 
-folder = "/home/wscott/rayleigh_taylor_tests/"
+folder = "/data2/wis15/outputs/rayleigh_taylor_tests/"
+date = "10.04.19_"
 # We declare the output filenames, and write out the initial conditions. ::
-u_file = File(folder+"velocity.pvd")
+u_file = File(folder+date+"velocity.pvd")
 u_file.write(u_)
-p_file = File(folder+"pressure.pvd")
+p_file = File(folder+date+"pressure.pvd")
 p_file.write(p_)
-d_file = File(folder+"density.pvd")
+d_file = File(folder+date+"density.pvd")
 d_file.write(rho)
 
 
 
 # time period and time step
 T = 2.5
-dt = 0.01
+CFL = 0.5
+dt = CFL*delx/U
 
 u_test, p_test = TestFunctions(Z)
 
