@@ -7,6 +7,7 @@
 from thwaites import *
 from math import pi
 import sys
+from scipy.integrate import quad
 #from firedrake import FacetNormal
 # set the diffusivity to zero
 kappa = Constant(0)  # no diffusion of density /temp  # grid peclet = 1
@@ -145,10 +146,15 @@ rho_solver_parameters = mumps_solver_parameters
 no_normal_flow = {'un': 0.}
 no_normal_no_slip_flow = {'u': as_vector((0,0))}
 
-def stress_open_boundary(rho,z,dz):
-  return rho*ds(1)
+def get_rho(y,rho):
+    return rho.at([0.0, y])
 
-up_bcs = {1: {'stress': stress_open_boundary}, 2: no_normal_flow, 3: no_normal_no_slip_flow, 4: no_normal_no_slip_flow}
+def stress_open_boundary(rho,z,dz):
+    top = 2.0
+    return quad(get_rho,z,top,args=(rho))
+
+
+up_bcs = {1: {'stress': n*stress_open_boundary(rho,y)}, 2: no_normal_flow, 3: no_normal_no_slip_flow, 4: no_normal_no_slip_flow}
 
 
 
