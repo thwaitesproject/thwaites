@@ -83,7 +83,7 @@ rho.interpolate(rho_init)
 
 
 folder = "/data2/wis15/outputs/rayleigh_taylor_tests/"
-date = "half_open_12.04.19_"
+date = "half_open_12.04.19_333"
 # We declare the output filenames, and write out the initial conditions. ::
 u_file = File(folder+date+"velocity.pvd")
 u_file.write(u_)
@@ -126,7 +126,7 @@ mumps_solver_parameters = {
     'pc_factor_mat_solver_type': 'mumps',
     'mat_type': 'aij'
 }
-# weakly applied dirichlet bcs on top and bottom for density
+
 
 # 1: top, 2: rhs, 3: bottom, 4: lhs
 
@@ -136,18 +136,20 @@ mumps_solver_parameters = {
 #4: plane y == Ly
 
 #rho_bcs = {1: {'q': rho_max}}
-rho_bcs = {}
+
+n = FacetNormal(mesh)
+rho_bcs = {}#1: {'q': rho}}
 rho_solver_parameters = mumps_solver_parameters
 
 
 no_normal_flow = {'un': 0.}
 no_normal_no_slip_flow = {'u': as_vector((0,0))}
 
-n_hat = FacetNormal(mesh)
-stress_open_boundary =  -n_hat*rho
+def stress_open_boundary(rho,z,dz):
+  return rho*ds(1)
 
-up_bcs = {1: {'stress': stress_open_boundary}, 2: no_normal_flow,
-          3: no_normal_no_slip_flow, 4: no_normal_no_slip_flow}
+up_bcs = {1: {'stress': stress_open_boundary}, 2: no_normal_flow, 3: no_normal_no_slip_flow, 4: no_normal_no_slip_flow}
+
 
 
 
@@ -191,7 +193,7 @@ up_coupling = [{'pressure': 1}, {'velocity': 0}]
 up_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], z, up_fields, up_coupling, dt, up_bcs,
                                                   solver_parameters=up_solver_parameters,
                                                   predictor_solver_parameters=mumps_solver_parameters,
-                                                  picard_iterations=1, pressure_nullspace=pressure_nullspace)
+                                                  picard_iterations=1)
 rho_timestepper = DIRK33(rho_eq, rho, rho_fields, dt, rho_bcs, solver_parameters=rho_solver_parameters)
 
 
