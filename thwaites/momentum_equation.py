@@ -81,11 +81,13 @@ class ViscosityTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         mu = fields['viscosity']
+        if 'rans_eddy_viscosity' in fields:
+            mu = mu + fields['rans_eddy_viscosity']
 
         if mu.__class__ == Constant:
             diff_tensor = as_matrix([[mu, 0],
                                      [0, mu]])
-        if mu.__class__ == algebra.Sum:
+        elif mu.__class__ == algebra.Sum:
             diff_tensor = as_matrix([[mu, 0],
                                      [0, mu]])
         elif mu.__class__ == tensors.ListTensor:
@@ -157,6 +159,8 @@ class ViscosityTerm(BaseTerm):
                 unorm = pow(dot(u_lagged, u_lagged),0.5)
 
                 F += dot(-phi, -C_D*unorm*u) * self.ds(id)
+            if 'wall_law_drag' in bc: # a linear drag calculated by the RANS model:
+                F += bc['wall_law_drag']*dot(phi, u) * self.ds(id)
 
 
             # NOTE 1: unspecified boundaries are equivalent to free stress (i.e. free in all directions)

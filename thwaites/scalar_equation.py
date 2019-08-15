@@ -125,6 +125,8 @@ class ScalarDiffusionTerm(BaseTerm):
                 # here we need only the third term, because we assume jump_q=0 (q_ext=q)
                 # the provided flux = kappa dq/dn = dot(n, dot(diff_tensor, grad(q))
                 F += -phi*bc['flux']*self.ds(id)
+            elif 'wall_law_drag' in bc:
+                F += phi*bc['wall_law_drag']*q*self.ds(id)
 
         return -F
 
