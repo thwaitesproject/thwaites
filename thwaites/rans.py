@@ -63,7 +63,7 @@ class WallSolver(object):
             muv.dat(op2.READ),
             iterate=op2.ALL)
         
-        u_plus.interpolate(conditional(solution>1e-16*muv, muv/solution, 1e-16))
+        u_plus.interpolate(conditional(muv>1e-16*solution, muv/solution, 1e-16))
 
 class RateOfStrainSolver(object):
     """
@@ -155,7 +155,7 @@ class ProductionSolver(object):
             self.var_solver.solve()
 
         tau = self.rate_of_strain
-        self.production.interpolate(2.0*self.eddy_viscosity*(tau[0,0]**2+tau[0,1]**2+tau[1,0]**2+tau[1,1]**2)))
+        self.production.interpolate(2.0*self.eddy_viscosity*(tau[0,0]**2+tau[0,1]**2+tau[1,0]**2+tau[1,1]**2))
 
 class RANSTKESourceTerm(BaseTerm):
     r"""
