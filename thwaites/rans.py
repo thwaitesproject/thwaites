@@ -63,9 +63,7 @@ class WallSolver(object):
             muv.dat(op2.READ),
             iterate=op2.ALL)
         
-        u_plus.interpolate(muv/solution)
-        u_plus.dat.data[np.isnan(u_plus.dat.data)] = 1.0e-16
-        u_plus.dat.data[u_plus.dat.data<1.e-16] = 1.0e-16
+        u_plus.interpolate(conditional(solution>1e-16*muv, muv/solution, 1e-16))
 
 class RateOfStrainSolver(object):
     """
@@ -156,7 +154,8 @@ class ProductionSolver(object):
         with timed_stage('shear_freq_solv'):
             self.var_solver.solve()
 
-        self.production.dat.data[:] = 2.0*self.eddy_viscosity.dat.data*np.sum(np.sum(self.rate_of_strain.dat.data**2,2),1)
+        tau = self.rate_of_strain
+        self.production.interpolate(2.0*self.eddy_viscosity*(tau[0,0]**2+tau[0,1]**2+tau[1,0]**2+tau[1,1]**2)))
 
 class RANSTKESourceTerm(BaseTerm):
     r"""
