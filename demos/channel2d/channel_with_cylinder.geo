@@ -1,23 +1,24 @@
-s=5e-1;
-s2=1e-1;
-L = 15;
-W = 10;
-k=5;
+s=2e-2;
+s2=5e-3;
+L = 2.2;
+H = 0.41;
+L_dist0=0.15; // distance inflow boundary and cylinder
+H_dist0=0.15; // distance between cylinder and bottom boundary
+r= 0.05;
 
 Point(1) = {0,0,0,s};
-Point(2) = {0,W, 0,s};
-Point(3) = {L, W, 0,s};
+Point(2) = {0,H, 0,s};
+Point(3) = {L, H, 0,s};
 Point(4) = {L, 0, 0,s};
 
-Point(5) = {L/k, W/2, 0,s};
+Point(5) = {L_dist0+r, H_dist0+r, 0, s};
 
 
-r= 1e0;
 
-Point(6) = {L/k+r, W/2, 0,s2};
-Point(7) = {L/k, W/2+r, 0,s2};
-Point(8) = {L/k-r, W/2, 0,s2};
-Point(9) = {L/k, W/2-r, 0,s2};
+Point(6) = {L_dist0+2*r, H_dist0+r, 0,s2};
+Point(7) = {L_dist0+r, H_dist0+2*r, 0,s2};
+Point(8) = {L_dist0, H_dist0+r, 0,s2};
+Point(9) = {L_dist0+r, H_dist0, 0,s2};
 
 Line(1) = {1,2};
 Line(2) = {2,3};

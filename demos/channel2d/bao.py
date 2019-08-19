@@ -3,7 +3,7 @@
 from thwaites import *
 from thwaites.rans import RANSModel
 from math import pi
-mesh = Mesh('channel_with_cylinder.msh')
+mesh = Mesh('bao.msh')
 
 # We set up a function space of discontinous bilinear elements for :math:`q`, and
 # a vector-valued continuous function space for our velocity field. ::
@@ -22,14 +22,14 @@ u_init = Constant((0.0, 0.0))
 u_.assign(u_init)
 
 # the viscosity
-mu_visc = Constant(1e-6)
+Re = 2.2e4
+V_in = 1.0
+H1 = 1.0
+mu_visc = V_in*H1/Re
 
-
-D = 0.1
-mu0 = 1
-l0 = D  # diameter of cylinder
-tke0 = Constant((mu0/l0)**2)
-psi0 = Constant(0.09*tke0**(3/2)/l0)
+mu0 = 0.1
+tke0 = Constant((mu0/H1)**2)
+psi0 = Constant(0.09*tke0**(3/2)/H1)
 
 
 # We declare the output filenames, and write out the initial conditions. ::
@@ -40,7 +40,7 @@ p_file.write(p_)
 
 
 # time period and time step
-T = 100.
+T = 1000.
 dt = T/1000.
 
 mom_eq = MomentumEquation(Z.sub(0), Z.sub(0))
@@ -59,18 +59,15 @@ mumps_solver_parameters = {
 }
 
 no_normal_flow = {'un': 0.}
-H=0.41
-Um = 0.3
-Ubar = 2*Um/3
-uv_in = as_vector((4*Um*y*(H-y)/H**2,0))
-inflow_bc = {'u': uv_in, 'tke': Constant(0.01), 'psi': Constant(0.09*(0.01)**(3/2.))}
+uv_in = Constant((V_in, 0))
+inflow_bc = {'u': uv_in, 'tke': Constant(0.0), 'psi': Constant(0.09*(0.0)**(3/2.))}
 outflow_bc = {}
 wall_bc = {'un': 0., 'wall_law': 0.}
 # NOTE: in the current implementation of the momentum advection term,
 # there's a subtle difference between not specifying a boundary, and
 # specifying an empty {} boundary - is equivalent to specifying a 
 # (0,0) 'u' value - it only adds a stabilisation on the outflow - need to check correctness
-up_bcs = {1: inflow_bc, 2: outflow_bc, 3: wall_bc, 4: wall_bc, 5: wall_bc}
+up_bcs = {1: inflow_bc, 2: outflow_bc, 3: no_normal_flow, 4: no_normal_flow, 5: wall_bc}
 up_solver_parameters = mumps_solver_parameters
 
 up_coupling = [{'pressure': 1}, {'velocity': 0}]
@@ -80,7 +77,7 @@ up_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], z, up_
 rans_fields = {'velocity': u_,}
 rans_solver_parameters = mumps_solver_parameters
 
-rans = RANSModel(rans_fields, mesh, bcs=up_bcs, options={'l_max': 1.})
+rans = RANSModel(rans_fields, mesh, bcs=up_bcs, options={'l_max': 10.})
 rans._create_integrators(BackwardEuler, dt, up_bcs, rans_solver_parameters)
 rans.initialize(rans_tke=tke0, rans_psi=psi0)
 
@@ -100,19 +97,17 @@ rans_output_fields = (
     rans.u_tau, rans.y_plus, rans.u_plus)
 rans_file.write(*rans_output_fields)
 
-eps = 1e-5
-xy_a = [0.15-eps, 0.2]
-xy_e = [0.25+eps, 0.2]
 def diagnostics():
     n = -FacetNormal(mesh)
-    tau = mu_visc*sym(grad(u_))
+    tau = (mu_visc+rans.fields.rans_eddy_viscosity)*sym(grad(u_))
     integrand = dot(n, tau) - p_*n
     F_D = assemble(integrand[0]*ds(5))
+    F_p = assemble(p_*n[0]*ds(5))
     F_L = assemble(integrand[1]*ds(5))
-    C_D = 2*F_D/(Ubar**2*D)
-    C_L = 2*F_L/(Ubar**2*D)
-    delta_p = p_(xy_a) -p_(xy_e)
-    return C_D, C_L, delta_p
+    C_D = 2*F_D/(V_in**2*H1)
+    C_p = 2*F_p/(V_in**2*H1)
+    C_L = 2*F_L/(V_in**2*H1)
+    return C_D, C_p, C_L
 
 t = 0.0
 step = 0
@@ -123,6 +118,9 @@ while t < T - 0.5*dt:
 
     step += 1
     t += dt
+
+    if t>100:
+        dt = 0.002
 
     if step % 1 == 0:
         u_file.write(u_)

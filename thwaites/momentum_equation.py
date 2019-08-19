@@ -120,7 +120,7 @@ class ViscosityTerm(BaseTerm):
         # sigma = 6.93 = 3.5*p*(p+1)
 
         degree = self.trial_space.ufl_element().degree()
-        sigma = 5.0*degree*(degree + 1)/cellsize
+        sigma = 60.0*degree*(degree + 1)/cellsize
         if degree == 0:
             sigma = 1.5 / cellsize
 
