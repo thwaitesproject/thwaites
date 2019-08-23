@@ -1,5 +1,6 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, conditional, CellDiameter, as_matrix, avg, jump, Constant
+from firedrake import dot, inner, div, grad, CellDiameter, as_matrix, avg, jump, Constant
+from firedrake import min_value, max_value
 from .utility import is_continuous, normal_is_continuous
 from ufl import tensors, algebra
 """
@@ -30,15 +31,18 @@ class ScalarAdvectionTerm(BaseTerm):
 
         F = -q*div(phi*u)*self.dx
 
+        # integration by parts leads to boundary term
+        F += q*dot(n, u)*phi*self.ds
+
+        # which is replaced at incoming Dirichlet 'q' boundaries:
         for id, bc in bcs.items():
             if 'q' in bc:
-                F += conditional(dot(u, n) < 0,
-                                 phi*dot(u, n)*bc['q'],
-                                 phi*dot(u, n)*q) * self.ds(id)
+                # on incoming boundaries, dot(u,n)<0, replace q with bc['q']
+                F += phi*min_value(dot(u, n),0)*(bc['q']-q) * self.ds(id)
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u)):
-            # this is the same trick as in the DG_advection firedrake demo
-            un = 0.5*(dot(u, n) + abs(dot(u, n)))
+            # outgoing velocity dot(u,n)>0 (i.e. the upwind side of the face)
+            un = max_value(dot(u,n), 0)
             F += (phi('+') - phi('-'))*(un('+')*q('+') - un('-')*q('-'))*self.dS
 
         return -F
@@ -133,15 +137,14 @@ class ScalarSourceTerm(BaseTerm):
         Source term :math:`s_T`
     """
 
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         if 'source' not in fields:
             return 0
 
-        phi = self.test
         source = fields['source']
 
         # NOTE, here source term F is already on the RHS
-        F = dot(phi, source)*self.dx
+        F = dot(test, source)*self.dx
 
         return F
 
@@ -176,7 +179,7 @@ class ScalarAdvectionEquation(BaseEquation):
     Scalar equation with only an advection term.
     """
 
-    terms = [ScalarAdvectionTerm]
+    terms = [ScalarAdvectionTerm, ScalarSourceTerm]
 
 
 class ScalarAdvectionDiffusionEquation(BaseEquation):
