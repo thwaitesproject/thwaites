@@ -2,8 +2,9 @@ from __future__ import absolute_import
 from .utility import *
 from firedrake import Constant, Function, FunctionSpace, TensorFunctionSpace
 from firedrake import TestFunction, TrialFunction, FacetNormal
-from firedrake import dx, ds, dS, sym, grad, sqrt, max_value, DirichletBC
+from firedrake import dx, ds, dS, sym, grad, sqrt, max_value, min_value, DirichletBC
 from firedrake import LinearVariationalProblem, LinearVariationalSolver
+from firedrake import VertexBasedLimiter
 from pyop2.profiling import timed_stage
 from .equations import BaseTerm, BaseEquation
 from .scalar_equation import *
@@ -102,7 +103,7 @@ class RateOfStrainSolver(object):
         stress_jump = sym(tensor_jump(uv, normal))
         l = inner(test, stress)*dx
         l += -inner(avg(test), stress_jump)*dS
-        #l += -inner(avg(test),sym(outer(uv, normal)))*(ds_t + ds_b)
+        #l += -inner(test, sym(outer(uv, normal)))*ds
         prob = LinearVariationalProblem(a, l, self.solution, constant_jacobian=True)
         self.weak_grad_solver = LinearVariationalSolver(prob, solver_parameters=solver_parameters)
 
@@ -335,6 +336,8 @@ class RANSModel(TurbulenceModel):
         self.P0_2dT = TensorFunctionSpace(mesh, "DG", 0)
         self.P1_2d = FunctionSpace(mesh, "CG", 1)
         self.P1DG_2d = FunctionSpace(mesh, "DG", 1)
+        self.RT1 = FunctionSpace(mesh, "RT", 1)
+        self.Z = self.P0_2d * self.RT1
 
         self.fields.rans_mixing_length = Function(self.P0_2d, name='rans_mixing_length')
         self.gamma1 = Function(self.P0_2d, name='rans_linearization_1')
@@ -344,20 +347,20 @@ class RANSModel(TurbulenceModel):
             self.gamma2 = self.gamma1
         if not 'rans_eddy_viscosity' in self.fields:
             self.fields.rans_eddy_viscosity = Function(self.P1_2d, name='rans_eddy_viscosity')
-        self.fields.rans_tke = Function(self.P0_2d, name='rans_tke')
-        self.fields.rans_psi = Function(self.P0_2d, name='rans_psi')
+        self.fields.z_tke = Function(self.Z, name='rans_tke_hybrid')
+        self.fields.z_psi = Function(self.Z, name='rans_psi_hybrid')
+        self.tke, self.grad_tke = self.fields.z_tke.split()
+        self.psi, self.grad_psi = self.fields.z_psi.split()
 
-        self.sqrt_tke = Function(self.P0_2d, name='eddy_viscosity')
+        self.sqrt_tke = Function(self.P0_2d, name='sqrt_tke')
         self.production = Function(self.P0_2d, name='production')
         self.rate_of_strain = Function(self.P0_2dT, name='rate of strain')
 
-        self.eq_rans_tke = RANSTKEEquation2D(self.P0_2d, self.P0_2d)
-        self.eq_rans_psi = RANSPsiEquation2D(self.P0_2d, self.P0_2d)
-        
+        self.eq_rans_tke = HybridizedScalarEquation(RANSTKEEquation2D, self.Z, self.Z)
+        self.eq_rans_psi = HybridizedScalarEquation(RANSPsiEquation2D, self.Z, self.Z)
+
         self.uv = self.fields['velocity']
         self.eddy_viscosity = Function(self.P0_2d, name='P0 eddy viscosity')
-        self.tke = self.fields.rans_tke
-        self.psi = self.fields.rans_psi
         self.u_tau = Function(self.P1_2d)
         self.u_plus = Function(self.u_tau.function_space(),
                                name='u plus')
@@ -384,16 +387,17 @@ class RANSModel(TurbulenceModel):
             if 'un' in funcs:
                 self.bcs_tke[bnd_marker]['un'] = funcs['un']
                 self.bcs_psi[bnd_marker]['un'] = funcs['un']
-            if 'uv' in funcs:
-                self.bcs_tke[bnd_marker]['uv'] = fuvcs['uv']
-                self.bcs_psi[bnd_marker]['uv'] = fuvcs['uv']
+            if 'u' in funcs:
+                self.bcs_tke[bnd_marker]['u'] = funcs['u']
+                self.bcs_psi[bnd_marker]['u'] = funcs['u']
 
         self.wall_solver = WallSolver(self.walls, self.delta, 1.0e-6)
 
         self.production_solver = ProductionSolver(self.uv, self.production, self.rate_of_strain, self.eddy_viscosity)
-        self.wall_viscosity_bc = DirichletBC(self.fields.rans_eddy_viscosity.function_space(), 0.4*self.y_plus*1e-6, self.walls)
-        self.wall_production = Function(self.production.function_space(), name="wall_production")
-        self.wall_production_bc = DirichletBC(self.production.function_space(), self.wall_production, self.walls)
+        if self.walls:
+            self.wall_viscosity_bc = DirichletBC(self.fields.rans_eddy_viscosity.function_space(), 0.4*self.y_plus*1e-6, self.walls)
+            self.wall_production = Function(self.production.function_space(), name="wall_production")
+            self.wall_production_bc = DirichletBC(self.production.function_space(), self.wall_production, self.walls)
         self.p1_averager = P1Average(self.P0_2d, self.P1_2d, self.P1DG_2d)
 
     def preprocess(self, init_solve=False):
@@ -403,34 +407,50 @@ class RANSModel(TurbulenceModel):
         self.sqrt_tke.project(conditional(self.tke>0, sqrt(self.tke), Constant(0.0)))
 
         self.fields.rans_mixing_length.project(conditional(self.psi*self.l_max>self.C_mu*(self.sqrt_tke**self.n0),
-                                                self.C_mu*self.sqrt_tke**self.n0/self.psi,
+                                                self.C_mu*self.sqrt_tke**self.n0/max_value(self.psi, 1e-6),
                                                 self.l_max))
+        #self.fields.rans_mixing_length.interpolate(self.C_mu*max_value(self.sqrt_tke,1e-16)**self.n0/max_value(self.psi, 1e-16))
+        #self.fields.rans_mixing_length.interpolate(min_value(self.fields.rans_mixing_length, self.l_max))
         
         self.eddy_viscosity.project(conditional(self.nu_0>self.fields.rans_mixing_length*self.sqrt_tke,
                                                self.nu_0,
                                                self.fields.rans_mixing_length*self.sqrt_tke))
+        #self.eddy_viscosity.project(self.C_mu*max_value(self.tke, 1e-16)**2/max_value(self.psi, 1e-16))
+        #self.eddy_viscosity.interpolate(
+        #       max_value(min_value(self.eddy_viscosity, self.l_max*self.sqrt_tke), self.nu_0))
+        #self.limiter.apply(self.eddy_viscosity)
+
 
 
         if self.closure_name == 'k-epsilon':
-            self.gamma1.project(self.C_mu*self.sqrt_tke**self.n1/self.eddy_viscosity)
+            self.gamma1.project(self.C_mu*max_value(self.tke, 0.)/self.eddy_viscosity)
         elif self.closure_name == 'k-omega':
             self.gamma1.project(conditional(self.psi>0, self.psi, Constant(0.0)))
             # check with James:
             self.gamma2.project(self.C_mu*self.sqrt_tke**self.n2/self.eddy_viscosity)
-        self.wall_solver.apply(self.u_tau, self.u_plus, self.y_plus, self.uv)
-        self.wall_viscosity_bc.apply(self.fields.rans_eddy_viscosity)
-        self.wall_production.interpolate(self.u_tau**4/self.fields.rans_eddy_viscosity)
-        self.wall_production_bc.apply(self.production)
+        if self.walls:
+            self.wall_solver.apply(self.u_tau, self.u_plus, self.y_plus, self.uv)
+            self.wall_viscosity_bc.apply(self.fields.rans_eddy_viscosity)
+            self.wall_production.interpolate(self.u_tau**4/self.fields.rans_eddy_viscosity)
+            self.wall_production_bc.apply(self.production)
+        self.grad_tke_old.assign(0.)
+        self.grad_psi_old.assign(0.)
+        self.grad_tke.assign(0.)
+        self.grad_psi.assign(0.)
 
     def postprocess(self):
 
+        #self.limiter.apply(self.tke)
+        #self.limiter.apply(self.psi)
         self.p1_averager.apply(self.eddy_viscosity, self.fields.rans_eddy_viscosity)
+        #self.tke.interpolate(max_value(self.tke, 0.))
+        #self.psi.interpolate(max_value(self.psi, 0.))
         
     def _create_integrators(self, integrator, dt, bnd_conditions, solver_parameters):
         
-        diffusivity = self.options.get('horizontal_diffusivity', Constant(0.0))
-        diffusivity_tke = diffusivity + self.fields['rans_eddy_viscosity']/self.schmidt_tke
-        diffusivity_psi = diffusivity + self.fields['rans_eddy_viscosity']/self.schmidt_psi
+        diffusivity = self.fields.diffusivity
+        diffusivity_tke = diffusivity + self.eddy_viscosity/self.schmidt_tke
+        diffusivity_psi = diffusivity + self.eddy_viscosity/self.schmidt_psi
         fields_tke = {
                   'velocity': self.uv,
                   'diffusivity': diffusivity_tke,
@@ -439,6 +459,7 @@ class RANSModel(TurbulenceModel):
                   'gamma1': self.gamma1,
                   'gamma2': self.gamma2,
                   'C_0': self.C_0,
+                  'dt': dt,
                   }
         fields_psi = {
                   'velocity': self.uv,
@@ -449,23 +470,27 @@ class RANSModel(TurbulenceModel):
                   'gamma2': self.gamma2,
                   'C_1': self.C_1,
                   'C_2': self.C_2,
+                  'dt': dt,
                   }
 
 
-        self.timesteppers.rans_tke = integrator(self.eq_rans_tke, self.tke, fields_tke, dt,
+        self.timesteppers.rans_tke = integrator(self.eq_rans_tke, self.fields.z_tke, fields_tke, dt,
                                                 bnd_conditions  = self.bcs_tke,
                                                 solver_parameters=solver_parameters)
 
-        self.timesteppers.rans_psi = integrator(self.eq_rans_psi, self.psi, fields_psi, dt,
+        self.timesteppers.rans_psi = integrator(self.eq_rans_psi, self.fields.z_psi, fields_psi, dt,
                                                 bnd_conditions  = self.bcs_psi,
                                                 solver_parameters=solver_parameters)
+        
+        _, self.grad_tke_old = self.timesteppers.rans_tke.solution_old.split()
+        _, self.grad_psi_old = self.timesteppers.rans_psi.solution_old.split()
 
     def initialize(self, rans_tke=Constant(0.0), rans_psi=Constant(0.0), **kwargs):
         self.tke.project(rans_tke)
         self.psi.project(rans_psi)
         self.wall_solver.apply(self.u_tau, self.u_plus, self.y_plus, self.uv)
-        self.timesteppers.rans_tke.initialize(self.tke)
-        self.timesteppers.rans_psi.initialize(self.psi)
+        self.timesteppers.rans_tke.initialize(self.fields.z_tke)
+        self.timesteppers.rans_psi.initialize(self.fields.z_psi)
 
     def advance(self, t, update_forcings=None):
         self.preprocess()
@@ -478,11 +503,11 @@ class RANSTKEEquation2D(BaseEquation):
     """
     2D tracer advection-diffusion equation :eq:`tracer_eq` in conservative form
     """
-    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, RANSTKEDestructionTerm, RANSTKESourceTerm]
+    terms = [ScalarAdvectionTerm, RANSTKEDestructionTerm, RANSTKESourceTerm]
 
 
 class RANSPsiEquation2D(BaseEquation):
     """
     2D tracer advection-diffusion equation :eq:`tracer_eq` in conservative form
     """
-    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, RANSPsiDestructionTerm, RANSPsiSourceTerm]
+    terms = [ScalarAdvectionTerm, RANSPsiDestructionTerm, RANSPsiSourceTerm]

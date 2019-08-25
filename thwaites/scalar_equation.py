@@ -1,5 +1,6 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, conditional, CellDiameter, as_matrix, avg, jump, Constant
+from firedrake import dot, inner, div, grad, conditional, CellDiameter, as_matrix, avg, jump, Constant, split, as_vector
+from firedrake import FacetNormal
 from .utility import is_continuous, normal_is_continuous
 from ufl import tensors, algebra
 """
@@ -187,3 +188,38 @@ class ScalarAdvectionDiffusionEquation(BaseEquation):
     """
 
     terms = [ScalarAdvectionTerm, ScalarDiffusionTerm]
+
+
+class HybridizedScalarEquation(BaseEquation):
+    def __init__(self, scalar_equation_class, test_space, trial_space):
+        self.eq_q = scalar_equation_class(test_space.sub(0), trial_space.sub(0))
+        super().__init__(test_space, trial_space)
+
+    def residual(self, test, trial, trial_lagged=None, fields=None, bcs=None):
+        if trial_lagged is not None:
+            trial_lagged_q = trial_lagged[0]
+        else:
+            trial_lagged_q = None
+
+        F = self.eq_q.residual(test[0], trial[0],
+                             trial_lagged=trial_lagged_q,
+                             fields=fields, bcs=bcs)
+
+        if isinstance(trial, list):
+            qtri, ptri = trial
+        else:
+            qtri, ptri = split(trial)
+        qtest, ptest = split(test)
+        kappa = fields['diffusivity']
+        n = FacetNormal(self.mesh)
+        dt = fields['dt']
+        F += qtest*div(kappa*ptri)*self.dx
+        F += -dot(div(ptest), trial[0])/dt*self.dx
+
+        F += -qtest*dot(n, kappa*ptri)*self.ds + dot(n, ptest)*trial[0]/dt*self.ds
+
+        for id, bc in bcs.items():
+            if 'q' in bc:
+                F += qtest*dot(n, kappa*ptri)*self.ds(id) - dot(n, ptest)*(trial[0]-bc['q'])/dt*self.ds(id)
+
+        return F
