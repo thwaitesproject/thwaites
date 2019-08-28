@@ -52,45 +52,12 @@ def error(nx):
     outfile_grad.write(p)
 
     # a big timestep, which means BackwardEuler takes us to a steady state almost immediately
+    # (needs to be smaller at polynomial_degree>0, 0.1/nx works for p=1 for 4 meshes)
     dt = Constant(1.0/nx)
 
-    class HybridizedScalarAdvectionEquation(BaseEquation):
-        def __init__(self, test_space, trial_space):
-            self.eq_q = ScalarAdvectionEquation(test_space.sub(0), trial_space.sub(0))
-            super().__init__(test_space, trial_space)
+    eq = HybridizedScalarEquation(Z, Z)
 
-        def residual(self, test, trial, trial_lagged=None, fields=None, bcs=None):
-            if trial_lagged is not None:
-                trial_lagged_q = trial_lagged[0]
-            else:
-                trial_lagged_q = None
-
-            F = self.eq_q.residual(test[0], trial[0],
-                                 trial_lagged=trial_lagged_q,
-                                 fields=fields, bcs=bcs)
-            if isinstance(trial, list):
-                qtri, ptri = trial
-            else:
-                qtri, ptri = split(trial)
-            qtest, ptest = split(test)
-            n = FacetNormal(self.mesh)
-            kappa = fields['diffusivity']
-            F += qtest*div(kappa*ptri)*self.dx
-            F += -dot(div(ptest), trial[0])/dt*self.dx
-
-            F += -qtest*dot(n, kappa*ptri)*self.ds + dot(n, ptest)*trial[0]/dt*self.ds
-
-            for id, bc in bcs.items():
-                if 'q' in bc:
-                    F += qtest*dot(n, kappa*ptri)*self.ds(id) - dot(n, ptest)*(trial[0]-bc['q'])/dt*self.ds(id)
-                if 'flux' in bc:
-                    F+= qtest*bc['flux']*self.ds(id)
-
-            return F
-
-    eq = HybridizedScalarAdvectionEquation(Z, Z)
-
-    fields = {'velocity': u, 'diffusivity': kappa, 'source': source}
+    fields = {'velocity': u, 'diffusivity': kappa, 'source': source, 'dt': dt}
 
     # boundary conditions, bottom and left are inflow
     # so Dirichlet, with others specifying a flux
