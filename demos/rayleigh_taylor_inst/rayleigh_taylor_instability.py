@@ -5,7 +5,7 @@ from thwaites import *
 from math import pi
 
 d=1
-mesh = RectangleMesh(5*4, 5*32,0.5,4) #Mesh("ice_shelf_mesh3.msh")#
+mesh = RectangleMesh(5*4, 5*32, 0.5, 4) #Mesh("ice_shelf_mesh3.msh")#
 
 
 

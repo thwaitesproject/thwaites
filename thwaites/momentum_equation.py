@@ -84,17 +84,8 @@ class ViscosityTerm(BaseTerm):
         if 'rans_eddy_viscosity' in fields:
             mu = mu + fields['rans_eddy_viscosity']
 
-        if mu.__class__ == Constant:
-            diff_tensor = as_matrix([[mu, 0],
-                                     [0, mu]])
-        elif mu.__class__ == algebra.Sum:
-            diff_tensor = as_matrix([[mu, 0],
-                                     [0, mu]])
-        elif mu.__class__ == tensors.ListTensor:
-            diff_tensor = mu  # predefine matrix as above with different horizontal and vertical viscosities.
-        else:
-            raise Exception(str(mu.__class__)+"is not a valid assigment. Should be Matrix, Sum or Constant.")
-
+        diff_tensor = as_matrix([[mu, 0],
+                                 [0, mu]])
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
