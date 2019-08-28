@@ -221,5 +221,10 @@ class HybridizedScalarEquation(BaseEquation):
         for id, bc in bcs.items():
             if 'q' in bc:
                 F += qtest*dot(n, kappa*ptri)*self.ds(id) - dot(n, ptest)*(trial[0]-bc['q'])/dt*self.ds(id)
+            if 'flux' in bc:
+                F += qtest*bc['flux']*self.ds(id)
+            if 'wall_law_drag' in bc:
+                F += qtest*bc['wall_law_drag']*qtri*self.ds(id)
+
 
         return F

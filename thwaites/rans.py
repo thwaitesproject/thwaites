@@ -32,7 +32,6 @@ class WallSolver(object):
         muv = Function(solution.function_space())
         muv.project(sqrt(dot(uv, uv)))
         muv.interpolate(max_value(muv, 0.))
-        #muv.dat.data[:] = np.sqrt(np.sum(uv.dat.data*uv.dat.data,axis=1))
 
         solution.project(sqrt(self.viscosity*muv/self.delta))
         
@@ -361,7 +360,7 @@ class RANSModel(TurbulenceModel):
 
         self.uv = self.fields['velocity']
         self.eddy_viscosity = Function(self.P0_2d, name='P0 eddy viscosity')
-        self.u_tau = Function(self.P1_2d)
+        self.u_tau = Function(self.P1_2d, name='u_tau')
         self.u_plus = Function(self.u_tau.function_space(),
                                name='u plus')
         self.y_plus = Function(self.u_tau.function_space(),
