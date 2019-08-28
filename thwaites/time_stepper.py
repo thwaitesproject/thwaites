@@ -214,7 +214,6 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
         :type terms_to_add: 'all' or list of 'implicit', 'explicit', 'source'.
         """
         super(DIRKGeneric, self).__init__(equation, solution, fields, dt, solver_parameters)
-        self.solver_parameters.setdefault('snes_monitor', False)
         self.solver_parameters.setdefault('snes_type', 'newtonls')
         self._initialized = False
 
@@ -248,10 +247,10 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
                 for j in range(i+1):
                     if j == 0:
                         u = []  # list of components in the mixed space
-                        for s, k in zip(split(self.solution_old), split(self.k[j])):
+                        for s, k in zip(firedrake.split(self.solution_old), firedrake.split(self.k[j])):
                             u.append(s + self.a[i][j]*self.dt_const*k)
                     else:
-                        for l, k in enumerate(split(self.k[j])):
+                        for l, k in enumerate(firedrake.split(self.k[j])):
                             u[l] += self.a[i][j]*self.dt_const*k
                 self.F.append(self.equation.mass_term(self.test, self.k[i]) -
                               self.equation.residual(self.test, u, self.solution_old, fields, bnd_conditions))

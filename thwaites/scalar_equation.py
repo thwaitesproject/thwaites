@@ -1,5 +1,6 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, conditional, CellDiameter, as_matrix, avg, jump, Constant
+from firedrake import dot, inner, div, grad, CellDiameter, as_matrix, avg, jump, Constant
+from firedrake import min_value, max_value, split, FacetNormal
 from .utility import is_continuous, normal_is_continuous
 from ufl import tensors, algebra
 """
@@ -30,15 +31,18 @@ class ScalarAdvectionTerm(BaseTerm):
 
         F = -q*div(phi*u)*self.dx
 
+        # integration by parts leads to boundary term
+        F += q*dot(n, u)*phi*self.ds
+
+        # which is replaced at incoming Dirichlet 'q' boundaries:
         for id, bc in bcs.items():
             if 'q' in bc:
-                F += conditional(dot(u, n) < 0,
-                                 phi*dot(u, n)*bc['q'],
-                                 phi*dot(u, n)*q) * self.ds(id)
+                # on incoming boundaries, dot(u,n)<0, replace q with bc['q']
+                F += phi*min_value(dot(u, n),0)*(bc['q']-q) * self.ds(id)
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u)):
-            # this is the same trick as in the DG_advection firedrake demo
-            un = 0.5*(dot(u, n) + abs(dot(u, n)))
+            # outgoing velocity dot(u,n)>0 (i.e. the upwind side of the face)
+            un = max_value(dot(u,n), 0)
             F += (phi('+') - phi('-'))*(un('+')*q('+') - un('-')*q('-'))*self.dS
 
         return -F
@@ -136,15 +140,14 @@ class ScalarSourceTerm(BaseTerm):
         Source term :math:`s_T`
     """
 
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         if 'source' not in fields:
             return 0
 
-        phi = self.test
         source = fields['source']
 
         # NOTE, here source term F is already on the RHS
-        F = dot(phi, source)*self.dx
+        F = dot(test, source)*self.dx
 
         return F
 
@@ -168,18 +171,12 @@ class ScalarAbsorptionTerm(BaseTerm):
         return F
 
 
-
-
-
-
-
-
 class ScalarAdvectionEquation(BaseEquation):
     """
     Scalar equation with only an advection term.
     """
 
-    terms = [ScalarAdvectionTerm]
+    terms = [ScalarAdvectionTerm, ScalarSourceTerm]
 
 
 class ScalarAdvectionDiffusionEquation(BaseEquation):
@@ -188,3 +185,40 @@ class ScalarAdvectionDiffusionEquation(BaseEquation):
     """
 
     terms = [ScalarAdvectionTerm, ScalarDiffusionTerm]
+
+
+class HybridizedScalarEquation(BaseEquation):
+    def __init__(self, test_space, trial_space):
+        self.eq_q = ScalarAdvectionEquation(test_space.sub(0), trial_space.sub(0))
+        super().__init__(test_space, trial_space)
+
+    def residual(self, test, trial, trial_lagged=None, fields=None, bcs=None):
+        if trial_lagged is not None:
+            trial_lagged_q = trial_lagged[0]
+        else:
+            trial_lagged_q = None
+
+        F = self.eq_q.residual(test[0], trial[0],
+                             trial_lagged=trial_lagged_q,
+                             fields=fields, bcs=bcs)
+        if isinstance(trial, list):
+            qtri, ptri = trial
+        else:
+            qtri, ptri = split(trial)
+        qtest, ptest = split(test)
+        n = FacetNormal(self.mesh)
+        kappa = fields['diffusivity']
+        dt = fields['dt']
+        F += qtest*div(kappa*ptri)*self.dx
+        F += -dot(div(ptest), trial[0])/dt*self.dx
+
+        F += -qtest*dot(n, kappa*ptri)*self.ds + dot(n, ptest)*trial[0]/dt*self.ds
+
+        for id, bc in bcs.items():
+            if 'q' in bc:
+                F += qtest*dot(n, kappa*ptri)*self.ds(id) - dot(n, ptest)*(trial[0]-bc['q'])/dt*self.ds(id)
+            if 'flux' in bc:
+                F+= qtest*bc['flux']*self.ds(id)
+
+        return F
+
