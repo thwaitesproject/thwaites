@@ -4,20 +4,26 @@ from thwaites import *
 from thwaites.equations import BaseEquation
 import numpy as np
 
+quad = True
 polynomial_order = 0
 number_of_grids = 4
 output_freq = 100
 
 def error(nx):
-    mesh = RectangleMesh(nx, nx, 0.5, 0.4)
+    mesh = RectangleMesh(nx, nx, 0.5, 0.4, quadrilateral=quad)
 
     mesh.coordinates.dat.data[:] += (0.1,-0.3)
 
     # function spaces DG0 for the scalar, and RT1 for the gradient
-    V = FunctionSpace(mesh, "DG", polynomial_order)
-    H = FunctionSpace(mesh, "RT", polynomial_order+1)
+    if quad:
+        V = FunctionSpace(mesh, "DQ", polynomial_order)
+        H = FunctionSpace(mesh, "RTCF", polynomial_order+1)
+        W = VectorFunctionSpace(mesh, "CQ", polynomial_order+1)
+    else:
+        V = FunctionSpace(mesh, "DG", polynomial_order)
+        H = FunctionSpace(mesh, "RT", polynomial_order+1)
+        W = VectorFunctionSpace(mesh, "CG", polynomial_order+1)
     Z = V*H
-    W = VectorFunctionSpace(mesh, "CG", polynomial_order+1)
 
     # set up prescribed velocity and diffusivity
     x, y = SpatialCoordinate(mesh)
@@ -55,7 +61,7 @@ def error(nx):
     # (needs to be smaller at polynomial_degree>0, 0.1/nx works for p=1 for 4 meshes)
     dt = Constant(1.0/nx)
 
-    eq = HybridizedScalarEquation(Z, Z)
+    eq = HybridizedScalarEquation(ScalarAdvectionEquation, Z, Z)
 
     fields = {'velocity': u, 'diffusivity': kappa, 'source': source, 'dt': dt}
 

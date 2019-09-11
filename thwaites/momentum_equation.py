@@ -1,6 +1,7 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, Constant
-from firedrake import CellDiameter, as_vector, as_matrix, avg
+from firedrake import CellDiameter, as_vector, as_matrix, avg, jump, Identity
+from firedrake import Dx
 from .utility import is_continuous, normal_is_continuous, tensor_jump
 from ufl import tensors, algebra
 #import numpy as np
@@ -81,11 +82,20 @@ class ViscosityTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         mu = fields['viscosity']
-        if 'rans_eddy_viscosity' in fields:
-            mu = mu + fields['rans_eddy_viscosity']
+        if mu.ufl_shape == ():
+            if 'rans_eddy_viscosity' in fields:
+                mu = mu + fields['rans_eddy_viscosity']
 
-        diff_tensor = as_matrix([[mu, 0],
-                                 [0, mu]])
+            diff_tensor = as_matrix([[mu, 0, ],
+                                     [0, mu, ]])
+        elif len(mu.ufl_shape) == 2:
+            if 'rans_eddy_viscosity' in fields:
+                diff_tensor = mu + fields['rans_eddy_viscosity']*Identity(mu.ufl_shape[0])
+            else:
+                diff_tensor = mu
+        else:
+            raise ValueError("Unknown shape of viscosity")
+
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
@@ -178,6 +188,71 @@ class ViscosityTerm(BaseTerm):
         return -F
 
 
+
+class VerticalViscosityTerm(BaseTerm):
+    r"""
+    Vertical viscosity term, :math:`- \frac{\partial }{\partial z}\left( \nu \frac{\partial \textbf{u}}{\partial z}\right)`
+
+    Using the symmetric interior penalty method the weak form becomes
+
+    .. math::
+        \int_\Omega \frac{\partial }{\partial z}\left( \nu \frac{\partial \textbf{u}}{\partial z}\right) \cdot \boldsymbol{\psi} dx
+        =& -\int_\Omega \nu \frac{\partial \boldsymbol{\psi}}{\partial z} \cdot \frac{\partial \textbf{u}}{\partial z} dx \\
+        &+ \int_{\mathcal{I}_h} \text{jump}(\boldsymbol{\psi} n_z) \cdot \text{avg}\left(\nu \frac{\partial \textbf{u}}{\partial z}\right) dS
+        + \int_{\mathcal{I}_h} \text{jump}(\textbf{u} n_z) \cdot \text{avg}\left(\nu \frac{\partial \boldsymbol{\psi}}{\partial z}\right) dS \\
+        &- \int_{\mathcal{I}_h} \sigma \text{avg}(\nu) \text{jump}(\textbf{u} n_z) \cdot \text{jump}(\boldsymbol{\psi} n_z) dS
+
+    where :math:`\sigma` is a penalty parameter,
+    see Epshteyn and Riviere (2007).
+
+    Epshteyn and Riviere (2007). Estimation of penalty parameters for symmetric
+    interior penalty Galerkin methods. Journal of Computational and Applied
+    Mathematics, 206(2):843-872. http://dx.doi.org/10.1016/j.cam.2006.08.029
+    """
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        mu = fields['viscosity']
+        vdim = 1
+        if mu.ufl_shape == ():
+            if 'rans_eddy_viscosity' in fields:
+                mu = mu + fields['rans_eddy_viscosity']
+        elif len(mu.ufl_shape) == 2:
+            if 'rans_eddy_viscosity' in fields:
+                mu = mu[vdim,vdim] +fields['rans_eddy_viscosity']
+            else:
+                mu = mu[vdim, vdim]
+        else:
+            raise ValueError("Unknown shape of viscosity")
+
+        f = 0
+        grad_test = Dx(test, vdim)
+        diff_flux = mu*Dx(trial, vdim)
+        f += inner(grad_test, diff_flux)*self.dx
+
+        if not is_continuous(self.trial_space):
+            h_elem_size = 15
+            v_elem_size = 2.5
+            # Interior Penalty method by
+            # Epshteyn (2007) doi:10.1016/j.cam.2006.08.029
+            degree = 1
+            # TODO compute elemsize as CellVolume/FacetArea
+            # h = n.D.n where D = diag(h_h, h_h, h_v)
+            elemsize = (h_elem_size*self.n[0]**2 + v_elem_size*self.n[vdim]**2)
+            sigma = 5.0*degree*(degree+ 1)/elemsize
+            alpha = avg(sigma)
+            f += alpha*inner(tensor_jump(self.n[vdim], test),
+                             avg(mu)*tensor_jump(self.n[vdim], trial))*self.dS
+            f += -inner(avg(mu*Dx(test, vdim)),
+                        tensor_jump(self.n[vdim], trial))*self.dS
+            f += -inner(tensor_jump(self.n[vdim], test),
+                        avg(mu*Dx(trial, vdim)))*self.dS
+
+        for id, bc in bcs.items():
+            if 'stress' in bc:  # a momentum flux, a.k.a. "force"
+                # here we need only the third term, because we assume jump_u=0 (u_ext=u)
+                # the provided stress = n.(mu.stress_tensor)
+                f += dot(-test, bc['stress']) * self.ds(id)
+        return -f
+
 class PressureGradientTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
         phi = test
@@ -187,6 +262,9 @@ class PressureGradientTerm(BaseTerm):
         # NOTE: we assume p is continuous
 
         F = dot(phi, grad(p))*self.dx
+
+        if True: #if not is_continuous(p):
+            F -= dot(avg(phi), jump(p, n)) * self.dS
 
         # do nothing should be zero (normal) stress:
         F += -dot(phi, n)*p*self.ds
@@ -209,6 +287,9 @@ class DivergenceTerm(BaseTerm):
         # NOTE: we assume psi is continuous
         #assert is_continuous(psi)
         F = -dot(grad(psi), u)*self.dx
+
+        if not is_continuous(self.test_space):
+            F += dot(jump(psi, n), avg(u))*self.dS
 
         # do nothing should be zero (normal) stress, which means no (Dirichlet condition)
         # should be imposed on the normal component

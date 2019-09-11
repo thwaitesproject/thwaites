@@ -1,5 +1,5 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, CellDiameter, as_matrix, as_vector
+from firedrake import dot, inner, div, grad, CellDiameter, as_matrix, as_vector, Identity
 from firedrake import avg, jump, Constant, split, FacetNormal, min_value, max_value
 from .utility import is_continuous, normal_is_continuous
 from ufl import tensors, algebra
@@ -74,20 +74,20 @@ class ScalarDiffusionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         kappa = fields['diffusivity']
-        diff_tensor = as_matrix([[kappa, 0, ],
-                                 [0, kappa, ]])
-        #
-        '''if kappa.__class__ == Constant:
+        if kappa.ufl_shape == ():
+            if 'rans_eddy_diffusivity' in fields:
+                kappa = kappa + fields['rans_eddy_diffusivity']
+
             diff_tensor = as_matrix([[kappa, 0, ],
                                      [0, kappa, ]])
-        if kappa.__class__ == algebra.Sum:
-            diff_tensor = as_matrix([[kappa, 0, ],
-                                     [0, kappa, ]])
-        elif kappa.__class__ == tensors.ListTensor:
-            diff_tensor = kappa  # predefine matrix as above with different horizontal and vertical diffusivities
+        elif len(kappa.ufl_shape) == 2:
+            if 'rans_eddy_diffusivity' in fields:
+                diff_tensor = kappa + fields['rans_eddy_diffusivity']*Identity(kappa.ufl_shape[0])
+            else:
+                diff_tensor = kappa
         else:
-            raise Exception(str(kappa.__class__)+"is not a valid assigment. Should be Matrix or Constant.")
-            '''
+            raise ValueError("Unknown shape of diffusivity")
+
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
@@ -110,7 +110,7 @@ class ScalarDiffusionTerm(BaseTerm):
         # sigma = 6.93 = 3.5*p*(p+1)
 
         degree = phi.ufl_element().degree()
-        sigma = 5.0*degree*(degree + 1)/cellsize
+        sigma = 60.0*degree*(degree + 1)/cellsize
         if degree == 0:
             sigma = 1.5 / cellsize
 

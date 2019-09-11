@@ -6,6 +6,7 @@ from .time_stepper import ERKEuler, ERKLSPUM2, ERKLPUM2, ERKMidpoint, SSPRK33, \
 from .coupled_integrators import CrankNicolsonSaddlePointTimeIntegrator, PressureProjectionTimeIntegrator
 from .assembledschur import AssembledSchurPC
 from .meltrate_param import MeltRateParam
+from .rans import RANSModel
 
 from ._version import get_versions
 __version__ = get_versions()['version']
