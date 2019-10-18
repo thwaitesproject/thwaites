@@ -74,20 +74,7 @@ class ScalarDiffusionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         kappa = fields['diffusivity']
-        diff_tensor = as_matrix([[kappa, 0, ],
-                                 [0, kappa, ]])
-        #
-        '''if kappa.__class__ == Constant:
-            diff_tensor = as_matrix([[kappa, 0, ],
-                                     [0, kappa, ]])
-        if kappa.__class__ == algebra.Sum:
-            diff_tensor = as_matrix([[kappa, 0, ],
-                                     [0, kappa, ]])
-        elif kappa.__class__ == tensors.ListTensor:
-            diff_tensor = kappa  # predefine matrix as above with different horizontal and vertical diffusivities
-        else:
-            raise Exception(str(kappa.__class__)+"is not a valid assigment. Should be Matrix or Constant.")
-            '''
+        diff_tensor = Identity(self.dim)*kappa
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
@@ -176,7 +163,7 @@ class ScalarAdvectionEquation(BaseEquation):
     Scalar equation with only an advection term.
     """
 
-    terms = [ScalarAdvectionTerm, ScalarSourceTerm]
+    terms = [ScalarAdvectionTerm, ScalarSourceTerm, ScalarAbsorptionTerm]
 
 
 class ScalarAdvectionDiffusionEquation(BaseEquation):
@@ -184,7 +171,7 @@ class ScalarAdvectionDiffusionEquation(BaseEquation):
     Scalar equation with advection and diffusion.
     """
 
-    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm]
+    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm, ScalarAbsorptionTerm]
 
 
 class HybridizedScalarEquation(BaseEquation):

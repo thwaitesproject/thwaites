@@ -38,7 +38,7 @@ class MomentumAdvectionTerm(BaseTerm):
             elif 'un' in bc:
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
-                u_in = as_vector((0,0))
+                u_in = zero(self.dim)
             F += conditional(dot(u_adv, n) < 0,
                              dot(phi, u_in)*dot(u_adv, n),
                              dot(phi, u)*dot(u_adv, n)) * self.ds(id)
@@ -81,19 +81,7 @@ class ViscosityTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         mu = fields['viscosity']
-        diff_tensor = as_matrix([[mu, 0],
-                                 [0, mu]])
-        '''if mu.__class__ == Constant:
-            diff_tensor = as_matrix([[mu, 0],
-                                     [0, mu]])
-        if mu.__class__ == algebra.Sum:
-            diff_tensor = as_matrix([[mu, 0],
-                                     [0, mu]])
-        elif mu.__class__ == tensors.ListTensor:
-            diff_tensor = mu  # predefine matrix as above with different horizontal and vertical viscosities.
-        else:
-            raise Exception(str(mu.__class__)+"is not a valid assigment. Should be Matrix, Sum or Constant.")
-        '''
+        diff_tensor = mu * Identity(self.dim)
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
@@ -171,16 +159,6 @@ class ViscosityTerm(BaseTerm):
                 raise ValueError("Cannot apply both 'u' and 'un' bc on same boundary")
 
 
-            ### added in by Will monday 28th oct
-            # want to have a non-dimensionalised form to test rayleigh-taylor instability
-            # reynolds number completely describes dimensionless problem and is applied as
-            # (1/Re) * viscous term.
-            # Make sure that mu = 1.0 in running script!
-
-            if 'reynolds' in fields:
-                Re = fields['reynolds']
-                F = (1.0/Re)*F
-
         return -F
 
 
@@ -244,13 +222,23 @@ class MomentumSourceTerm(BaseTerm):
 
         return F
 
+class CoriolisTerm(BaseTerm):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        if 'coriolis_frequency' not in fields:
+            return 0
+        phi = test
+        f = fields['coriolis_frequency']
+
+        F = (-f*trial[1]*test[0] + f*trial[0]*phi[1])*self.dx
+        return -F
+
 
 class MomentumEquation(BaseEquation):
     """
     Momentum equation with advection, viscosity and pressure gradient
     """
 
-    terms = [MomentumAdvectionTerm, ViscosityTerm, PressureGradientTerm, MomentumSourceTerm]
+    terms = [MomentumAdvectionTerm, ViscosityTerm, PressureGradientTerm, MomentumSourceTerm, CoriolisTerm]
 
 
 class ContinuityEquation(BaseEquation):
