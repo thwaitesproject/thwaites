@@ -1,6 +1,6 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, div, grad, CellDiameter, as_matrix, avg, jump, Constant
-from firedrake import min_value, max_value, split, FacetNormal
+from firedrake import min_value, max_value, split, FacetNormal, Identity
 from .utility import is_continuous, normal_is_continuous
 from ufl import tensors, algebra
 """
@@ -74,7 +74,7 @@ class ScalarDiffusionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         kappa = fields['diffusivity']
-        diff_tensor = Identity(self.dim)*kappa
+        diff_tensor = kappa*Identity(self.dim)
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
@@ -130,11 +130,11 @@ class ScalarSourceTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
         if 'source' not in fields:
             return 0
-
+        phi = test
         source = fields['source']
 
         # NOTE, here source term F is already on the RHS
-        F = dot(test, source)*self.dx
+        F = dot(phi, source)*self.dx
 
         return F
 
@@ -144,11 +144,11 @@ class ScalarAbsorptionTerm(BaseTerm):
             Absorption Term :math:`\alpha_T T`
         """
 
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         if 'absorption coefficient' not in fields:
             return 0
 
-        phi = self.test
+        phi = test
         alpha = fields['absorption coefficient']
 
         # NOTE, here absorption term F is already on the RHS
