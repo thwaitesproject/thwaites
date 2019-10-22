@@ -27,10 +27,8 @@ V_in = 1.0
 H1 = 1.0
 mu_visc = V_in*H1/Re
 
-mu0 = 0.1
-tke0 = Constant((mu0/H1)**2)
-psi0 = Constant(0.09*tke0**(3/2)/H1)
-
+tke_in = Constant(0.02 * 0.5*V_in**2)  # 2% turbulence - Bosch '98
+eps_in = Constant(0.09 * tke_in**2 / mu_visc / 100)  # r_t=vu_t/vu=100 - Bosch '98
 
 # We declare the output filenames, and write out the initial conditions. ::
 u_file = File("velocity.pvd")
@@ -41,7 +39,7 @@ p_file.write(p_)
 
 # time period and time step
 T = 1000.
-dt = T/1000.
+dt = 0.02
 
 mom_eq = MomentumEquation(Z.sub(0), Z.sub(0))
 cty_eq = ContinuityEquation(Z.sub(1), Z.sub(1))
@@ -60,7 +58,7 @@ mumps_solver_parameters = {
 
 no_normal_flow = {'un': 0.}
 uv_in = Constant((V_in, 0))
-inflow_bc = {'u': uv_in, 'tke': Constant(0.0), 'psi': Constant(0.09*(0.0)**(3/2.))}
+inflow_bc = {'u': uv_in, 'tke': tke_in, 'psi': eps_in}
 outflow_bc = {}
 wall_bc = {'un': 0., 'wall_law': 0.}
 # NOTE: in the current implementation of the momentum advection term,
@@ -79,7 +77,7 @@ rans_solver_parameters = mumps_solver_parameters
 
 rans = RANSModel(rans_fields, mesh, bcs=up_bcs, options={'l_max': 10.})
 rans._create_integrators(BackwardEuler, dt, up_bcs, rans_solver_parameters)
-rans.initialize(rans_tke=tke0, rans_psi=psi0)
+rans.initialize(rans_tke=tke_in, rans_psi=eps_in)
 
 up_fields['rans_eddy_viscosity'] = rans.fields.rans_eddy_viscosity
 
@@ -118,9 +116,6 @@ while t < T - 0.5*dt:
 
     step += 1
     t += dt
-
-    if t>100:
-        dt = 0.002
 
     if step % 1 == 0:
         u_file.write(u_)

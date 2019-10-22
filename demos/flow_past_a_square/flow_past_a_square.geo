@@ -1,8 +1,8 @@
 H = 0.04;
 x1 = 5*H + H/2;
 x2 = 20*H - H/2;
-dx = H/15;
-dx1 = H;
+dx = H/200;
+dx1 = H/4;
 
 // Outer box
 Point(1) = {-x1, -7*H, 0, dx1};

@@ -3,6 +3,9 @@
 from thwaites import *
 from thwaites.rans import RANSModel
 from math import pi
+import os.path
+
+outputdir = 'nowall'
 mesh = Mesh('flow_past_a_square.msh')
 
 # We set up a function space of discontinous bilinear elements for :math:`q`, and
@@ -33,14 +36,14 @@ tke0 = Constant(1e-5)
 psi0 = Constant(1e-5)
 
 # We declare the output filenames, and write out the initial conditions. ::
-u_file = File("velocity.pvd")
+u_file = File(os.path.join(outputdir, "velocity.pvd"))
 u_file.write(u_)
-p_file = File("pressure.pvd")
+p_file = File(os.path.join(outputdir, "pressure.pvd"))
 p_file.write(p_)
 
 
 # time period and time step
-T = 5.
+T = 10.
 dt = 0.002
 
 mom_eq = MomentumEquation(Z.sub(0), Z.sub(0))
@@ -68,7 +71,7 @@ no_slip_bc = {'u': Constant((0,0))}
 # there's a subtle difference between not specifying a boundary, and
 # specifying an empty {} boundary - is equivalent to specifying a 
 # (0,0) 'u' value - it only adds a stabilisation on the outflow - need to check correctness
-up_bcs = {1: inflow_bc, 2: outflow_bc, 3: no_normal_flow, 4: no_normal_flow, 5: no_slip_bc}
+up_bcs = {1: inflow_bc, 2: outflow_bc, 3: no_normal_flow, 4: no_normal_flow, 5: no_normal_flow}
 up_solver_parameters = mumps_solver_parameters
 
 up_coupling = [{'pressure': 1}, {'velocity': 0}]
@@ -87,7 +90,7 @@ up_fields['rans_eddy_viscosity'] = rans.eddy_viscosity
 
 # output files for RANS
 # we write initial states, so the indexing is in sync with the velocity/pressure files
-rans_file = File("rans.pvd")
+rans_file = File(os.path.join(outputdir, "rans.pvd"))
 rans_output_fields = (
     rans.tke, rans.psi,
     rans.fields.rans_eddy_viscosity,
@@ -101,15 +104,17 @@ rans_file.write(*rans_output_fields)
 
 def diagnostics():
     n = -FacetNormal(mesh)
-    tau = (mu_visc+rans.fields.rans_eddy_viscosity)*sym(grad(u_))
+    tau = (mu_visc+rans.eddy_viscosity)*sym(grad(u_))
     integrand = dot(n, tau) - p_*n
     F_D = assemble(integrand[0]*ds(5))
-    F_p = assemble(p_*n[0]*ds(5))
+    F_Dp = assemble(p_*n[0]*ds(5))
     F_L = assemble(integrand[1]*ds(5))
+    F_Lp = assemble(p_*n[1]*ds(5))
     C_D = 2*F_D/(V_in**2*H1)
-    C_p = 2*F_p/(V_in**2*H1)
+    C_Dp = 2*F_Dp/(V_in**2*H1)
     C_L = 2*F_L/(V_in**2*H1)
-    return C_D, C_p, C_L
+    C_Lp = 2*F_Lp/(V_in**2*H1)
+    return C_D, C_Dp, C_L, C_Lp
 
 t = 0.0
 step = 0
