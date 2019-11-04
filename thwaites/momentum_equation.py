@@ -191,7 +191,7 @@ class DivergenceTerm(BaseTerm):
         u = fields['velocity']
 
         # NOTE: we assume psi is continuous
-        #assert is_continuous(psi)
+        # assert is_continuous(psi)
         F = -dot(grad(psi), u)*self.dx
 
         # do nothing should be zero (normal) stress, which means no (Dirichlet condition)
@@ -222,6 +222,7 @@ class MomentumSourceTerm(BaseTerm):
 
         return F
 
+
 class CoriolisTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
         if 'coriolis_frequency' not in fields:
@@ -235,7 +236,7 @@ class CoriolisTerm(BaseTerm):
 
 class MomentumEquation(BaseEquation):
     """
-    Momentum equation with advection, viscosity and pressure gradient
+    Momentum equation with advection, viscosity, pressure gradient, source term, and coriolis.
     """
 
     terms = [MomentumAdvectionTerm, ViscosityTerm, PressureGradientTerm, MomentumSourceTerm, CoriolisTerm]
