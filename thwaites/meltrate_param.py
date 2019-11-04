@@ -2,11 +2,11 @@ from firedrake import conditional
 from firedrake import Constant
 
 
-class MeltRateParam():
-    """methods for calculating meltrate parameterisation used in ice-ocean boundary"""
-    a = -5.73E-2  # salinity coefficient of freezing eqation
-    b = 0.0832 # use fluidity value #9.39E-2  # constant coeff of freezing equation
-    c = -7.53E-8  # pressure coeff of freezing equation
+class MeltRateParam:
+    """methods for calculating melt rate parameterisation used in ice-ocean boundary"""
+    a = -5.73E-2  # salinity coefficient of freezing equation
+    b = 0.0832  # use fluidity value #9.39E-2  # constant coefficient of freezing equation
+    c = -7.53E-8  # pressure coefficient of freezing equation
 
     c_p_m = 3974.  # specific heat capacity of mixed layer
     c_p_i = 2009.
@@ -22,203 +22,130 @@ class MeltRateParam():
     k_i = 1.14E-6
 
     rho_ice = 920.0
-    # h_ice = 1000. # in m
     T_ice = -25.0
     
     g = 9.81
     rho0 = 1025.0
 
-
-
-    
-
-
-
-    def __init__(self,S,T,Pin,cav_boundary,z,dz):
-        self.z = z  # -1000m at GL to 0 outside domain at surface
-        self.dz_calc = dz*1.0
-        self.cav_boundary = cav_boundary
-
-        #self.P_ice = self.rho_ice * self.g * h_ice  # hydrostatic pressure just from ice
-        #self.Pfull = self.rho0 * (Pin - self.g * self.z) + self.P_ice
-        Phydrostatic = -self.rho0*self.g*self.z
-        self.Pfull = Phydrostatic + self.rho0*Pin
-        self.S = S
-        self.T = T
-
+    def __init__(self, salinity, temperature, pressure_perturbation, z):
+        P_hydrostatic = -self.rho0 * self.g * z
+        self.P_full = P_hydrostatic + self.rho0 * pressure_perturbation
+        self.S = salinity
+        self.T = temperature
 
     def freezing_point(self):
-        return self.a * self.S + self.b + self.c * self.Pfull
-
-    def two_eq_param_meltrate(self):
-
-        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * self.S + self.b + self.c * self.Pfull, 0.0)
-        # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = Constant(0.0)
-        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
-        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -Q_latent / (self.Lf * self.rho0), 0.0)
-
-        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
-                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s = wb*self.S
-
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s, wb, loc_Tb, self.Pfull  # these are all still expressions
+        return self.a * self.S + self.b + self.c * self.P_full
 
 
-    def three_eq_param_meltrate_without_Qice(self):
+class TwoEqMeltRateParam(MeltRateParam):
 
+    def __init__(self, salinity, temperature, pressure_perturbation, z):
+        super().__init__(salinity, temperature, pressure_perturbation, z)
+
+        self.Tb = self.a * self.S + self.b + self.c * self.P_full
+        self.Q_ice = Constant(0.0)
+        self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * self.gammaT
+        self.Q_latent = self.Q_ice - self.Q_mixed
+        self.wb = -self.Q_latent / (self.Lf * self.rho0)
+        self.T_flux_bc = -(self.wb + self.gammaT) * (self.Tb - self.T)
+        self.Q_s = self.wb*self.S
+
+
+class ThreeEqMeltRateParamWithoutQice(MeltRateParam):
+    def __init__(self, salinity, temperature, pressure_perturbation, z):
+        super().__init__(salinity, temperature, pressure_perturbation, z)
 
         Aa = self.c_p_m*self.gammaT*self.a
 
         Bb = self.c_p_m*self.gammaT*self.b - self.c_p_m*self.gammaT*self.T
-        Bb = Bb + self.c_p_m*self.c*self.Pfull*self.gammaT - self.gammaS*self.Lf
+        Bb = Bb + self.c_p_m*self.c*self.P_full*self.gammaT - self.gammaS*self.Lf
 
         Cc = self.gammaS*self.Lf*self.S
 
-        soln1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)  # this is one value of loc_Sb
-        soln2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        self.Sb = conditional(S1 > 0.0, S1, S2)
 
-        loc_Sb = conditional(soln1 > 0.0, soln1, soln2)
+        self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
 
-        '''try:
-            p = int(typ[1:])
-            if p < 1:
-                raise ValueError
-        except ValueError:
-            raise ValueError("Don't know how to interpret %s-norm" % norm_type)'''
+        self.Q_ice = Constant(0.0)
+        self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * self.gammaT
+        self.Q_latent = self.Q_ice - self.Q_mixed
+        self.wb = -self.Q_latent / (self.Lf * self.rho0)
 
-        # need to add in an exception if the salinity falls below zero. ...
-        '''error = conditional(if i in loc_Sb.dat.data < 0.0:
-            print("Melt interface, loc_Sb: ",  i)
-            print("Melt interface, Aa: ",  Aa)
-            print("Melt interface, Bb: ",  Bb)
-            print("Melt interface, Cc: ",  Cc)
-            print("Melt interface, T: ",  T)
-            print("Melt interface, S: ",  S)
-            print("Melt interface, P: ",  Pfull)
-            print("Melt interface, fv: n/a")  # add in friction velocity
-    
-            raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
-
-        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
-        # Q_ice = conditional(self.z > 0-self.dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = Constant(0.0)
-        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
-        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -Q_latent / (self.Lf * self.rho0), 0.0)
-
-        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
-                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
-
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
+        self.T_flux_bc = -(self.wb + self.gammaT) * (self.Tb - self.T)
+        self.S_flux_bc = -(self.wb + self.gammaS) * (self.Sb - self.S)
 
 
-    def three_eq_param_meltrate(self):
-        # solve with two equation param.
-        b_plus_cPb = (self.b + self.c * self.Pfull) # save calculating this each time...
+class ThreeEqMeltRateParam(MeltRateParam):
+    def __init__(self, salinity, temperature, pressure_perturbation, z):
+        super().__init__(salinity, temperature, pressure_perturbation, z)
+        b_plus_cPb = (self.b + self.c * self.P_full)  # save calculating this each time...
 
         Aa = self.c_p_m * self.gammaT * self.a - self.c_p_i * self.gammaS * self.a
 
-        Bb = self.c_p_i * self.gammaS * self.T_ice - self.c_p_i * self.gammaS * b_plus_cPb + self.c_p_i * self.gammaS * self.S * self.a
-        Bb = Bb + self.c_p_m * self.gammaT * b_plus_cPb - self.c_p_m * self.gammaT * self.T - self.gammaS * self.Lf
+        Bb = self.c_p_i * self.gammaS * self.T_ice
+        Bb -= self.c_p_i * self.gammaS * b_plus_cPb
+        Bb += self.c_p_i * self.gammaS * self.S * self.a
+        Bb += self.c_p_m * self.gammaT * b_plus_cPb
+        Bb -= self.c_p_m * self.gammaT * self.T
+        Bb -= self.gammaS * self.Lf
 
-        Cc = self.c_p_i * self.gammaS * self.S * b_plus_cPb - self.c_p_m * self.gammaS * self.S * self.T_ice + self.gammaS * self.Lf * self.S
+        Cc = self.c_p_i * self.gammaS * self.S * b_plus_cPb
+        Cc -= self.c_p_m * self.gammaS * self.S * self.T_ice
+        Cc += self.gammaS * self.Lf * self.S
 
-        soln1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)  # this is one value of loc_Sb
-        soln2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        self.Sb = conditional(S1 > 0.0, S1, S2)
 
-        loc_Sb = conditional(soln1 > 0.0, soln1, soln2)
+        self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
+        self.wb = -self.gammaS*(self.Sb-self.S)/self.Sb
 
-        '''try:
-            p = int(typ[1:])
-            if p < 1:
-                raise ValueError
-        except ValueError:
-            raise ValueError("Don't know how to interpret %s-norm" % norm_type)'''
+        self.Q_ice = -self.rho0 * (self.T_ice - self.Tb) * self.c_p_i * self.wb
+        self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * self.gammaT
+        self.Q_latent = self.Q_ice - self.Q_mixed
 
-        # need to add in an exception if the salinity falls below zero. ...
-        '''error = conditional(if i in loc_Sb.dat.data < 0.0:
-            print("Melt interface, loc_Sb: ",  i)
-            print("Melt interface, Aa: ",  Aa)
-            print("Melt interface, Bb: ",  Bb)
-            print("Melt interface, Cc: ",  Cc)
-            print("Melt interface, T: ",  T)
-            print("Melt interface, S: ",  S)
-            print("Melt interface, P: ",  Pfull)
-            print("Melt interface, fv: n/a")  # add in friction velocity
-    
-            raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
-
-        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
-
-        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -self.gammaS*(loc_Sb-self.S)/loc_Sb, 0.0)
-        # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
-        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
+        self.T_flux_bc = -(self.wb + self.gammaT) * (self.Tb - self.T)
+        self.S_flux_bc = -(self.wb + self.gammaS) * (self.Sb - self.S)
 
 
-        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
-                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
+class ThreeEqMeltRateParamFrictionVel(MeltRateParam):
+    def __init__(self, salinity, temperature, pressure_perturbation, z, velocity):
+        super().__init__(salinity, temperature, pressure_perturbation, z)
 
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, loc_Sb, self.Pfull  # these are all still expressions
-
-    def three_eq_param_meltrate_friction_vel(self,u):
-        # solve with two equation param.
-
-        u_star = pow(self.C_d*pow(u,2),0.5)  # + tidal velocity?????
-        u_star = conditional(u_star>1.0E-3, u_star,1.0E-3)
+        u = velocity
+        u_star = pow(self.C_d*pow(u, 2), 0.5)  # + tidal velocity?????
+        u_star = conditional(u_star > 1.0E-3, u_star, 1.0E-3)
 
         T_param = self.gammaT_fric * u_star
         S_param = self.gammaS_fric * u_star
 
-        b_plus_cPb = (self.b + self.c * self.Pfull)  # save calculating this each time...
+        b_plus_cPb = (self.b + self.c * self.P_full)  # save calculating this each time...
 
         Aa = self.c_p_m * T_param * self.a - self.c_p_i * S_param * self.a
 
-        Bb = self.c_p_i * S_param * self.T_ice - self.c_p_i * S_param * b_plus_cPb + self.c_p_i * S_param * self.S * self.a
-        Bb = Bb + self.c_p_m * T_param * b_plus_cPb - self.c_p_m * T_param * self.T - S_param * self.Lf
+        Bb = self.c_p_i * S_param * self.T_ice
+        Bb -= self.c_p_i * S_param * b_plus_cPb
+        Bb += self.c_p_i * S_param * self.S * self.a
+        Bb += self.c_p_m * T_param * b_plus_cPb
+        Bb -= self.c_p_m * T_param * self.T
+        Bb -= S_param * self.Lf
 
-        Cc = self.c_p_i * S_param * self.S * b_plus_cPb - self.c_p_m * S_param * self.S * self.T_ice + S_param * self.Lf * self.S
+        Cc = self.c_p_i * S_param * self.S * b_plus_cPb
+        Cc -= self.c_p_m * S_param * self.S * self.T_ice
+        Cc += S_param * self.Lf * self.S
 
-        soln1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)  # this is one value of loc_Sb
-        soln2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        self.Sb = conditional(S1 > 0.0, S1, S2)
 
-        loc_Sb = conditional(soln1 > 0.0, soln1, soln2)
+        self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
+        self.wb = -S_param * (self.Sb - self.S) / self.Sb
 
-        '''try:
-            p = int(typ[1:])
-            if p < 1:
-                raise ValueError
-        except ValueError:
-            raise ValueError("Don't know how to interpret %s-norm" % norm_type)'''
+        self.Q_ice = -self.rho0 * (self.T_ice - self.Tb) * self.c_p_i * self.wb
+        self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * T_param
+        self.Q_latent = self.Q_ice - self.Q_mixed
 
-        # need to add in an exception if the salinity falls below zero. ...
-        '''error = conditional(if i in loc_Sb.dat.data < 0.0:
-            print("Melt interface, loc_Sb: ",  i)
-            print("Melt interface, Aa: ",  Aa)
-            print("Melt interface, Bb: ",  Bb)
-            print("Melt interface, Cc: ",  Cc)
-            print("Melt interface, T: ",  T)
-            print("Melt interface, S: ",  S)
-            print("Melt interface, P: ",  Pfull)
-            print("Melt interface, fv: n/a")  # add in friction velocity
-
-            raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
-
-        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
-
-        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -S_param * (loc_Sb - self.S) / loc_Sb, 0.0)
-        # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
-        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * T_param, 0.0)
-        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
-
-        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + T_param) * (loc_Tb - self.T),
-                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + S_param) * (loc_Sb - self.S), 0.0)
-
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, loc_Sb, self.Pfull  # these are all still expressions
+        self.T_flux_bc = -(self.wb + T_param) * (self.Tb - self.T)
+        self.S_flux_bc = -(self.wb + S_param) * (self.Sb - self.S)
