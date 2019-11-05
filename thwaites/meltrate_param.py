@@ -13,19 +13,19 @@ class MeltRateParam:
     gammaT = 1E-4  # roughly thermal exchange velocity
     gammaS = 5.05E-7
 
-    gammaT_fric = 1.1E-2  # from jenkins et al 2010 - fluidity and ben have 1.1E-3!!!!
-    gammaS_fric = 3.1E-4   # from jenkins et al 2010 - matches fluidity
-    C_d = 0.0097  # drag coefficient for ice...
+    gammaT_fric = 1.1E-2  # from jenkins et al 2010
+    gammaS_fric = gammaT_fric / 35.0  # from jenkins et al 2010 - matches fluidity
+    C_d = 0.0025  # 0.0097  # drag coefficient for ice...
 
     Lf = 3.34E5  # latent heat of fusion
 
-    k_i = 1.14E-6
+    k_i = 0.0  # before isomip 1.14E-6
 
     rho_ice = 920.0
     T_ice = -25.0
     
     g = 9.81
-    rho0 = 1025.0
+    rho0 = 1027.5
 
     def __init__(self, salinity, temperature, pressure_perturbation, z):
         P_hydrostatic = -self.rho0 * self.g * z
@@ -77,7 +77,7 @@ class ThreeEqMeltRateParamWithoutQice(MeltRateParam):
         self.S_flux_bc = -(self.wb + self.gammaS) * (self.Sb - self.S)
 
 
-class ThreeEqMeltRateParam(MeltRateParam):
+class ThreeEqMeltRateParamWithoutFrictionVel(MeltRateParam):
     def __init__(self, salinity, temperature, pressure_perturbation, z):
         super().__init__(salinity, temperature, pressure_perturbation, z)
         b_plus_cPb = (self.b + self.c * self.P_full)  # save calculating this each time...
@@ -110,13 +110,13 @@ class ThreeEqMeltRateParam(MeltRateParam):
         self.S_flux_bc = -(self.wb + self.gammaS) * (self.Sb - self.S)
 
 
-class ThreeEqMeltRateParamFrictionVel(MeltRateParam):
+class ThreeEqMeltRateParam(MeltRateParam):
     def __init__(self, salinity, temperature, pressure_perturbation, z, velocity):
         super().__init__(salinity, temperature, pressure_perturbation, z)
 
         u = velocity
-        u_star = pow(self.C_d*pow(u, 2), 0.5)  # + tidal velocity?????
-        u_star = conditional(u_star > 1.0E-3, u_star, 1.0E-3)
+        u_tidal = 0.01
+        u_star = pow(self.C_d*(pow(u, 2)+pow(u_tidal, 2)), 0.5)
 
         T_param = self.gammaT_fric * u_star
         S_param = self.gammaS_fric * u_star
