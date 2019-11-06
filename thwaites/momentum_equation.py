@@ -81,7 +81,10 @@ class ViscosityTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         mu = fields['viscosity']
-        diff_tensor = mu * Identity(self.dim)
+        if len(mu.ufl_shape) == 2:
+            diff_tensor = mu
+        else:
+            diff_tensor = mu * Identity(self.dim)
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
@@ -107,7 +110,8 @@ class ViscosityTerm(BaseTerm):
         # sigma = 6.93 = 3.5*p*(p+1)
 
         degree = self.trial_space.ufl_element().degree()
-        sigma = 5.0*degree*(degree + 1)/cellsize
+        alpha = fields.get('interior_penalty', 5.0)
+        sigma = alpha*degree*(degree + 1)/cellsize
         if degree == 0:
             sigma = 1.5 / cellsize
 
