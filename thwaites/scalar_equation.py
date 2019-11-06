@@ -74,7 +74,10 @@ class ScalarDiffusionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         kappa = fields['diffusivity']
-        diff_tensor = kappa*Identity(self.dim)
+        if len(kappa.ufl_shape) == 2:
+            diff_tensor = kappa
+        else:
+            diff_tensor = kappa*Identity(self.dim)
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
@@ -96,8 +99,9 @@ class ScalarDiffusionTerm(BaseTerm):
         # assuming k_max/k_min=2, Theta=pi/3
         # sigma = 6.93 = 3.5*p*(p+1)
 
-        degree = phi.ufl_element().degree()
-        sigma = 5.0*degree*(degree + 1)/cellsize
+        degree = self.trial_space.ufl_element().degree()
+        alpha = fields.get('interior_penalty', 5.0)
+        sigma = alpha*degree*(degree + 1)/cellsize
         if degree == 0:
             sigma = 1.5 / cellsize
 
