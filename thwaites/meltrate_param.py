@@ -64,11 +64,19 @@ class ThreeEqMeltRateParamWithoutQice(MeltRateParam):
 
         S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
         S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
-        self.Sb = conditional(S1 > 0.0, S1, S2)
 
+        if isinstance(S1, float):
+            if S1 > 0:
+                self.Sb = S1
+            else:
+                self.Sb = S2
+            self.Q_ice = 0.0
+        else:
+            self.Sb = conditional(S1 > 0.0, S1, S2)
+            self.Q_ice = Constant(0.0)
         self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
 
-        self.Q_ice = Constant(0.0)
+
         self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * self.gammaT
         self.Q_latent = self.Q_ice - self.Q_mixed
         self.wb = -self.Q_latent / (self.Lf * self.rho0)
@@ -92,12 +100,18 @@ class ThreeEqMeltRateParamWithoutFrictionVel(MeltRateParam):
         Bb -= self.gammaS * self.Lf
 
         Cc = self.c_p_i * self.gammaS * self.S * b_plus_cPb
-        Cc -= self.c_p_m * self.gammaS * self.S * self.T_ice
+        Cc -= self.c_p_i * self.gammaS * self.S * self.T_ice
         Cc += self.gammaS * self.Lf * self.S
 
         S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
         S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
-        self.Sb = conditional(S1 > 0.0, S1, S2)
+        if isinstance(S1, float):
+            if S1 > 0:
+                self.Sb = S1
+            else:
+                self.Sb = S2
+        else:
+            self.Sb = conditional(S1 > 0.0, S1, S2)
 
         self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
         self.wb = -self.gammaS*(self.Sb-self.S)/self.Sb
@@ -133,12 +147,18 @@ class ThreeEqMeltRateParam(MeltRateParam):
         Bb -= S_param * self.Lf
 
         Cc = self.c_p_i * S_param * self.S * b_plus_cPb
-        Cc -= self.c_p_m * S_param * self.S * self.T_ice
+        Cc -= self.c_p_i * S_param * self.S * self.T_ice
         Cc += S_param * self.Lf * self.S
 
         S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
         S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
-        self.Sb = conditional(S1 > 0.0, S1, S2)
+        if isinstance(S1, float):
+            if S1 > 0:
+                self.Sb = S1
+            else:
+                self.Sb = S2
+        else:
+            self.Sb = conditional(S1 > 0.0, S1, S2)
 
         self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
         self.wb = -S_param * (self.Sb - self.S) / self.Sb
