@@ -9,7 +9,7 @@ from firedrake import FacetNormal
 import pandas as pd
 ##########
 
-folder = "/data/msci_testing/4.11.19.3_eq_param_dt_3600_t120_delT_3.0_melt_lag/"  # output folder.
+folder = "/data/msci_testing/11.11.19.3_eq_param_dt_600_t120_delT_3.0/"  # output folder.
 
 ##########
 
@@ -140,7 +140,7 @@ s_file.write(sal)
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p_, z)
+mp = ThreeEqMeltRateParam(sal, temp, p_, z, u_)
 
 ##########
 
@@ -247,8 +247,8 @@ sal_solver_parameters = mumps_solver_parameters
 
 # define time steps
 T = 3600*24*120
-dt = 3600.
-output_dt = dt*24.
+dt = 600.
+output_dt = 3600.*24.
 output_step = output_dt/dt
 
 ##########
@@ -270,21 +270,22 @@ while t < T - 0.5*dt:
     temp_timestepper.advance(t)
     sal_timestepper.advance(t)
 
-    # Update melt rate functions
-    Q_ice.interpolate(mp.Q_ice)
-    Q_mixed.interpolate(mp.Q_mixed)
-    Q_latent.interpolate(mp.Q_latent)
-    Q_s.interpolate(mp.S_flux_bc)
-    melt.interpolate(mp.wb)
-    Tb.interpolate(mp.Tb)
-    Sb.interpolate(mp.Sb)
-    full_pressure.interpolate(mp.P_full)
-
     step += 1
     t += dt
 
     # Output files
     if step % output_step == 0:
+        # Update melt rate functions
+        Q_ice.interpolate(mp.Q_ice)
+        Q_mixed.interpolate(mp.Q_mixed)
+        Q_latent.interpolate(mp.Q_latent)
+        Q_s.interpolate(mp.S_flux_bc)
+        melt.interpolate(mp.wb)
+        Tb.interpolate(mp.Tb)
+        Sb.interpolate(mp.Sb)
+        full_pressure.interpolate(mp.P_full)
+
+        # Write melt rate functions
         u_file.write(u_)
         p_file.write(p_)
         t_file.write(temp)
