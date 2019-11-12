@@ -10,7 +10,7 @@ class MeltRateParam:
 
     c_p_m = 3974.  # specific heat capacity of mixed layer
     c_p_i = 2009.
-    gammaT = 1E-4  # roughly thermal exchange velocity
+    gammaT = 1.0E-4  # roughly thermal exchange velocity
     gammaS = 5.05E-7
 
     gammaT_fric = 1.1E-2  # from jenkins et al 2010
@@ -43,8 +43,13 @@ class TwoEqMeltRateParam(MeltRateParam):
         super().__init__(salinity, temperature, pressure_perturbation, z)
 
         self.Tb = self.a * self.S + self.b + self.c * self.P_full
-        self.Q_ice = Constant(0.0)
-        self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * self.gammaT
+
+        if isinstance(self.Tb, float):
+            self.Q_ice = 0.0
+        else:
+            self.Q_ice = Constant(0.0)
+
+        self.Q_mixed = -self.rho0 * self.c_p_m * self.gammaT * (self.Tb - self.T)
         self.Q_latent = self.Q_ice - self.Q_mixed
         self.wb = -self.Q_latent / (self.Lf * self.rho0)
         self.T_flux_bc = -(self.wb + self.gammaT) * (self.Tb - self.T)
@@ -66,20 +71,27 @@ class ThreeEqMeltRateParamWithoutQice(MeltRateParam):
         S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
 
         if isinstance(S1, float):
+            # Print statements for testing
+            print("S1 = ", S1)
+            print("S2 = ", S2)
             if S1 > 0:
                 self.Sb = S1
+                print("Choose S1")
             else:
                 self.Sb = S2
+                print("Choose S2")
             self.Q_ice = 0.0
         else:
             self.Sb = conditional(S1 > 0.0, S1, S2)
             self.Q_ice = Constant(0.0)
-        self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
 
+        self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
 
         self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * self.gammaT
         self.Q_latent = self.Q_ice - self.Q_mixed
         self.wb = -self.Q_latent / (self.Lf * self.rho0)
+
+        self.QS_mixed = -self.rho0 * self.gammaS * (self.Sb - self.S)
 
         self.T_flux_bc = -(self.wb + self.gammaT) * (self.Tb - self.T)
         self.S_flux_bc = -(self.wb + self.gammaS) * (self.Sb - self.S)
@@ -106,10 +118,15 @@ class ThreeEqMeltRateParamWithoutFrictionVel(MeltRateParam):
         S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
         S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
         if isinstance(S1, float):
+            # Print statements for testing
+            print("S1 = ", S1)
+            print("S2 = ", S2)
             if S1 > 0:
                 self.Sb = S1
+                print("Choose S1")
             else:
                 self.Sb = S2
+                print("Choose S2")
         else:
             self.Sb = conditional(S1 > 0.0, S1, S2)
 
@@ -119,6 +136,8 @@ class ThreeEqMeltRateParamWithoutFrictionVel(MeltRateParam):
         self.Q_ice = -self.rho0 * (self.T_ice - self.Tb) * self.c_p_i * self.wb
         self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * self.gammaT
         self.Q_latent = self.Q_ice - self.Q_mixed
+
+        self.QS_mixed = -self.rho0 * self.gammaS * (self.Sb - self.S)
 
         self.T_flux_bc = -(self.wb + self.gammaT) * (self.Tb - self.T)
         self.S_flux_bc = -(self.wb + self.gammaS) * (self.Sb - self.S)
@@ -152,11 +171,17 @@ class ThreeEqMeltRateParam(MeltRateParam):
 
         S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
         S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+
         if isinstance(S1, float):
+            # Print statements for testing
+            print("S1 = ", S1)
+            print("S2 = ", S2)
             if S1 > 0:
                 self.Sb = S1
+                print("Choose S1")
             else:
                 self.Sb = S2
+                print("Choose S2")
         else:
             self.Sb = conditional(S1 > 0.0, S1, S2)
 
@@ -166,6 +191,8 @@ class ThreeEqMeltRateParam(MeltRateParam):
         self.Q_ice = -self.rho0 * (self.T_ice - self.Tb) * self.c_p_i * self.wb
         self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * T_param
         self.Q_latent = self.Q_ice - self.Q_mixed
+
+        self.QS_mixed = -self.rho0 * S_param * (self.Sb - self.S)
 
         self.T_flux_bc = -(self.wb + T_param) * (self.Tb - self.T)
         self.S_flux_bc = -(self.wb + S_param) * (self.Sb - self.S)
