@@ -152,8 +152,8 @@ s_file.write(sal)
 
 ##########
 
-# Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p_, z, u_)
+# Get expressions used in melt rate parameterisation, Qice = 0 for isomip (set ice_heat_flux to False)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, u, False)
 
 ##########
 

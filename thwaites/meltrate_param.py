@@ -10,16 +10,16 @@ class MeltRateParam:
 
     c_p_m = 3974.  # specific heat capacity of mixed layer
     c_p_i = 2009.
-    gammaT = 1.0E-4  # roughly thermal exchange velocity
-    gammaS = 5.05E-7
+    gammaT = 1.0E-4  # thermal exchange velocity, m/s
+    gammaS = 5.05E-7 # salt exchange velocity, m/s
 
-    gammaT_fric = 1.1E-2  # from jenkins et al 2010
-    gammaS_fric = gammaT_fric / 35.0  # from jenkins et al 2010 - matches fluidity
+    GammaT = 1.1E-2  # dimensionless GammaT (capital). gammaT = GammaT.u* from jenkins et al 2010
+    GammaS = GammaT / 35.0  # dimensionless GammaS (capital). gammaS = GammaS.u* from jenkins et al 2010
     C_d = 0.0025  # 0.0097  # drag coefficient for ice...
 
     Lf = 3.34E5  # latent heat of fusion
 
-    k_i = 0.0  # before isomip 1.14E-6
+    k_i = 1.14E-6
 
     rho_ice = 920.0
     T_ice = -25.0
@@ -89,8 +89,7 @@ class ThreeEqMeltRateParamWithoutQice(MeltRateParam):
 
         self.Q_mixed = -self.rho0 * (self.Tb - self.T) * self.c_p_m * self.gammaT
         self.Q_latent = self.Q_ice - self.Q_mixed
-        self.wb = -self.Q_latent / (self.Lf * self.rho0)
-
+        self.wb = -self.gammaS * (self.Sb - self.S) / self.Sb
         self.QS_mixed = -self.rho0 * self.gammaS * (self.Sb - self.S)
 
         self.T_flux_bc = -(self.wb + self.gammaT) * (self.Tb - self.T)
@@ -143,7 +142,7 @@ class ThreeEqMeltRateParamWithoutFrictionVel(MeltRateParam):
         self.S_flux_bc = -(self.wb + self.gammaS) * (self.Sb - self.S)
 
 
-class ThreeEqMeltRateParam(MeltRateParam):
+class ThreeEqMeltRateParamOld(MeltRateParam):
     def __init__(self, salinity, temperature, pressure_perturbation, z, velocity):
         super().__init__(salinity, temperature, pressure_perturbation, z)
 
@@ -151,8 +150,8 @@ class ThreeEqMeltRateParam(MeltRateParam):
         u_tidal = 0.01
         u_star = pow(self.C_d*(pow(u, 2)+pow(u_tidal, 2)), 0.5)
 
-        T_param = self.gammaT_fric * u_star
-        S_param = self.gammaS_fric * u_star
+        T_param = self.GammaT * u_star
+        S_param = self.GammaS * u_star
 
         b_plus_cPb = (self.b + self.c * self.P_full)  # save calculating this each time...
 
@@ -196,3 +195,73 @@ class ThreeEqMeltRateParam(MeltRateParam):
 
         self.T_flux_bc = -(self.wb + T_param) * (self.Tb - self.T)
         self.S_flux_bc = -(self.wb + S_param) * (self.Sb - self.S)
+
+
+class ThreeEqMeltRateParam(MeltRateParam):
+    def __init__(self, salinity, temperature, pressure_perturbation, z, velocity=None, ice_heat_flux=True):
+        super().__init__(salinity, temperature, pressure_perturbation, z)
+
+        if velocity is None:
+            gammaT = self.gammaT
+            gammaS = self.gammaS
+        else:
+            u = velocity
+            u_tidal = 0.01
+            u_star = pow(self.C_d*(pow(u, 2)+pow(u_tidal, 2)), 0.5)
+
+            gammaT = self.GammaT * u_star
+            gammaS = self.GammaS * u_star
+
+        b_plus_cPb = (self.b + self.c * self.P_full)  # save calculating this each time...
+
+        # calculate coefficients in quadratic equation for salinity at base.
+        # Aa.Sb^2 + Bb.Sb + Cc = 0
+        Aa = self.c_p_m * gammaT * self.a
+        Bb = -gammaS * self.Lf
+        Bb -= self.c_p_m * gammaT * self.T
+        Bb += self.c_p_m * gammaT * b_plus_cPb
+        Cc = gammaS * self.S * self.Lf
+
+        if ice_heat_flux:
+            Aa -= gammaS * self.c_p_i * self.a
+            Bb += gammaS * self.S * self.c_p_i * self.a
+            Bb -= gammaS * self.c_p_i * b_plus_cPb
+            Bb += gammaS * self.c_p_i * self.T_ice
+            Cc += gammaS * self.S * self.c_p_i * b_plus_cPb
+            Cc -= gammaS * self.S * self.c_p_i * self.T_ice
+
+        S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+
+        if isinstance(S1, float):
+            # Print statements for testing
+            print("S1 = ", S1)
+            print("S2 = ", S2)
+            if S1 > 0:
+                self.Sb = S1
+                print("Choose S1")
+            else:
+                self.Sb = S2
+                print("Choose S2")
+
+        else:
+            self.Sb = conditional(S1 > 0.0, S1, S2)
+
+        self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
+        self.wb = gammaS * (self.S - self.Sb) / self.Sb
+
+        if ice_heat_flux:
+            self.Q_ice = -self.rho0 * (self.T_ice - self.Tb) * self.c_p_i * self.wb
+        else:
+            if isinstance(S1, float):
+                self.Q_ice = 0.0
+            else:
+                self.Q_ice = Constant(0.0)
+
+        self.Q_mixed = -self.rho0 * self.c_p_m * gammaT * (self.Tb - self.T)
+        self.Q_latent = self.Q_ice - self.Q_mixed
+
+        self.QS_mixed = -self.rho0 * gammaS * (self.Sb - self.S)
+
+        self.T_flux_bc = -(self.wb + gammaT) * (self.Tb - self.T)
+        self.S_flux_bc = -(self.wb + gammaS) * (self.Sb - self.S)
