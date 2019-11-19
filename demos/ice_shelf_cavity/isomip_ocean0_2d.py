@@ -104,7 +104,7 @@ kappa_temp = Constant(6)
 kappa_sal = Constant(6)
 
 
-# momentum source: the buoyancy term Boussinesq approx. From Ben's thesis page 31
+# momentum source: the buoyancy term Boussinesq approx. From Asay-Davis et al 2016.
 T_ref = -1.0
 S_ref = 34.2
 beta_temp = 3.733*10E-5
@@ -222,8 +222,8 @@ top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
 
 # WEAKLY Enforced BCs
 n = FacetNormal(mesh)
-Temperature_term = -beta_temp * ((T_bottom - T_surface) * (pow(z, 2) / -water_depth) + (T_surface-T_ref) * z)
-Salinity_term = beta_sal * ((S_bottom - S_surface) * (pow(z, 2) / -water_depth) + (S_surface-S_ref) * z)
+Temperature_term = -beta_temp * ((T_bottom - T_surface) * (pow(z, 2) / (-2.0*water_depth)) + (T_surface-T_ref) * z)
+Salinity_term = beta_sal * ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
 
