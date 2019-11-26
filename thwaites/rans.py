@@ -365,47 +365,59 @@ class TurbulenceModel(object):
 
 class RANSModel(TurbulenceModel):
 
+    default_options = {
+            'nu_0': Constant(1.0e-6),
+            'l_max': Constant(1.0),
+            'l_min': Constant(1e-12),
+            'tke_min': Constant(1e-6),
+            'delta':  Constant(1e-3),
+            'closure_name': 'k-epsilon',
+            'Ri_st': Constant(0.25),
+            'stability_function': None,  # default is CanutoA
+            'C_3_plus': Constant(1.0),
+            'C_3_min': None,  # compute from stability function
+            }
+    default_keps_options = {
+            'n0': Constant(3),
+            'n1': Constant(2),
+            'n2': Constant(2),
+            'C_0': Constant(1.0),
+            'C_1': Constant(1.44),
+            'C_2': Constant(1.92),
+            'schmidt_tke': Constant(1.0),
+            'schmidt_psi': Constant(1.3),
+            'C_mu': Constant(0.09),
+            }
+    default_komega_options = {
+            'n0': Constant(1),
+            'n1': Constant(2),
+            'n2': Constant(0),
+            'C_0': Constant(0.09),
+            'C_1': Constant(5.0/9.0),
+            'C_2': Constant(0.075),
+            'schmidt_tke': Constant(2.0),
+            'schmidt_psi': Constant(2.0),
+            'C_mu': Constant(1.0),
+            }
+
     def __init__(self, fields, mesh, options=AttrDict(), bcs=None):
 
         self.fields = AttrDict(fields)
         self.options = options
         self.timesteppers = AttrDict()
 
-        self.nu_0 = Constant(options.get('nu_0', 1.0e-6))
-        self.l_max = Constant(options.get('l_max', 1.0))
-
-        self.delta = options.get('delta', 1e-3)
-
         self.bcs = bcs or {}
-        self.closure_name = options.get('closure_name', 'k-epsilon')
+        self.options = self.default_options.copy()
 
-        
-        if self.closure_name == 'k-epsilon':
-            
-            self.n0 = Constant(3)
-            self.n1 = Constant(2)
-            self.n2 = Constant(2)
+        self.options.update(options)
+        if self.options['closure_name'] == 'k-epsilon':
+            self.options.update(self.default_keps_options)
+        elif self.options['closure_name'] == 'k-omega':
+            self.options.update(self.default_komega_options)
+        self.options.update(options)
 
-            self.C_0 = Constant(options.get('C_0', 1.0))
-            self.C_1 = Constant(options.get('C_1', 1.44))
-            self.C_2 = Constant(options.get('C_2', 1.92))
-
-            self.schmidt_tke = options.get('schmidt_tke',1.0)
-            self.schmidt_psi = options.get('schmidt_psi', 1.3)
-            
-        elif self.closure_name == 'k-omega':
-            
-            self.n0 = Constant(1)
-            self.n1 = Constant(2)
-            self.n2 = Constant(0)
-
-            self.C_0 = Constant(options.get('C_0', 0.09))
-            self.C_1 = Constant(options.get('C_1', 5.0/9.0))
-            self.C_2 = Constant(options.get('C_2', 0.075))
-
-            self.schmidt_tke = options.get('schmidt_tke',2.0)
-            self.schmidt_psi = options.get('schmidt_psi', 2.0)
-
+        for key, value in self.options.items():
+            setattr(self, key, value)
 
         if mesh.ufl_cell().is_simplex():
             DG_family = 'DG'
@@ -429,10 +441,6 @@ class RANSModel(TurbulenceModel):
         if 'density' in fields:
             self.C_mu = Function(self.P0, name="C_mu")
             self.C_mu_p = Function(self.P0, name="C_mu_p")
-        elif self.closure_name == 'k-epsilon':
-            self.C_mu = Constant(options.get('C_mu', 0.09))
-        elif self.closure_name == 'k-omega':
-            self.C_mu = Constant(options.get('C_mu', 1.0))
 
         self.fields.rans_mixing_length = Function(self.P0, name='rans_mixing_length')
         self.gamma1 = Function(self.P0, name='rans_linearization_1')
@@ -456,7 +464,7 @@ class RANSModel(TurbulenceModel):
         self.eq_rans_tke = HybridizedScalarEquation(RANSTKEEquation2D, self.Z, self.Z)
         self.eq_rans_psi = HybridizedScalarEquation(RANSPsiEquation2D, self.Z, self.Z)
 
-        self.uv = self.fields['velocity']
+        self.uv = self.fields.velocity
         self.eddy_viscosity = Function(self.P0, name='P0 eddy viscosity')
         self.u_tau = Function(self.P1, name='u_tau')
         self.u_plus = Function(self.u_tau.function_space(),
@@ -465,17 +473,15 @@ class RANSModel(TurbulenceModel):
                                name='y plus')
         # buoyancy terms:
         if 'density' in self.fields:
-            self.Ri_st = options.get('Ri_st', 0.25)  # steady state Richardson number
-            self.stability_function = options.get('stability_function', None)
             if self.stability_function is None:
                 stab_args = {'lim_alpha_shear': True,
                              'lim_alpha_buoy': True,
                              'smooth_alpha_buoy_lim': False}
                 self.stability_function = stability_functions.StabilityFunctionCanutoA(**stab_args)
-            self.C_3_plus = Constant(options.get('C_3_plus', 1.0))
-            self.C_3_min = self.stability_function.compute_c3_minus(float(self.C_1), float(self.C_2), self.Ri_st)
             self.cmu0 = self.stability_function.compute_cmu0()
-            self.galperin_clim = self.stability_function.compute_length_clim(self.cmu0, self.Ri_st)
+            if self.C_3_min is None:
+                self.C_3_min = self.stability_function.compute_c3_minus(float(self.C_1), float(self.C_2), float(self.Ri_st))
+            self.galperin_clim = self.stability_function.compute_length_clim(self.cmu0, float(self.Ri_st))
             rho = self.fields['density']
             self.fields.M2 = Function(self.P0, name='shear frequency')
             self.fields.N2 = Function(self.P0, name='buoyancy frequency')
@@ -633,7 +639,7 @@ class RANSModel(TurbulenceModel):
 
     def postprocess(self):
 
-        self.tke.interpolate(max_value(self.tke, 1e-6))
+        self.tke.interpolate(max_value(self.tke, self.tke_min))
         val = (sqrt(2)*self.galperin_clim * (self.cmu0)**-3 * self.tke**-1 * (self.fields.N2_pos + 1e-12)**(-0.5))**-1
         self.psi.interpolate(max_value(self.psi,max_value(val, 1e-14)))
 
@@ -645,8 +651,7 @@ class RANSModel(TurbulenceModel):
             self.psi_flux.interpolate(self.psi_flux_expr)
 
         #self.limiter.apply(self.tke)
-        l_min = 1e-12
-        self.fields.rans_mixing_length.interpolate(conditional(self.cmu0**3*self.tke**1.5>l_min*self.psi, self.cmu0**3*self.tke**1.5/self.psi, l_min))
+        self.fields.rans_mixing_length.interpolate(conditional(self.cmu0**3*self.tke**1.5>self.l_min*self.psi, self.cmu0**3*self.tke**1.5/self.psi, self.l_min))
         #self.eddy_viscosity.project(conditional(self.nu_0>self.fields.rans_mixing_length*self.sqrt_tke,
         #                                       self.nu_0,
         #                                       self.fields.rans_mixing_length*self.sqrt_tke))
