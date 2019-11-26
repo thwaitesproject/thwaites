@@ -10,7 +10,7 @@ quad = True
 Lx = 45.
 H = 50.
 nx = 3
-nz = 20
+nz = 40
 mesh = PeriodicRectangleMesh(nx, nz, Lx, H, direction='x', quadrilateral=quad)
 #h_mesh = PeriodicIntervalMesh(nx, Lx)
 #v_mesh = IntervalMesh(nz, H)
@@ -34,9 +34,6 @@ sal = Function(Q)
 rho = Function(Q)
 
 
-
-x,z = SpatialCoordinate(mesh)
-z = z - H
 
 u_init = Constant((0.0, 0.0))
 u_.assign(u_init)
@@ -146,13 +143,16 @@ up_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, up_
 sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
 
 
+# aux. vars to compute mixing depth
+tke_p1 = Function(W)
+mix_depth = Function(W)
+mix_depths = []
 
 t = 0.0
 step = 0
+trange = []
 
 output_step = 5
-
-mom_cons = open(os.path.join(output_dir, 'mom_cons.txt'), 'w')
 
 limiter = VertexBasedLimiter(Q)
 u_lim = Function(Q)
@@ -162,9 +162,6 @@ while t < T - 0.5*dt:
 
     uint0 = assemble(u_[0]*dx)
     up_timestepper.advance(t)
-    #u_lim.interpolate(u_[0])
-    #limiter.apply(u_lim)
-    #u_.interpolate(as_vector((u_lim, u_[1])))
     uint1 = assemble(u_[0]*dx)
     print(uint1-uint0, tau_wind*Lx)
 
@@ -172,9 +169,10 @@ while t < T - 0.5*dt:
 
     rans.advance(t)
 
-    mom_cons.write(' '.join(str(x) for x in
-        [assemble(u_[0]*dx), assemble(sal*dx), assemble(rans.tke*dx), assemble(rans.psi*dx),
-        assemble(rans.production*dx), assemble(rans.fields.N2*dx), assemble(rans.fields.M2*dx)]) + '\n')
+    tke_p1.project(rans.tke)
+    mix_depth.interpolate(conditional(tke_p1>rans.tke_min*1.5, z, H))
+    mix_depths.append(H-mix_depth.dat.data.min())
+    trange.append(t)
 
     step += 1
     t += dt
@@ -187,11 +185,13 @@ while t < T - 0.5*dt:
         rans_file.write(*rans_output_fields)
 
 
-        #with DumbCheckpoint(os.path.join(output_dir, "dump.h5"), mode=FILE_UPDATE) as chk:
-        #    chk.store(sal, name="Salinity")
-        #    chk.store(u_, name="Velocity")
-        #    chk.store(p_, name="Pressure")
-
         PETSc.Sys.Print("t=", t)
 
-mom_cons.close()
+try:
+    import matplotlib.pyplot as plt
+    plt.plot(trange, mix_depths, label='Thwaites')
+    plt.plot(trange, [1.05*sqrt(tau_wind)*buoyfreq0**(-0.5)*sqrt(t) for t in trange], label='theory')
+    plt.legend()
+    plt.savefig('mixing_depth.pdf')
+except ImportError:
+    pass
