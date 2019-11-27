@@ -1,5 +1,5 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, Constant
+from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor
 from firedrake import CellDiameter, avg, Identity, zero
 from .utility import is_continuous, normal_is_continuous, tensor_jump
 from ufl import tensors, algebra
@@ -80,11 +80,29 @@ class ViscosityTerm(BaseTerm):
 
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
-        mu = fields['viscosity']
-        if len(mu.ufl_shape) == 2:
-            diff_tensor = mu
+
+        if 'background_viscosity' in fields:
+            assert('grid_resolution' in fields)
+            mu_background = fields['background_viscosity']
+            grid_dx = fields['grid_resolution'][0]
+            grid_dz = fields['grid_resolution'][1]
+            try:
+                mu_h = 1E5*abs(trial[0]) * grid_dx + mu_background
+                mu_v = 1E5*abs(trial[1]) * grid_dz + mu_background
+                print("use redx viscosity")
+
+            except:
+                print("just use background viscosity")
+                mu_h = mu_background
+                mu_v = mu_background
+
+            diff_tensor = as_tensor([[mu_h, 0], [0, mu_v]])
         else:
-            diff_tensor = mu * Identity(self.dim)
+            mu = fields['viscosity']
+            if len(mu.ufl_shape) == 2:
+                diff_tensor = mu
+            else:
+                diff_tensor = mu * Identity(self.dim)
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)

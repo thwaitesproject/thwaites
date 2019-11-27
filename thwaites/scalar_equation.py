@@ -1,5 +1,5 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, CellDiameter, as_matrix, avg, jump, Constant
+from firedrake import dot, inner, div, grad, CellDiameter, as_tensor, avg, jump, Constant
 from firedrake import min_value, max_value, split, FacetNormal, Identity
 from .utility import is_continuous, normal_is_continuous
 from ufl import tensors, algebra
@@ -73,16 +73,31 @@ class ScalarDiffusionTerm(BaseTerm):
 
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
-        kappa = fields['diffusivity']
-        if len(kappa.ufl_shape) == 2:
-            diff_tensor = kappa
+
+        if 'background_diffusivity' in fields:
+            assert('grid_resolution' in fields)
+            kappa_background = fields['background_diffusivity']
+            grid_dx = fields['grid_resolution'][0]
+            grid_dz = fields['grid_resolution'][1]
+            try:
+                kappa_h = 1E5*abs(trial[0]) * grid_dx + kappa_background
+                kappa_v = 1E5*abs(trial[1]) * grid_dz + kappa_background
+            except:
+                print("just use background viscosity")
+                kappa_h = kappa_background
+                kappa_v = kappa_background
+            diff_tensor = as_tensor([[kappa_h, 0], [0, kappa_v]])
         else:
-            diff_tensor = kappa*Identity(self.dim)
+            kappa = fields['diffusivity']
+            if len(kappa.ufl_shape) == 2:
+                diff_tensor = kappa
+            else:
+                diff_tensor = kappa * Identity(self.dim)
+
         phi = test
         n = self.n
         cellsize = CellDiameter(self.mesh)
         q = trial
-
 
         grad_test = grad(phi)
         diff_flux = dot(diff_tensor, grad(q))
