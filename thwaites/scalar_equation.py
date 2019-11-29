@@ -76,16 +76,12 @@ class ScalarDiffusionTerm(BaseTerm):
 
         if 'background_diffusivity' in fields:
             assert('grid_resolution' in fields)
+            u = fields['velocity']
             kappa_background = fields['background_diffusivity']
             grid_dx = fields['grid_resolution'][0]
             grid_dz = fields['grid_resolution'][1]
-            try:
-                kappa_h = 1E5*abs(trial[0]) * grid_dx + kappa_background
-                kappa_v = 1E5*abs(trial[1]) * grid_dz + kappa_background
-            except:
-                print("just use background viscosity")
-                kappa_h = kappa_background
-                kappa_v = kappa_background
+            kappa_h = 0.5*abs(u[0]) * grid_dx + kappa_background
+            kappa_v = 0.5*abs(u[1]) * grid_dz + kappa_background
             diff_tensor = as_tensor([[kappa_h, 0], [0, kappa_v]])
         else:
             kappa = fields['diffusivity']

@@ -86,17 +86,11 @@ class ViscosityTerm(BaseTerm):
             mu_background = fields['background_viscosity']
             grid_dx = fields['grid_resolution'][0]
             grid_dz = fields['grid_resolution'][1]
-            try:
-                mu_h = 1E5*abs(trial[0]) * grid_dx + mu_background
-                mu_v = 1E5*abs(trial[1]) * grid_dz + mu_background
-                print("use redx viscosity")
-
-            except:
-                print("just use background viscosity")
-                mu_h = mu_background
-                mu_v = mu_background
-
+            mu_h = 0.5*abs(trial[0]) * grid_dx + mu_background
+            mu_v = 0.5*abs(trial[1]) * grid_dz + mu_background
+            print("use redx viscosity")
             diff_tensor = as_tensor([[mu_h, 0], [0, mu_v]])
+
         else:
             mu = fields['viscosity']
             if len(mu.ufl_shape) == 2:
