@@ -241,13 +241,20 @@ class MomentumSourceTerm(BaseTerm):
 
 class CoriolisTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
-        if 'coriolis_frequency' not in fields:
-            return 0
-        phi = test
-        f = fields['coriolis_frequency']
-
-        F = (-f*trial[1]*test[0] + f*trial[0]*phi[1])*self.dx
-        return -F
+        if 'coriolis_frequency' in fields:
+            if self.dim == 3:
+                phi = test
+                f = fields['coriolis_frequency']
+                F = (-f*trial[1]*test[0] + f*trial[0]*phi[1])*self.dx
+                return -F
+            elif self.dim == 2:
+                assert 'u_velocity' in fields
+                u = fields['u_velocity']
+                f = fields['coriolis_frequency']
+                F = f*u*test[0]*self.dx
+                return -F
+        else:
+            return 0.0
 
 
 class MomentumEquation(BaseEquation):

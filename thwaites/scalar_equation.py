@@ -173,6 +173,19 @@ class ScalarAbsorptionTerm(BaseTerm):
         return F
 
 
+class ScalarVelocity2halfDTerm(BaseTerm):
+    r"""
+            coriolis forcing for scalar advection diffusion equation for x component of velocity :math:`-fv`
+        """
+
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        assert 'coriolis_frequency' in fields
+        v = fields['velocity']
+        f = fields['coriolis_frequency']
+        F = -f * v[0] * test * self.dx
+        return -F
+
+
 class ScalarAdvectionEquation(BaseEquation):
     """
     Scalar equation with only an advection term.
@@ -187,6 +200,15 @@ class ScalarAdvectionDiffusionEquation(BaseEquation):
     """
 
     terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm, ScalarAbsorptionTerm]
+
+
+class ScalarVelocity2halfDEquation(BaseEquation):
+    """
+    Scalar equation with advection, and diffusion (viscosity) for x compenent of velocity for 2.5D coriolis modelling.
+    """
+
+    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm, ScalarAbsorptionTerm,
+             ScalarVelocity2halfDTerm]
 
 
 class HybridizedScalarEquation(BaseEquation):
