@@ -25,7 +25,7 @@ u_.assign(u_init)
 Re = 2.2e4
 V_in = 1.0
 H1 = 1.0
-mu_visc = V_in*H1/Re
+mu_visc = Constant(V_in*H1/Re)
 
 tke_in = Constant(0.02 * 0.5*V_in**2)  # 2% turbulence - Bosch '98
 eps_in = Constant(0.09 * tke_in**2 / mu_visc / 100)  # r_t=vu_t/vu=100 - Bosch '98
@@ -72,7 +72,7 @@ up_coupling = [{'pressure': 1}, {'velocity': 0}]
 
 up_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], z, up_fields, up_coupling, dt, up_bcs, solver_parameters=up_solver_parameters)
 
-rans_fields = {'velocity': u_,}
+rans_fields = {'velocity': u_, 'viscosity': mu_visc}
 rans_solver_parameters = mumps_solver_parameters
 
 rans = RANSModel(rans_fields, mesh, bcs=up_bcs, options={'l_max': 10.})
@@ -86,7 +86,7 @@ up_fields['rans_eddy_viscosity'] = rans.fields.rans_eddy_viscosity
 # we write initial states, so the indexing is in sync with the velocity/pressure files
 rans_file = File("rans.pvd")
 rans_output_fields = (
-    rans.fields.rans_tke, rans.fields.rans_psi,
+    rans.tke, rans.psi,
     rans.fields.rans_eddy_viscosity,
     rans.production, rans.rate_of_strain,
     rans.eddy_viscosity,
