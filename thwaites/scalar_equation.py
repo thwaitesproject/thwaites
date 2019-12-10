@@ -186,7 +186,7 @@ class ScalarAdvectionDiffusionEquation(BaseEquation):
     Scalar equation with advection and diffusion.
     """
 
-    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm]
+    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm]
 
 
 class HybridizedScalarEquation(BaseEquation):
@@ -214,14 +214,14 @@ class HybridizedScalarEquation(BaseEquation):
         kappa = fields['diffusivity']
 
         dt = fields['dt']
-        F += qtest*div(kappa*ptri)*self.dx
-        F += -dot(div(ptest), trial[0])/dt*self.dx
+        F += qtest*div(ptri)*self.dx
+        F += -dot(div(dot(ptest,kappa)), trial[0])/dt*self.dx
 
-        F += -qtest*dot(n, kappa*ptri)*self.ds + dot(n, ptest)*trial[0]/dt*self.ds
+        F += -qtest*dot(n, ptri)*self.ds + dot(n, dot(kappa, ptest))*trial[0]/dt*self.ds
 
         for id, bc in bcs.items():
             if 'q' in bc:
-                F += qtest*dot(n, kappa*ptri)*self.ds(id) - dot(n, ptest)*(trial[0]-bc['q'])/dt*self.ds(id)
+                F += qtest*dot(n, ptri)*self.ds(id) - dot(n, dot(kappa, ptest))*(trial[0]-bc['q'])/dt*self.ds(id)
             if 'flux' in bc:
                 F += qtest*bc['flux']*self.ds(id)
             if 'wall_law_drag' in bc:
