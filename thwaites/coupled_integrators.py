@@ -183,3 +183,50 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         self.predictor_solver.solve()
         # pressure correction solve, solves for final solution (corrected velocity and pressure)
         self.solver.solve()
+
+class CoupledEquationsTimeIntegrator(CoupledTimeIntegrator):
+    def __init__(self, equations, solution, fields, dt, bcs=None, mass_terms=None, solver_parameters={}, strong_bcs=None):
+        super().__init__(equations, solution, fields, {}, dt, bcs, solver_parameters)
+
+        if mass_terms is None:
+            self.mass_terms = [True]*len(equations)
+        else:
+            self.mass_terms = mass_terms
+
+        self.strong_bcs = strong_bcs
+        self.theta = 1.0
+        self.solution_old = firedrake.Function(self.solution)
+        self._initialized = False
+
+    def initialize(self, init_solution):
+        self.solution_old.assign(init_solution)
+        z_theta = (1-self.theta)*self.solution_old + self.theta*self.solution
+
+        self._fields = []
+        for fields in self.fields:
+            cfields = fields.copy()
+            for field_name, field_expr in fields.items():
+                if isinstance(field_expr, float):
+                    continue
+                cfields[field_name] = firedrake.replace(field_expr, {self.solution: z_theta})
+            self._fields.append(cfields)
+
+        F = 0
+        for test, u, u_old, eq, mass_term, fields, bcs in zip(self.test, firedrake.split(self.solution), firedrake.split(self.solution_old), self.equations, self.mass_terms, self._fields, self.bcs):
+            if mass_term:
+                F += eq.mass_term(test, u-u_old)
+
+            u_theta = (1-self.theta)*u_old + self.theta*u
+            F -= self.dt_const * eq.residual(test, u_theta, u_theta, fields, bcs=bcs)
+
+        self.problem = firedrake.NonlinearVariationalProblem(F, self.solution, bcs=self.strong_bcs)
+        self.solver = firedrake.NonlinearVariationalSolver(self.problem,
+                                                           solver_parameters=self.solver_parameters,
+                                                           options_prefix=self.name)
+        self._initialized = True
+
+    def advance(self, t, update_forcings=None):
+        if not self._initialized:
+            self.initialize(self.solution)
+        self.solution_old.assign(self.solution)
+        self.solver.solve()
