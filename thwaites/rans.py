@@ -370,6 +370,7 @@ class RANSModel(TurbulenceModel):
             'l_max': Constant(1.0),
             'l_min': Constant(1e-12),
             'tke_min': Constant(1e-6),
+            'nu_min': Constant(1e-8),  # minimum eddy viscosity (in addition to background)
             'delta':  Constant(1e-3),
             'closure_name': 'k-epsilon',
             'Ri_st': Constant(0.25),
@@ -458,8 +459,6 @@ class RANSModel(TurbulenceModel):
         self.sqrt_tke = Function(self.P0, name='sqrt_tke')
         self.production = Function(self.P0, name='production')
         self.rate_of_strain = Function(self.P0T, name='rate of strain')
-        self.rate_of_strain_p1dg = Function(self.P1DGT, name='rate of strain p1dg')
-        self.rate_of_strain_vert = Function(self.P0, name='rate of strain vertical')
 
         self.eq_rans_tke = HybridizedScalarEquation(RANSTKEEquation2D, self.Z, self.Z)
         self.eq_rans_psi = HybridizedScalarEquation(RANSPsiEquation2D, self.Z, self.Z)
@@ -511,13 +510,13 @@ class RANSModel(TurbulenceModel):
                 self.bcs_tke[bnd_marker]['flux'] = Constant(0.0)
                 if self.closure_name == 'k-epsilon':
                     ## PSI flux from fluidity:
-                    #n = as_vector((0, -1))  # FIXME
-                    #t = funcs['stress'] - dot(n, funcs['stress'])*n
-                    #u_tau = dot(t,t)**0.25
-                    #y = 18500/9.81*u_tau**2 # Charnock formula from fluidity source
-                    #self.psi_flux_expr = self.C_mu*self.tke**2/y
-                    z_s=2.5*0.5+0.05
-                    self.psi_flux_expr = -(-1*self.eddy_viscosity*(self.cmu0)**3 * self.tke**1.5 * 0.4**-1 * z_s**-2)
+                    n = as_vector((0, -1))  # FIXME
+                    t = funcs['stress'] - dot(n, funcs['stress'])*n
+                    u_tau = dot(t,t)**0.25
+                    y = 18500/9.81*u_tau**2 # Charnock formula from fluidity source
+                    self.psi_flux_expr = self.C_mu*self.tke**2/y
+                    #z_s=1.25*0.5+0.05
+                    #self.psi_flux_expr = -(-1*self.eddy_viscosity*(self.cmu0)**3 * self.tke**1.5 * 0.4**-1 * z_s**-2)
                     self.psi_flux = Function(self.P0, name='psi flux')
                     self.bcs_psi[bnd_marker]['flux'] = self.psi_flux
                 elif self.closure_name == 'k-omega':
@@ -536,15 +535,11 @@ class RANSModel(TurbulenceModel):
         self.wall_solver = WallSolver(self.walls, self.delta, 1.0e-6)
 
         self.rate_of_strain_solver = RateOfStrainSolver(self.uv, self.rate_of_strain)
-        self.rate_of_strain_solver_p1dg = RateOfStrainSolver(self.uv, self.rate_of_strain_p1dg)
-        self.rate_of_strain_solver_vert = VerticalGradSolver(self.uv[0], self.rate_of_strain_vert)
         if self.walls:
             self.wall_viscosity_bc = DirichletBC(self.fields.rans_eddy_viscosity.function_space(), 0.4*self.y_plus*1e-6, self.walls)
             self.wall_production = Function(self.production.function_space(), name="wall_production")
             self.wall_production_bc = DirichletBC(self.production.function_space(), self.wall_production, self.walls)
         self.p1_averager = P1Average(self.P0, self.P1, self.P1DG)
-
-        #self.limiter = VertexBasedLimiter(self.P0)
 
     def _create_integrators(self, integrator, dt, bnd_conditions, solver_parameters):
         
@@ -603,10 +598,9 @@ class RANSModel(TurbulenceModel):
 
     def preprocess(self, init_solve=False):
         self.rate_of_strain_solver.solve()
-        self.rate_of_strain_solver_p1dg.solve()
-        self.rate_of_strain_solver_vert.solve()
-        #self.fields.M2.interpolate(inner(self.rate_of_strain, self.rate_of_strain))
-        self.fields.M2.interpolate(self.rate_of_strain_vert**2)
+        # note to self: ROS=0.5*[grad(u)+grad(u)^T],
+        # so M2=[grad(u)+grad(u)^T]:[grad(u)+grad(u)^T]=2*ROS:ROS
+        self.fields.M2.interpolate(2.*inner(self.rate_of_strain, self.rate_of_strain))
 
         if 'density' in self.fields:
             self.buoyancy_frequency_solver.solve()
@@ -624,7 +618,6 @@ class RANSModel(TurbulenceModel):
             mu = self.eddy_viscosity
         self.production.interpolate(mu*self.fields.M2)
         if self.closure_name == 'k-epsilon':
-            #self.gamma1.project(self.C_mu*max_value(self.tke, 0.)/self.eddy_viscosity)
             self.gamma1.project(self.psi/self.tke)
         elif self.closure_name == 'k-omega':
             self.gamma1.project(conditional(self.psi>0, self.psi, Constant(0.0)))
@@ -650,12 +643,8 @@ class RANSModel(TurbulenceModel):
             self.C_mu_p.dat.data[:] = cmu_p_dat
             self.psi_flux.interpolate(self.psi_flux_expr)
 
-        #self.limiter.apply(self.tke)
         self.fields.rans_mixing_length.interpolate(conditional(self.cmu0**3*self.tke**1.5>self.l_min*self.psi, self.cmu0**3*self.tke**1.5/self.psi, self.l_min))
-        #self.eddy_viscosity.project(conditional(self.nu_0>self.fields.rans_mixing_length*self.sqrt_tke,
-        #                                       self.nu_0,
-        #                                       self.fields.rans_mixing_length*self.sqrt_tke))
-        self.eddy_viscosity.interpolate(max_value(self.C_mu*self.fields.rans_mixing_length*self.sqrt_tke/self.cmu0**3, 1e-8))
+        self.eddy_viscosity.interpolate(max_value(self.C_mu*self.fields.rans_mixing_length*self.sqrt_tke/self.cmu0**3, self.nu_min))
         self.eddy_diffusivity.interpolate(self.C_mu_p/self.C_mu*self.eddy_viscosity)
 
         if self.walls:
@@ -664,10 +653,7 @@ class RANSModel(TurbulenceModel):
             self.wall_production.interpolate(self.u_tau**4/self.fields.rans_eddy_viscosity)
             self.wall_production_bc.apply(self.production)
 
-        #self.limiter.apply(self.psi)
         self.p1_averager.apply(self.eddy_viscosity, self.fields.rans_eddy_viscosity)
-        #self.tke.interpolate(max_value(self.tke, 0.))
-        #self.psi.interpolate(max_value(self.psi, 0.))
         
     def initialize(self, rans_tke=Constant(0.0), rans_psi=Constant(0.0), **kwargs):
         self.tke.project(rans_tke)

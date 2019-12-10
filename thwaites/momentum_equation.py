@@ -217,7 +217,7 @@ class VerticalViscosityTerm(BaseTerm):
                 mu = mu + fields['rans_eddy_viscosity']
         elif len(mu.ufl_shape) == 2:
             if 'rans_eddy_viscosity' in fields:
-                mu = mu[vdim,vdim] +fields['rans_eddy_viscosity']
+                mu = mu[vdim,vdim] + fields['rans_eddy_viscosity']
             else:
                 mu = mu[vdim, vdim]
         else:
@@ -230,7 +230,7 @@ class VerticalViscosityTerm(BaseTerm):
 
         if not is_continuous(self.trial_space):
             h_elem_size = 15
-            v_elem_size = 2.5
+            v_elem_size = 1.25
             # Interior Penalty method by
             # Epshteyn (2007) doi:10.1016/j.cam.2006.08.029
             degree = 1

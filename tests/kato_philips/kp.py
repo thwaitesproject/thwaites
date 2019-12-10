@@ -41,7 +41,7 @@ u_.assign(u_init)
 # linearly vary viscosity/diffusivities over domain.
 kappa_sal = Constant([[1., 0], [0, 1.4e-7]])
 mu_visc = Constant([[1., 0],[0, 1.3e-6]])
-rho0=1025
+rho0=1027
 tau_wind = 1e-4
 tke0 = Constant(1e-7)
 psi0 = Constant(1.4639e-8)
@@ -124,7 +124,7 @@ rans_file = File(os.path.join(output_dir, "rans.pvd"))
 rans_output_fields = (
     rans.tke, rans.psi,
     rans.fields.rans_eddy_viscosity,
-    rans.production, rans.rate_of_strain, rans.rate_of_strain_p1dg, rans.rate_of_strain_vert,
+    rans.production, rans.rate_of_strain,
     rans.eddy_viscosity,
     rans.fields.rans_mixing_length,
     rans.sqrt_tke, rans.gamma1,
@@ -154,23 +154,15 @@ trange = []
 
 output_step = 5
 
-limiter = VertexBasedLimiter(Q)
-u_lim = Function(Q)
-
 while t < T - 0.5*dt:
 
 
-    uint0 = assemble(u_[0]*dx)
     up_timestepper.advance(t)
-    uint1 = assemble(u_[0]*dx)
-    print(uint1-uint0, tau_wind*Lx)
-
     sal_timestepper.advance(t)
-
     rans.advance(t)
 
     tke_p1.project(rans.tke)
-    mix_depth.interpolate(conditional(tke_p1>rans.tke_min*1.5, z, H))
+    mix_depth.interpolate(conditional(tke_p1>rans.tke_min*2., z, H))
     mix_depths.append(H-mix_depth.dat.data.min())
     trange.append(t)
 
@@ -178,7 +170,6 @@ while t < T - 0.5*dt:
     t += dt
 
     if step % output_step == 0:
-        print(t, uint1/Lx)
         u_file.write(u_)
         p_file.write(p_)
         t_file.write(sal)
