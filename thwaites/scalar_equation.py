@@ -212,16 +212,20 @@ class HybridizedScalarEquation(BaseEquation):
 
         n = FacetNormal(self.mesh)
         kappa = fields['diffusivity']
+        if len(kappa.ufl_shape) == 2:
+            kappa_ptest = dot(kappa, ptest)  # NOTE: we assume kappa is symmetric
+        else:
+            kappa_ptest = kappa*ptest
 
         dt = fields['dt']
         F += qtest*div(ptri)*self.dx
-        F += -dot(div(dot(ptest,kappa)), trial[0])/dt*self.dx
+        F += -dot(div(kappa_ptest), trial[0])/dt*self.dx
 
-        F += -qtest*dot(n, ptri)*self.ds + dot(n, dot(kappa, ptest))*trial[0]/dt*self.ds
+        F += -qtest*dot(n, ptri)*self.ds + dot(n, kappa_ptest)*trial[0]/dt*self.ds
 
         for id, bc in bcs.items():
             if 'q' in bc:
-                F += qtest*dot(n, ptri)*self.ds(id) - dot(n, dot(kappa, ptest))*(trial[0]-bc['q'])/dt*self.ds(id)
+                F += qtest*dot(n, ptri)*self.ds(id) - dot(n, kappa_ptest)*(trial[0]-bc['q'])/dt*self.ds(id)
             if 'flux' in bc:
                 F += qtest*bc['flux']*self.ds(id)
             if 'wall_law_drag' in bc:

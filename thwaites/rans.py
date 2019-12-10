@@ -470,6 +470,8 @@ class RANSModel(TurbulenceModel):
                                name='u plus')
         self.y_plus = Function(self.u_tau.function_space(),
                                name='y plus')
+        self.fields.M2 = Function(self.P0, name='shear frequency')
+
         # buoyancy terms:
         if 'density' in self.fields:
             if self.stability_function is None:
@@ -482,7 +484,6 @@ class RANSModel(TurbulenceModel):
                 self.C_3_min = self.stability_function.compute_c3_minus(float(self.C_1), float(self.C_2), float(self.Ri_st))
             self.galperin_clim = self.stability_function.compute_length_clim(self.cmu0, float(self.Ri_st))
             rho = self.fields['density']
-            self.fields.M2 = Function(self.P0, name='shear frequency')
             self.fields.N2 = Function(self.P0, name='buoyancy frequency')
             N2_tmp = Function(self.P0, name='temp. buoyancy frequency')
             self.fields.N2_pos_over_k = Function(self.P0, name='positive buoyancy frequency over k')
@@ -542,7 +543,6 @@ class RANSModel(TurbulenceModel):
         self.p1_averager = P1Average(self.P0, self.P1, self.P1DG)
 
     def _create_integrators(self, integrator, dt, bnd_conditions, solver_parameters):
-        
         viscosity = self.fields.viscosity
         if viscosity.ufl_shape == ():
             diffusivity_tke = (viscosity + self.eddy_viscosity)/self.schmidt_tke
@@ -557,31 +557,33 @@ class RANSModel(TurbulenceModel):
             'diffusivity': diffusivity_tke,
             'production': self.production,
             'eddy_viscosity': self.eddy_viscosity,
-            'eddy_diffusivity': self.eddy_diffusivity,
             'gamma1': self.gamma1,
             'gamma2': self.gamma2,
-            'N2_neg': self.fields.N2_neg,
-            'N2_pos_over_k': self.fields.N2_pos_over_k,
             'C_0': self.C_0,
             'dt': dt,
         }
+        if 'density' in self.fields:
+            fields_tke['eddy_diffusivity'] = self.eddy_diffusivityx
+            fields_tke['N2_neg'] =  self.fields.N2_neg
+            fields_tke['N2_pos_over_k'] =  self.fields.N2_pos_over_k
         fields_psi = {
             'velocity': self.uv,
             'diffusivity': diffusivity_psi,
             'production': self.production,
             'eddy_viscosity': self.eddy_viscosity,
-            'eddy_diffusivity': self.eddy_diffusivity,
             'gamma1': self.gamma1,
             'gamma2': self.gamma2,
-            'N2_neg': self.fields.N2_neg,
-            'N2_pos': self.fields.N2_pos,
-            'N2_pos_over_k': self.fields.N2_pos_over_k,
             'C_1': self.C_1,
             'C_2': self.C_2,
-            'C_3_min': self.C_3_min,
-            'C_3_plus': self.C_3_plus,
             'dt': dt,
         }
+        if 'density' in self.fields:
+            fields_psi['eddy_diffusivity'] = self.eddy_diffusivity
+            fields_psi['N2_neg'] = self.fields.N2_neg
+            fields_psi['N2_pos'] = self.fields.N2_pos
+            fields_psi['N2_pos_over_k'] = self.fields.N2_pos_over_k
+            fields_psi['C_3_min'] = self.C_3_min
+            fields_psi['C_3_plus'] = self.C_3_plus
 
 
         self.timesteppers.rans_tke = integrator(self.eq_rans_tke, self.fields.z_tke, fields_tke, dt,
@@ -633,19 +635,20 @@ class RANSModel(TurbulenceModel):
     def postprocess(self):
 
         self.tke.interpolate(max_value(self.tke, self.tke_min))
-        val = (sqrt(2)*self.galperin_clim * (self.cmu0)**-3 * self.tke**-1 * (self.fields.N2_pos + 1e-12)**(-0.5))**-1
-        self.psi.interpolate(max_value(self.psi,max_value(val, 1e-14)))
-
         self.sqrt_tke.project(conditional(self.tke>0, sqrt(self.tke), Constant(0.0)))
+
         if 'density' in self.fields:
+            val = (sqrt(2)*self.galperin_clim * (self.cmu0)**-3 * self.tke**-1 * (self.fields.N2_pos + 1e-12)**(-0.5))**-1
+            self.psi.interpolate(max_value(self.psi,max_value(val, 1e-14)))
             cmu_dat, cmu_p_dat = self.stability_function.evaluate(self.fields.M2.dat.data, self.fields.N2.dat.data, self.tke.dat.data, self.psi.dat.data)
             self.C_mu.dat.data[:] = cmu_dat
             self.C_mu_p.dat.data[:] = cmu_p_dat
             self.psi_flux.interpolate(self.psi_flux_expr)
 
-        self.fields.rans_mixing_length.interpolate(conditional(self.cmu0**3*self.tke**1.5>self.l_min*self.psi, self.cmu0**3*self.tke**1.5/self.psi, self.l_min))
-        self.eddy_viscosity.interpolate(max_value(self.C_mu*self.fields.rans_mixing_length*self.sqrt_tke/self.cmu0**3, self.nu_min))
-        self.eddy_diffusivity.interpolate(self.C_mu_p/self.C_mu*self.eddy_viscosity)
+        self.fields.rans_mixing_length.interpolate(conditional(self.tke**1.5>self.l_min*self.psi, self.tke**1.5/self.psi, self.l_min))
+        self.eddy_viscosity.interpolate(max_value(self.C_mu*self.fields.rans_mixing_length*self.sqrt_tke, self.nu_min))
+        if 'density' in self.fields:
+            self.eddy_diffusivity.interpolate(self.C_mu_p/self.C_mu*self.eddy_viscosity)
 
         if self.walls:
             self.wall_solver.apply(self.u_tau, self.u_plus, self.y_plus, self.uv)
