@@ -1,5 +1,5 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, CellDiameter, as_matrix, as_vector, Identity
+from firedrake import dot, inner, div, grad, CellDiameter, as_matrix, Identity
 from firedrake import avg, jump, Constant, split, FacetNormal, min_value, max_value
 from .utility import is_continuous, normal_is_continuous
 from ufl import tensors, algebra
@@ -93,7 +93,6 @@ class ScalarDiffusionTerm(BaseTerm):
         cellsize = CellDiameter(self.mesh)
         q = trial
 
-
         grad_test = grad(phi)
         diff_flux = dot(diff_tensor, grad(q))
 
@@ -109,8 +108,9 @@ class ScalarDiffusionTerm(BaseTerm):
         # assuming k_max/k_min=2, Theta=pi/3
         # sigma = 6.93 = 3.5*p*(p+1)
 
-        degree = phi.ufl_element().degree()
-        sigma = 60.0*degree*(degree + 1)/cellsize
+        degree = self.trial_space.ufl_element().degree()
+        alpha = fields.get('interior_penalty', 5.0)
+        sigma = alpha*degree*(degree + 1)/cellsize
         if degree == 0:
             sigma = 1.5 / cellsize
 
@@ -145,11 +145,11 @@ class ScalarSourceTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
         if 'source' not in fields:
             return 0
-
+        phi = test
         source = fields['source']
 
         # NOTE, here source term F is already on the RHS
-        F = dot(test, source)*self.dx
+        F = dot(phi, source)*self.dx
 
         return F
 
@@ -159,11 +159,11 @@ class ScalarAbsorptionTerm(BaseTerm):
             Absorption Term :math:`\alpha_T T`
         """
 
-    def residual(self, trial, trial_lagged, fields, bcs):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
         if 'absorption coefficient' not in fields:
             return 0
 
-        phi = self.test
+        phi = test
         alpha = fields['absorption coefficient']
 
         # NOTE, here absorption term F is already on the RHS
@@ -173,12 +173,25 @@ class ScalarAbsorptionTerm(BaseTerm):
         return F
 
 
+class ScalarVelocity2halfDTerm(BaseTerm):
+    r"""
+            coriolis forcing for scalar advection diffusion equation for x component of velocity :math:`-fv`
+        """
+
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        assert 'coriolis_frequency' in fields
+        v = fields['velocity']
+        f = fields['coriolis_frequency']
+        F = -f * v[0] * test * self.dx
+        return -F
+
+
 class ScalarAdvectionEquation(BaseEquation):
     """
     Scalar equation with only an advection term.
     """
 
-    terms = [ScalarAdvectionTerm, ScalarSourceTerm]
+    terms = [ScalarAdvectionTerm, ScalarSourceTerm, ScalarAbsorptionTerm]
 
 
 class ScalarAdvectionDiffusionEquation(BaseEquation):
@@ -186,7 +199,16 @@ class ScalarAdvectionDiffusionEquation(BaseEquation):
     Scalar equation with advection and diffusion.
     """
 
-    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm]
+    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm, ScalarAbsorptionTerm]
+
+
+class ScalarVelocity2halfDEquation(BaseEquation):
+    """
+    Scalar equation with advection, and diffusion (viscosity) for x compenent of velocity for 2.5D coriolis modelling.
+    """
+
+    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm, ScalarAbsorptionTerm,
+             ScalarVelocity2halfDTerm]
 
 
 class HybridizedScalarEquation(BaseEquation):

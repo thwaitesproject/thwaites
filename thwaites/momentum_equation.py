@@ -1,7 +1,6 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, Constant
-from firedrake import CellDiameter, as_vector, as_matrix, avg, jump, Identity
-from firedrake import Dx
+from firedrake import CellDiameter, as_matrix, avg, jump, Identity, zero, Dx
 from .utility import is_continuous, normal_is_continuous, tensor_jump
 from ufl import tensors, algebra
 #import numpy as np
@@ -39,7 +38,7 @@ class MomentumAdvectionTerm(BaseTerm):
             elif 'un' in bc:
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
-                u_in = as_vector((0,0))
+                u_in = zero(self.dim)
             F += conditional(dot(u_adv, n) < 0,
                              dot(phi, u_in)*dot(u_adv, n),
                              dot(phi, u)*dot(u_adv, n)) * self.ds(id)
@@ -121,7 +120,8 @@ class ViscosityTerm(BaseTerm):
         # sigma = 6.93 = 3.5*p*(p+1)
 
         degree = self.trial_space.ufl_element().degree()
-        sigma = 60.0*degree*(degree + 1)/cellsize
+        alpha = fields.get('interior_penalty', 5.0)
+        sigma = alpha*degree*(degree + 1)/cellsize
         if degree == 0:
             sigma = 1.5 / cellsize
 
@@ -174,16 +174,6 @@ class ViscosityTerm(BaseTerm):
             if 'u' in bc and 'un' in bc:
                 raise ValueError("Cannot apply both 'u' and 'un' bc on same boundary")
 
-
-            ### added in by Will monday 28th oct
-            # want to have a non-dimensionalised form to test rayleigh-taylor instability
-            # reynolds number completely describes dimensionless problem and is applied as
-            # (1/Re) * viscous term.
-            # Make sure that mu = 1.0 in running script!
-
-            if 'reynolds' in fields:
-                Re = fields['reynolds']
-                F = (1.0/Re)*F
 
         return -F
 
@@ -285,7 +275,7 @@ class DivergenceTerm(BaseTerm):
         u = fields['velocity']
 
         # NOTE: we assume psi is continuous
-        #assert is_continuous(psi)
+        # assert is_continuous(psi)
         F = -dot(grad(psi), u)*self.dx
 
         if not is_continuous(self.test_space):
@@ -320,12 +310,30 @@ class MomentumSourceTerm(BaseTerm):
         return F
 
 
+class CoriolisTerm(BaseTerm):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        if 'coriolis_frequency' in fields:
+            if self.dim == 3:
+                phi = test
+                f = fields['coriolis_frequency']
+                F = (-f*trial[1]*test[0] + f*trial[0]*phi[1])*self.dx
+                return -F
+            elif self.dim == 2:
+                assert 'u_velocity' in fields
+                u = fields['u_velocity']
+                f = fields['coriolis_frequency']
+                F = f*u*test[0]*self.dx
+                return -F
+        else:
+            return 0.0
+
+
 class MomentumEquation(BaseEquation):
     """
-    Momentum equation with advection, viscosity and pressure gradient
+    Momentum equation with advection, viscosity, pressure gradient, source term, and coriolis.
     """
 
-    terms = [MomentumAdvectionTerm, ViscosityTerm, PressureGradientTerm, MomentumSourceTerm]
+    terms = [MomentumAdvectionTerm, ViscosityTerm, PressureGradientTerm, MomentumSourceTerm, CoriolisTerm]
 
 
 class ContinuityEquation(BaseEquation):

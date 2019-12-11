@@ -2,223 +2,125 @@ from firedrake import conditional
 from firedrake import Constant
 
 
-class MeltRateParam():
-    """methods for calculating meltrate parameterisation used in ice-ocean boundary"""
-    a = -5.73E-2  # salinity coefficient of freezing eqation
-    b = 0.0832 # use fluidity value #9.39E-2  # constant coeff of freezing equation
-    c = -7.53E-8  # pressure coeff of freezing equation
+class MeltRateParam:
+    """methods for calculating melt rate parameterisation used in ice-ocean boundary"""
+    a = -5.73E-2  # salinity coefficient of freezing equation
+    b = 0.0832  # use fluidity value #9.39E-2  # constant coefficient of freezing equation
+    c = -7.53E-8  # pressure coefficient of freezing equation
 
     c_p_m = 3974.  # specific heat capacity of mixed layer
     c_p_i = 2009.
-    gammaT = 1E-4  # roughly thermal exchange velocity
-    gammaS = 5.05E-7
+    gammaT = 1.0E-4  # thermal exchange velocity, m/s
+    gammaS = 5.05E-7 # salt exchange velocity, m/s
 
-    gammaT_fric = 1.1E-2  # from jenkins et al 2010 - fluidity and ben have 1.1E-3!!!!
-    gammaS_fric = 3.1E-4   # from jenkins et al 2010 - matches fluidity
-    C_d = 0.0097  # drag coefficient for ice...
+    GammaT = 1.1E-2  # dimensionless GammaT (capital). gammaT = GammaT.u* from jenkins et al 2010
+    GammaS = GammaT / 35.0  # dimensionless GammaS (capital). gammaS = GammaS.u* from jenkins et al 2010
+    C_d = 0.0025  # 0.0097  # drag coefficient for ice...
 
     Lf = 3.34E5  # latent heat of fusion
 
     k_i = 1.14E-6
 
     rho_ice = 920.0
-    # h_ice = 1000. # in m
     T_ice = -25.0
     
     g = 9.81
-    rho0 = 1025.0
+    rho0 = 1027.5
 
-
-
-    
-
-
-
-    def __init__(self,S,T,Pin,cav_boundary,z,dz):
-        self.z = z  # -1000m at GL to 0 outside domain at surface
-        self.dz_calc = dz*1.0
-        self.cav_boundary = cav_boundary
-
-        #self.P_ice = self.rho_ice * self.g * h_ice  # hydrostatic pressure just from ice
-        #self.Pfull = self.rho0 * (Pin - self.g * self.z) + self.P_ice
-        Phydrostatic = -self.rho0*self.g*self.z
-        self.Pfull = Phydrostatic + self.rho0*Pin
-        self.S = S
-        self.T = T
-
+    def __init__(self, salinity, temperature, pressure_perturbation, z):
+        P_hydrostatic = -self.rho0 * self.g * z
+        self.P_full = P_hydrostatic + self.rho0 * pressure_perturbation
+        self.S = salinity
+        self.T = temperature
 
     def freezing_point(self):
-        return self.a * self.S + self.b + self.c * self.Pfull
-
-    def two_eq_param_meltrate(self):
-
-        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * self.S + self.b + self.c * self.Pfull, 0.0)
-        # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = Constant(0.0)
-        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
-        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -Q_latent / (self.Lf * self.rho0), 0.0)
-
-        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
-                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s = wb*self.S
-
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s, wb, loc_Tb, self.Pfull  # these are all still expressions
+        return self.a * self.S + self.b + self.c * self.P_full
 
 
-    def three_eq_param_meltrate_without_Qice(self):
+class TwoEqMeltRateParam(MeltRateParam):
+
+    def __init__(self, salinity, temperature, pressure_perturbation, z):
+        super().__init__(salinity, temperature, pressure_perturbation, z)
+
+        self.Tb = self.a * self.S + self.b + self.c * self.P_full
+
+        if isinstance(self.Tb, float):
+            self.Q_ice = 0.0
+        else:
+            self.Q_ice = Constant(0.0)
+
+        self.Q_mixed = -self.rho0 * self.c_p_m * self.gammaT * (self.Tb - self.T)
+        self.Q_latent = self.Q_ice - self.Q_mixed
+        self.wb = -self.Q_latent / (self.Lf * self.rho0)
+        self.T_flux_bc = -(self.wb + self.gammaT) * (self.Tb - self.T)
+        self.Q_s = self.wb*self.S
 
 
-        Aa = self.c_p_m*self.gammaT*self.a
+class ThreeEqMeltRateParam(MeltRateParam):
+    def __init__(self, salinity, temperature, pressure_perturbation, z, velocity=None, ice_heat_flux=True):
+        super().__init__(salinity, temperature, pressure_perturbation, z)
 
-        Bb = self.c_p_m*self.gammaT*self.b - self.c_p_m*self.gammaT*self.T
-        Bb = Bb + self.c_p_m*self.c*self.Pfull*self.gammaT - self.gammaS*self.Lf
+        if velocity is None:
+            gammaT = self.gammaT
+            gammaS = self.gammaS
+        else:
+            u = velocity
+            u_tidal = 0.01
+            u_star = pow(self.C_d*(pow(u, 2)+pow(u_tidal, 2)), 0.5)
 
-        Cc = self.gammaS*self.Lf*self.S
+            gammaT = self.GammaT * u_star
+            gammaS = self.GammaS * u_star
 
-        soln1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)  # this is one value of loc_Sb
-        soln2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        b_plus_cPb = (self.b + self.c * self.P_full)  # save calculating this each time...
 
-        loc_Sb = conditional(soln1 > 0.0, soln1, soln2)
+        # Calculate coefficients in quadratic equation for salinity at ice-ocean boundary.
+        # Aa.Sb^2 + Bb.Sb + Cc = 0
+        Aa = self.c_p_m * gammaT * self.a
+        Bb = -gammaS * self.Lf
+        Bb -= self.c_p_m * gammaT * self.T
+        Bb += self.c_p_m * gammaT * b_plus_cPb
+        Cc = gammaS * self.S * self.Lf
 
-        '''try:
-            p = int(typ[1:])
-            if p < 1:
-                raise ValueError
-        except ValueError:
-            raise ValueError("Don't know how to interpret %s-norm" % norm_type)'''
+        if ice_heat_flux:
+            Aa -= gammaS * self.c_p_i * self.a
+            Bb += gammaS * self.S * self.c_p_i * self.a
+            Bb -= gammaS * self.c_p_i * b_plus_cPb
+            Bb += gammaS * self.c_p_i * self.T_ice
+            Cc += gammaS * self.S * self.c_p_i * b_plus_cPb
+            Cc -= gammaS * self.S * self.c_p_i * self.T_ice
 
-        # need to add in an exception if the salinity falls below zero. ...
-        '''error = conditional(if i in loc_Sb.dat.data < 0.0:
-            print("Melt interface, loc_Sb: ",  i)
-            print("Melt interface, Aa: ",  Aa)
-            print("Melt interface, Bb: ",  Bb)
-            print("Melt interface, Cc: ",  Cc)
-            print("Melt interface, T: ",  T)
-            print("Melt interface, S: ",  S)
-            print("Melt interface, P: ",  Pfull)
-            print("Melt interface, fv: n/a")  # add in friction velocity
-    
-            raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
+        S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
 
-        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
-        # Q_ice = conditional(self.z > 0-self.dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = Constant(0.0)
-        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
-        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -Q_latent / (self.Lf * self.rho0), 0.0)
+        if isinstance(S1, float):
+            # Print statements for testing
+            print("S1 = ", S1)
+            print("S2 = ", S2)
+            if S1 > 0:
+                self.Sb = S1
+                print("Choose S1")
+            else:
+                self.Sb = S2
+                print("Choose S2")
 
-        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
-                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
+        else:
+            self.Sb = conditional(S1 > 0.0, S1, S2)
 
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, self.Pfull  # these are all still expressions
+        self.Tb = self.a * self.Sb + self.b + self.c * self.P_full
+        self.wb = gammaS * (self.S - self.Sb) / self.Sb
 
+        if ice_heat_flux:
+            self.Q_ice = -self.rho0 * (self.T_ice - self.Tb) * self.c_p_i * self.wb
+        else:
+            if isinstance(S1, float):
+                self.Q_ice = 0.0
+            else:
+                self.Q_ice = Constant(0.0)
 
-    def three_eq_param_meltrate(self):
-        # solve with two equation param.
-        b_plus_cPb = (self.b + self.c * self.Pfull) # save calculating this each time...
+        self.Q_mixed = -self.rho0 * self.c_p_m * gammaT * (self.Tb - self.T)
+        self.Q_latent = self.Q_ice - self.Q_mixed
 
-        Aa = self.c_p_m * self.gammaT * self.a - self.c_p_i * self.gammaS * self.a
+        self.QS_mixed = -self.rho0 * gammaS * (self.Sb - self.S)
 
-        Bb = self.c_p_i * self.gammaS * self.T_ice - self.c_p_i * self.gammaS * b_plus_cPb + self.c_p_i * self.gammaS * self.S * self.a
-        Bb = Bb + self.c_p_m * self.gammaT * b_plus_cPb - self.c_p_m * self.gammaT * self.T - self.gammaS * self.Lf
-
-        Cc = self.c_p_i * self.gammaS * self.S * b_plus_cPb - self.c_p_m * self.gammaS * self.S * self.T_ice + self.gammaS * self.Lf * self.S
-
-        soln1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)  # this is one value of loc_Sb
-        soln2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
-
-        loc_Sb = conditional(soln1 > 0.0, soln1, soln2)
-
-        '''try:
-            p = int(typ[1:])
-            if p < 1:
-                raise ValueError
-        except ValueError:
-            raise ValueError("Don't know how to interpret %s-norm" % norm_type)'''
-
-        # need to add in an exception if the salinity falls below zero. ...
-        '''error = conditional(if i in loc_Sb.dat.data < 0.0:
-            print("Melt interface, loc_Sb: ",  i)
-            print("Melt interface, Aa: ",  Aa)
-            print("Melt interface, Bb: ",  Bb)
-            print("Melt interface, Cc: ",  Cc)
-            print("Melt interface, T: ",  T)
-            print("Melt interface, S: ",  S)
-            print("Melt interface, P: ",  Pfull)
-            print("Melt interface, fv: n/a")  # add in friction velocity
-    
-            raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
-
-        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
-
-        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -self.gammaS*(loc_Sb-self.S)/loc_Sb, 0.0)
-        # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
-        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * self.gammaT, 0.0)
-        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
-
-
-        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaT) * (loc_Tb - self.T),
-                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + self.gammaS) * (loc_Sb - self.S), 0.0)
-
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, loc_Sb, self.Pfull  # these are all still expressions
-
-    def three_eq_param_meltrate_friction_vel(self,u):
-        # solve with two equation param.
-
-        u_star = pow(self.C_d*pow(u,2),0.5)  # + tidal velocity?????
-        u_star = conditional(u_star>1.0E-3, u_star,1.0E-3)
-
-        T_param = self.gammaT_fric * u_star
-        S_param = self.gammaS_fric * u_star
-
-        b_plus_cPb = (self.b + self.c * self.Pfull)  # save calculating this each time...
-
-        Aa = self.c_p_m * T_param * self.a - self.c_p_i * S_param * self.a
-
-        Bb = self.c_p_i * S_param * self.T_ice - self.c_p_i * S_param * b_plus_cPb + self.c_p_i * S_param * self.S * self.a
-        Bb = Bb + self.c_p_m * T_param * b_plus_cPb - self.c_p_m * T_param * self.T - S_param * self.Lf
-
-        Cc = self.c_p_i * S_param * self.S * b_plus_cPb - self.c_p_m * S_param * self.S * self.T_ice + S_param * self.Lf * self.S
-
-        soln1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)  # this is one value of loc_Sb
-        soln2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
-
-        loc_Sb = conditional(soln1 > 0.0, soln1, soln2)
-
-        '''try:
-            p = int(typ[1:])
-            if p < 1:
-                raise ValueError
-        except ValueError:
-            raise ValueError("Don't know how to interpret %s-norm" % norm_type)'''
-
-        # need to add in an exception if the salinity falls below zero. ...
-        '''error = conditional(if i in loc_Sb.dat.data < 0.0:
-            print("Melt interface, loc_Sb: ",  i)
-            print("Melt interface, Aa: ",  Aa)
-            print("Melt interface, Bb: ",  Bb)
-            print("Melt interface, Cc: ",  Cc)
-            print("Melt interface, T: ",  T)
-            print("Melt interface, S: ",  S)
-            print("Melt interface, P: ",  Pfull)
-            print("Melt interface, fv: n/a")  # add in friction velocity
-
-            raise Exception("Melt interface, Sb is negative. The range of Salinity is not right.")'''
-
-        loc_Tb = conditional(self.z > self.cav_boundary - self.dz_calc, self.a * loc_Sb + self.b + self.c * self.Pfull, 0.0)
-
-        wb = conditional(self.z > self.cav_boundary - self.dz_calc, -S_param * (loc_Sb - self.S) / loc_Sb, 0.0)
-        # Q_ice = conditional(z > 0-dz_calc,-rho_ice*c_p_i*k_i*(T_ice-Tb)/h_ice,0.0)  # assumption 2 in holland and jenkins - not so good because ice is thick!
-        Q_ice = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (self.T_ice - loc_Tb) * self.c_p_i * wb, 0.0)
-        Q_mixed = conditional(self.z > self.cav_boundary - self.dz_calc, -self.rho0 * (loc_Tb - self.T) * self.c_p_m * T_param, 0.0)
-        Q_latent = conditional(self.z > self.cav_boundary - self.dz_calc, Q_ice - Q_mixed, 0.0)
-
-        Q_mixed_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + T_param) * (loc_Tb - self.T),
-                                 0.0)  # units of Km/s , add in meltrate to capture flux of water through boundary Jenkins et al 2001 eq 25
-        Q_s_bc = conditional(self.z > self.cav_boundary - self.dz_calc, -(wb + S_param) * (loc_Sb - self.S), 0.0)
-
-        return Q_ice, Q_mixed_bc, Q_mixed, Q_latent, Q_s_bc, wb, loc_Tb, loc_Sb, self.Pfull  # these are all still expressions
+        self.T_flux_bc = -(self.wb + gammaT) * (self.Tb - self.T)
+        self.S_flux_bc = -(self.wb + gammaS) * (self.Sb - self.S)
