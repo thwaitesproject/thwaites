@@ -9,7 +9,7 @@ class MeltRateParam:
     c = -7.53E-8  # pressure coefficient of freezing equation
 
     c_p_m = 3974.  # specific heat capacity of mixed layer
-    c_p_i = 2009.
+    c_p_i = 2000.#2009.
     gammaT = 1.0E-4  # thermal exchange velocity, m/s
     gammaS = 5.05E-7 # salt exchange velocity, m/s
 
@@ -22,14 +22,14 @@ class MeltRateParam:
     k_i = 1.14E-6
 
     rho_ice = 920.0
-    T_ice = -25.0
+    T_ice = -20.0#-25.0
     
     g = 9.81
-    rho0 = 1027.5
+    rho0 = 1030.#1027.5
 
     def __init__(self, salinity, temperature, pressure_perturbation, z):
         P_hydrostatic = -self.rho0 * self.g * z
-        self.P_full = P_hydrostatic + self.rho0 * pressure_perturbation
+        self.P_full = P_hydrostatic #+ self.rho0 * pressure_perturbation
         self.S = salinity
         self.T = temperature
 
