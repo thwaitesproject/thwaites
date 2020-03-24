@@ -321,9 +321,9 @@ vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
-temp_bcs = {2: {'q': T_restore}, 4: {'flux': -mp.T_flux_bc}}
+temp_bcs = {2: {'q': T_restore}, 4: {'flux': 0.0}}
 
-sal_bcs = {2: {'q': S_restore}, 4: {'flux': -mp.S_flux_bc}}
+sal_bcs = {2: {'q': S_restore}, 4: {'flux': 0.0}}
 
 
 
@@ -433,7 +433,7 @@ w_comp = Function(U)
 ########
 
 # Set up folder
-folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3EqParam_dt"+str(dt)+\
+folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_no_melting_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_with_ufric/"
