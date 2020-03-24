@@ -436,7 +436,7 @@ w_comp = Function(U)
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_no_melting_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance/"
+         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance_sal34.5/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
