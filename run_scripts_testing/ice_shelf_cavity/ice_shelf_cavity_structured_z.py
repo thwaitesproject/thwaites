@@ -185,7 +185,7 @@ S_ref = Constant(35)
 beta_temp = Constant(2.0E-4)
 beta_sal = Constant(7.4E-4)
 g = Constant(9.81)
-mom_source = as_vector((0., 0.)) 
+mom_source = as_vector((0., -g))*(-beta_temp*(temp_init - T_ref) + beta_sal * (sal_init - S_ref)) 
 
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
@@ -436,7 +436,7 @@ w_comp = Function(U)
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_no_melting_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance_sal34.5_no_mom_source/"
+         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance_sal34.5_inside34.4_no_mom_source/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
