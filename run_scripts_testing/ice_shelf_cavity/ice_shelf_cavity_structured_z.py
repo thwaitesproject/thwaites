@@ -329,7 +329,7 @@ sal_bcs = {2: {'q': S_restore}, 4: {'flux': 0.0}}
 
 # STRONGLY Enforced BCs
 # open ocean (RHS): no tangential flow because viscosity of outside ocean resists vertical flow.
-strong_bcs = []#DirichletBC(M.sub(0).sub(1), 0, 2)]
+strong_bcs = [DirichletBC(M.sub(0).sub(1), 0, 2)]
 
 ##########
 
@@ -436,7 +436,7 @@ w_comp = Function(U)
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_no_melting_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance_sal34.5_inside34.4_no_mom_source/"
+         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance_sal34.5_inside34.4_no_mom_source_noSlipStrongBCrhs/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
