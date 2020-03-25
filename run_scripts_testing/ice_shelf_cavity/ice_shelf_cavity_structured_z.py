@@ -152,7 +152,7 @@ else:
 
     #S_bottom = 34.8
     #salinity_gradient = (S_bottom - S_200m_depth) / -H2
-    S_surface = 34.401 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
+    S_surface = 34.4001 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
 
     T_restore = Constant(T_200m_depth)
     S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
@@ -436,7 +436,7 @@ w_comp = Function(U)
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_no_melting_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance_sal34.401_in34.4_no_mom_noSlipRhs/"
+         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance_sal34.4001_in34.4_no_mom_noSlipRhs/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
