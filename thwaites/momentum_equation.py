@@ -1,5 +1,5 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor
+from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor, sign
 from firedrake import CellDiameter, avg, Identity, zero
 from .utility import is_continuous, normal_is_continuous, tensor_jump
 from ufl import tensors, algebra
@@ -44,9 +44,11 @@ class MomentumAdvectionTerm(BaseTerm):
                              dot(phi, u)*dot(u_adv, n)) * self.ds(id)
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u_adv)):
-            # this is the same trick as in the DG_advection firedrake demo
-            un = 0.5*(dot(u_adv, n) + abs(dot(u_adv, n)))
-            F += dot(phi('+') - phi('-'), un('+')*u('+') - un('-')*u('-'))*self.dS
+            # s=0: u.n(-)<0  =>  flow goes from '+' to '-' => '+' is upwind
+            # s=1: u.n(-)>0  =>  flow goes from '-' to '+' => '-' is upwind
+            s = 0.5*(sign(dot(avg(u),n('-'))) + 1.0)
+            u_up = u('-')*s + u('+')*(1-s)
+            F += dot(u_up, (dot(u_adv('+'), n('+'))*phi('+') + dot(u_adv('-'), n('-'))*phi('-'))) * self.dS
 
         return -F
 

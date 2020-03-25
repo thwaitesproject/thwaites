@@ -152,7 +152,7 @@ else:
 
     #S_bottom = 34.8
     #salinity_gradient = (S_bottom - S_200m_depth) / -H2
-    S_surface = 34.4001 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
+    S_surface = 34.41 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
 
     T_restore = Constant(T_200m_depth)
     S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
@@ -185,7 +185,7 @@ S_ref = Constant(35)
 beta_temp = Constant(2.0E-4)
 beta_sal = Constant(7.4E-4)
 g = Constant(9.81)
-mom_source = as_vector((0., -g))*(-beta_temp*(temp_init - T_ref) + beta_sal * (sal_init - S_ref)) 
+mom_source = as_vector((0., -g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) 
 
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
@@ -342,6 +342,7 @@ mumps_solver_parameters = {
     'mat_type': 'aij',
     'snes_max_it': 100,
     'snes_rtol': 1e-8,
+    'snes_atol': 1e-6,
 }
 
 vp_solver_parameters = mumps_solver_parameters
