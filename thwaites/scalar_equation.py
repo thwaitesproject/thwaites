@@ -1,5 +1,5 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, CellDiameter, as_tensor, avg, jump, Constant
+from firedrake import dot, inner, div, grad, CellDiameter, as_tensor, avg, jump, Constant, sign
 from firedrake import min_value, max_value, split, FacetNormal, Identity
 from .utility import is_continuous, normal_is_continuous
 from ufl import tensors, algebra
@@ -43,7 +43,11 @@ class ScalarAdvectionTerm(BaseTerm):
         if not (is_continuous(self.trial_space) and normal_is_continuous(u)):
             # outgoing velocity dot(u,n)>0 (i.e. the upwind side of the face)
             un = max_value(dot(u,n), 0)
-            F += (phi('+') - phi('-'))*(un('+')*q('+') - un('-')*q('-'))*self.dS
+            # s=0: u.n(-)<0  =>  flow goes from '+' to '-' => '+' is upwind
+            # s=1: u.n(-)>0  =>  flow goes from '-' to '+' => '-' is upwind
+            s = 0.5*(sign(dot(avg(u),n('-'))) + 1.0)
+            q_up = q('-')*s + q('+')*(1-s)
+            F += jump(phi*u, n) * q_up * self.dS
 
         return -F
 
