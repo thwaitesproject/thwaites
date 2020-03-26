@@ -114,9 +114,9 @@ full_pressure = Function(M.sub(1), name="full pressure")
 ##########
 
 # Define a dump file
-dump_file = "/data/Ben_FRISP_2.5d/09.12.19_3EqParam_dt50.0_dtOutput3600.0_T864000.0_ip50.0_tres600.0_Kh1.0_Kv0.5right_dy50.0_nz50/dump.h5"
+dump_file = "/data/2d_mitgcm_comparison/26.03.20_no_melt_dt600.0_dtOutput43200.0_T432000.0_ip50.0_tres86400.0_Kh0.01_Kv0.01openocean_structured_dy50_dz0.5_with_limiters_open_restoring_sal34.41_in34.4_no_mom_noSlipRhs_fixadv/dump.h5"
 
-DUMP = False
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -129,7 +129,7 @@ if DUMP:
         # from holland et al 2008b. constant T below 200m depth. varying sal.
         T_200m_depth = 1.0
 
-        S_200m_depth = 34.4
+        S_200m_depth = 34.41
         #S_bottom = 34.8
         #salinity_gradient = (S_bottom - S_200m_depth) / -H2
         #S_surface = S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
@@ -434,10 +434,10 @@ w_comp = Function(U)
 ########
 
 # Set up folder
-folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_no_melting_dt"+str(dt)+\
+folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_no_melt_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"openocean"+"_fluidity_structured_dy50_dz0.5_with_limiters_open_restoring_imbalance_sal34.4001_in34.4_no_mom_noSlipRhs/"
+         +"openocean"+"_structured_dy50_dz0.5_with_limiters_open_restoring_sal34.41_in34.4_no_mom_noSlipRhs_fixadv/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
