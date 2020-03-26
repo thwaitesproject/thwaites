@@ -255,7 +255,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_al
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5))
+mp = ThreeEqMeltRateParam(sal, temp, p, z)
 
 ##########
 
@@ -434,7 +434,7 @@ w_comp = Function(U)
 ########
 
 # Set up folder
-folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
+folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_no_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_structured_dy50_dz0.5_with_limiters_closed/"
