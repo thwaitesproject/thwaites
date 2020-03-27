@@ -321,9 +321,9 @@ vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'u': as_vector((0.0, 
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
-temp_bcs = {2: {'q': T_restore}, 4: {'flux': -mp.T_flux_bc}}
+temp_bcs = {4: {'flux': -mp.T_flux_bc}}
 
-sal_bcs = {2: {'q': S_restore}, 4: {'flux': -mp.S_flux_bc}}
+sal_bcs = {4: {'flux': -mp.S_flux_bc}}
 
 
 
@@ -437,7 +437,7 @@ w_comp = Function(U)
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_no_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz0.5_with_limiters_closed/"
+         +"_structured_dy50_dz0.5_with_limiters_closed_no_TS_diric_rhs/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
