@@ -194,25 +194,25 @@ rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
-sponge_fraction = 0.1  # fraction of domain where sponge
+sponge_fraction = 0.06  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          absorption_factor * ((y - (1.0-sponge_fraction) * L) / (L * sponge_fraction)) * T_restore,
+                          absorption_factor * T_restore,
                           0.0)
 
 # Salinity source term
 source_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor * ((y - (1.0-sponge_fraction) * L) / (L * sponge_fraction)) * S_restore,
+                         absorption_factor * S_restore,
                          0.0)
 
 # Temperature absorption term
 absorp_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          absorption_factor * ((y - (1.0-sponge_fraction) * L) / (L * sponge_fraction)),
+                          absorption_factor,
                           0.0)
 
 # Salinity absorption term
 absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                         absorption_factor,
                          0.0)
 
 
@@ -429,7 +429,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 # Set up folder
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
+         "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_structured_dy50_dz0.5_no_limiter_closed_no_TS_diric_rhs/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
