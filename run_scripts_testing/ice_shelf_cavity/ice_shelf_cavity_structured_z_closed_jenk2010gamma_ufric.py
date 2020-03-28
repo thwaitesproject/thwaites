@@ -426,18 +426,11 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 ##########
 
-# Add limiter for DG functions
-limiter = VertexBasedLimiter(U)
-v_comp = Function(U)
-w_comp = Function(U)
-
-########
-
 # Set up folder
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz0.5_with_limiters_closed_no_TS_diric_rhs/"
+         +"_structured_dy50_dz0.5_no_limiter_closed_no_TS_diric_rhs/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -505,14 +498,6 @@ while t < T - 0.5*dt:
     #u_timestepper.advance(t)
     temp_timestepper.advance(t)
     sal_timestepper.advance(t)
-
-    limiter.apply(sal)
-    limiter.apply(temp)
-    v_comp.interpolate(v[0])
-    limiter.apply(v_comp)
-    w_comp.interpolate(v[1])
-    limiter.apply(w_comp)
-    v_.interpolate(as_vector((v_comp, w_comp)))
 
     step += 1
     t += dt
