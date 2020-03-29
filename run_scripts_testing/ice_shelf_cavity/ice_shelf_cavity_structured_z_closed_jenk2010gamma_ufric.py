@@ -52,7 +52,7 @@ ny = round(L/dy)
 dz = 0.5
 
 # create mesh
-mesh = Mesh("./ascii_fix_structured_ice_shelf_dz0.5.msh")
+mesh = Mesh("./structured_ice_shelf_z_triangle_dz1m_boundarydz_0.5m.msh")`
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 

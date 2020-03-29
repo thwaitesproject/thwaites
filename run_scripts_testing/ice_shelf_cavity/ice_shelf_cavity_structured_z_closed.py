@@ -52,7 +52,7 @@ ny = round(L/dy)
 dz = 0.5
 
 # create mesh
-mesh = Mesh("./ascii_fix_structured_ice_shelf_dz0.5.msh")
+mesh = Mesh("./structured_ice_shelf_z_triangle_dz1m_boundarydz_0.5m.msh")
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -430,7 +430,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_no_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz0.5_no_limiter_closed_no_TS_diric_freeslip_rhs/"
+         +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
