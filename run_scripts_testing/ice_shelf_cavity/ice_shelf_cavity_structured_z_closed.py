@@ -317,7 +317,7 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'u': as_vector((0.0, 0.0))}, 
+vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
@@ -430,7 +430,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_no_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz0.5_no_limiter_closed_no_TS_diric_rhs/"
+         +"_structured_dy50_dz0.5_no_limiter_closed_no_TS_diric_freeslip_rhs/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
