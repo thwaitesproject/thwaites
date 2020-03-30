@@ -1,31 +1,44 @@
 from firedrake import conditional
 from firedrake import Constant
-
+from firedrake import Max,ln
 
 class MeltRateParam:
     """methods for calculating melt rate parameterisation used in ice-ocean boundary"""
     a = -5.73E-2  # salinity coefficient of freezing equation
-    b = 0.0832  # use fluidity value #9.39E-2  # constant coefficient of freezing equation
+    b = 0.0832  # constant coefficient of freezing equation
     c = -7.53E-8  # pressure coefficient of freezing equation
 
-    c_p_m = 3974.  # specific heat capacity of mixed layer
-    c_p_i = 2000.#2009.
+    c_p_m = 3974.  # specific heat capacity of mixed layer, J / kg /K
+    c_p_i = 2000.  # Specific heat capacity of ice, J/kg/K
     gammaT = 1.0E-4  # thermal exchange velocity, m/s
     gammaS = 5.05E-7 # salt exchange velocity, m/s
 
     GammaT = 1.1E-2  # dimensionless GammaT (capital). gammaT = GammaT.u* from jenkins et al 2010
     GammaS = GammaT / 35.0  # dimensionless GammaS (capital). gammaS = GammaS.u* from jenkins et al 2010
-    C_d = 0.0025  # 0.0097  # drag coefficient for ice...
+    C_d = 0.0097  # Drag coefficient for ice, dimensionless
 
-    Lf = 3.34E5  # latent heat of fusion
+    Lf = 3.34E5  # Latent heat of fusion of ice, J/kg
 
-    k_i = 1.14E-6
+    k_i = 1.14E-6  # Molecular thermal conductivity of ice, m^2/s
 
-    rho_ice = 920.0
-    T_ice = -20.0#-25.0
+    rho_ice = 920.0  # Reference density of ice, kg/m^3
+    T_ice = -20.0  # Temperature of far field ice, degC
     
-    g = 9.81
-    rho0 = 1030.#1027.5
+    g = 9.81  # gravitational acceleration, m/s^2
+    rho0 = 1030.  # Reference density of sea water, kg/m^3
+
+    Pr = 13.8  # Prandtl number, dimnesionless
+    Sc = 2432  # Schmidt number, dimensionless
+    zeta_N = 0.052  # Stability constant, dimensionless
+    eta_star = 1.0  # Stability parameter, dimensionless. This is default in MTIgcm. Should this be
+    # N.b MITgcm sets etastar = 1 so that the first part of Gamma_turb term below is constant.
+    # eta_star = (1 + (zeta_N * u_star) / (f * L0 * Rc))^-1/2  (Eq 18)
+    # In H&J99  eta_star is set to 1 when the Obukhov length is negative (i.e the buoyancy flux
+    # is destabilising. This occurs during freezing. (Melting is stabilising)
+    # So it does seem a bit odd because then eta_star is tuned to freezing conditions
+    # need to work this out...?
+    k = 0.4  # Von Karman's constant, dimensionless
+    nu = 1.95e-6  # Kinematic viscosity of seawater, m^2/s    
 
     def __init__(self, salinity, temperature, pressure_perturbation, z):
         P_hydrostatic = -self.rho0 * self.g * z
@@ -57,19 +70,75 @@ class TwoEqMeltRateParam(MeltRateParam):
 
 
 class ThreeEqMeltRateParam(MeltRateParam):
-    def __init__(self, salinity, temperature, pressure_perturbation, z, velocity=None, ice_heat_flux=True):
+    def __init__(self, salinity, temperature, pressure_perturbation, z, velocity=None, ice_heat_flux=True, HJ99Gamma=False, f=None):
         super().__init__(salinity, temperature, pressure_perturbation, z)
 
         if velocity is None:
+            # Use constant turbulent thermal and salinity exchange values given in Holland and Jenkins 1999. 
             gammaT = self.gammaT
             gammaS = self.gammaS
+
         else:
             u = velocity
-            u_tidal = 0.01
-            u_star = pow(self.C_d*(pow(u, 2)+pow(u_tidal, 2)), 0.5)
 
-            gammaT = self.GammaT * u_star
-            gammaS = self.GammaS * u_star
+            if HJ99Gamma:
+                # Holland and Jenkins 1999 turbulent heat/salt exchange velocity as a function
+                # of friction velocity. This should be the same as in MITgcm.  
+
+                # Holland, D.M. and Jenkins, A., 1999. Modeling thermodynamic ice–ocean interactions at 
+                #the base of an ice shelf. Journal of Physical Oceanography, 29(8), pp.1787-1800.
+
+                # Calculate friction velocity
+                print(u)
+                print(type(u))
+                if isinstance(u, float):
+                    u_bounded = max(u,1e-3)
+                else:
+                    u_bounded = conditional(u > 1e-3, u, 1e-3)
+                u_star = pow(self.C_d * pow(u_bounded, 2), 0.5)
+                
+                # Calculate turbulent component of thermal and salinity exchange velocity (Eq 15) 
+                # N.b MITgcm sets etastar = 1 so that the first part of Gamma_turb term below is constant. 
+                # eta_star = (1 + (zeta_N * u_star) / (f * L0 * Rc))^-1/2  (Eq 18)
+                # In H&J99  eta_star is set to 1 when the Obukhov length is negative (i.e the buoyancy flux 
+                # is destabilising. This occurs during freezing. (Melting is stabilising) 
+                # So it does seem a bit odd because then eta_star is tuned to freezing conditions 
+                # need to work this out...?
+                Gamma_Turb = 1.0 / (2.0 * self.zeta_N * self.eta_star) - 1.0 / self.k
+                if f is not None:
+                    # Add extra term if using coriolis term
+                    # Calculate viscous sublayer thickness (Eq 17)
+                    h_nu = 5.0 * self.nu / u_star 
+                    Gamma_Turb += ln(u_star * self.zeta_N * pow(self.eta_star, 2) / (abs(f) * h_nu)) / self.k
+                
+                # Calculate molecular components of thermal exchange velocity (Eq 16)
+                GammaT_Mole = 12.5 * pow(self.Pr, 2.0/3.0) - 6.0
+
+                # Calculate molecular component of salinity exchange velocity (Eq 16)
+                GammaS_Mole = 12.5 * pow(self.Sc, 2.0/3.0) - 6.0
+                
+                # Calculate thermal and salinity exchange velocity. (Eq 14)
+                # Do we need to catch -ve gamma? could have -ve Gamma_Turb?
+                gammaT = u_star / (Gamma_Turb + GammaT_Mole)
+                gammaS = u_star / (Gamma_Turb + GammaS_Mole)
+                
+                # print exchange velocities if testing when input velocity is a float.
+                if isinstance(gammaT, float) or isinstance(gammaS, float):
+                    print("gammaT = ", gammaT)
+                    print("gammaS = ", gammaS)
+
+            else:
+                # ISOMIP+ based on Jenkins et al 2010. Measurement of basal rates beneath Ronne Ice Shelf
+                u_tidal = 0.01
+                u_star = pow(self.C_d*(pow(u, 2)+pow(u_tidal, 2)), 0.5)
+
+                gammaT = self.GammaT * u_star
+                gammaS = self.GammaS * u_star
+
+                # print exchange velocities if testing when input velocity is a float.
+                if isinstance(gammaT, float) or isinstance(gammaS, float):
+                    print("gammaT = ", gammaT)
+                    print("gammaS = ", gammaS)
 
         b_plus_cPb = (self.b + self.c * self.P_full)  # save calculating this each time...
 
