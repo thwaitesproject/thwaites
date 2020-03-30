@@ -9,6 +9,7 @@ from firedrake import FacetNormal
 import pandas as pd
 import argparse
 import numpy as np
+from pyop2.profiling import timed_stage
 ##########
 
 
@@ -95,7 +96,7 @@ S = FunctionSpace(mesh, "DG", 1)    # salinity space
 m = Function(M)
 v_, p_ = m.split()  # function: y component of velocity, pressure
 v, p = split(m)  # expression: y component of velocity, pressure
-v_._name = "y z velocity"
+v_._name = "v_velocity"
 p_._name = "perturbation pressure"
 #u = Function(U, name="x velocity")  # x component of velocity
 
@@ -114,9 +115,10 @@ full_pressure = Function(M.sub(1), name="full pressure")
 ##########
 
 # Define a dump file
-dump_file = "/data/Ben_FRISP_2.5d/09.12.19_3EqParam_dt50.0_dtOutput3600.0_T864000.0_ip50.0_tres600.0_Kh1.0_Kv0.5right_dy50.0_nz50/dump.h5"
+#dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_checkpoint_3cores_67hours.h5"
+dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/dump.h5"
 
-DUMP = False
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -493,64 +495,82 @@ depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 t = 0.0
 step = 0
 
-while t < T - 0.5*dt:
-    vp_timestepper.advance(t)
-    #u_timestepper.advance(t)
-    temp_timestepper.advance(t)
-    sal_timestepper.advance(t)
+PROFILING=True
 
-    step += 1
-    t += dt
+if PROFILING:
+    while t < T - 0.5*dt:
+        with timed_stage('velocity-pressure'):
+            vp_timestepper.advance(t)
+            #u_timestepper.advance(t)
+        with timed_stage('temperature'):
+            temp_timestepper.advance(t)
+        with timed_stage('salinity'):
+            sal_timestepper.advance(t)
+        step += 1
+        t += dt
+        #with timed_region('output'):
+        # Output files
+         #   if step % output_step == 0:
 
-    # Output files
-    if step % output_step == 0:
-        # dumb checkpoint for starting from spin up
-
-        with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
-            # Checkpoint file open for reading and writing
-            chk.store(v_, name="v_velocity")
-            chk.store(p_, name="perturbation_pressure")
-            #chk.store(u, name="u_velocity")
-            chk.store(temp, name="temperature")
-            chk.store(sal, name="salinity")
-
-        # Update melt rate functions
-        Q_ice.interpolate(mp.Q_ice)
-        Q_mixed.interpolate(mp.Q_mixed)
-        Q_latent.interpolate(mp.Q_latent)
-        Q_s.interpolate(mp.S_flux_bc)
-        melt.interpolate(mp.wb)
-        Tb.interpolate(mp.Tb)
-        Sb.interpolate(mp.Sb)
-        full_pressure.interpolate(mp.P_full)
-
-        # Update density for plotting
-        rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
-
-        # Write out files
-        v_file.write(v_)
-        p_file.write(p_)
-        #u_file.write(u)
-        t_file.write(temp)
-        s_file.write(sal)
-        rho_file.write(rho)
-
-        # Write melt rate functions
-        m_file.write(melt)
-        Q_mixed_file.write(Q_mixed)
-        full_pressure_file.write(full_pressure)
-        Qs_file.write(Q_s)
-        Q_ice_file.write(Q_ice)
-
-        time_str = str(step)
-        top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
-
-        depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
-        depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
-        depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
-        depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
-        depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
-
-        PETSc.Sys.Print("t=", t)
-
-        PETSc.Sys.Print("integrated melt =", assemble(melt * ds(4)))
+else:
+    while t < T - 0.5*dt:
+       vp_timestepper.advance(t)
+       #u_timestepper.advance(t)
+       temp_timestepper.advance(t)
+       sal_timestepper.advance(t)
+    
+       step += 1
+       t += dt
+    
+       # Output files
+       if step % output_step == 0:
+           # dumb checkpoint for starting from spin up
+    
+           with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
+               # Checkpoint file open for reading and writing
+               chk.store(v_, name="v_velocity")
+               chk.store(p_, name="perturbation_pressure")
+               #chk.store(u, name="u_velocity")
+               chk.store(temp, name="temperature")
+               chk.store(sal, name="salinity")
+    
+           # Update melt rate functions
+           Q_ice.interpolate(mp.Q_ice)
+           Q_mixed.interpolate(mp.Q_mixed)
+           Q_latent.interpolate(mp.Q_latent)
+           Q_s.interpolate(mp.S_flux_bc)
+           melt.interpolate(mp.wb)
+           Tb.interpolate(mp.Tb)
+           Sb.interpolate(mp.Sb)
+           full_pressure.interpolate(mp.P_full)
+    
+           # Update density for plotting
+           rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
+    
+           # Write out files
+           v_file.write(v_)
+           p_file.write(p_)
+           #u_file.write(u)
+           t_file.write(temp)
+           s_file.write(sal)
+           rho_file.write(rho)
+    
+           # Write melt rate functions
+           m_file.write(melt)
+           Q_mixed_file.write(Q_mixed)
+           full_pressure_file.write(full_pressure)
+           Qs_file.write(Q_s)
+           Q_ice_file.write(Q_ice)
+    
+           time_str = str(step)
+           top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
+    
+           depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
+           depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
+           depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
+           depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
+           depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
+    
+           PETSc.Sys.Print("t=", t)
+    
+           PETSc.Sys.Print("integrated melt =", assemble(melt * ds(4)))
