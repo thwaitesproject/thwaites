@@ -146,7 +146,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
                                                                      options_prefix='predictor_' + self.name)
 
         # the correction solve, solving the coupled system:
-        #   u1 = u* + G ( p_theta - p_lag_theta)
+        #   u1 = u* - dt*G ( p_theta - p_lag_theta)
         #   div(u1) = 0
         self.F = self.equations[0].mass_term(self.u_test, u-self.u_star)
 
@@ -154,12 +154,12 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         pg_fields = self.fields.copy()
         # note that p_theta-p_lag_theta = theta*(p1-p_lag)
         pg_fields['pressure'] = self.theta * (p - p_lag)
-        self.F += pg_term.residual(self.u_test, u_theta, u_lag_theta, pg_fields, bcs=self.bcs)
+        self.F -= self.dt_const*pg_term.residual(self.u_test, u_theta, u_lag_theta, pg_fields, bcs=self.bcs)
 
         div_term = [term for term in self.equations[1]._terms if isinstance(term, DivergenceTerm)][0]
         div_fields = self.fields.copy()
         div_fields['velocity'] = u
-        self.F += div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
+        self.F -= self.dt_const*div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
 
         self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution)
         self.solver = firedrake.NonlinearVariationalSolver(self.problem,

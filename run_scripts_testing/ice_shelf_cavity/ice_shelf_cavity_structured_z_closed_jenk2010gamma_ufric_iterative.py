@@ -50,7 +50,7 @@ H2 = 102.
 dy = 50.0
 ny = round(L/dy)
 #nz = 50
-dz = 0.5
+dz = 1.0
 
 # create mesh
 mesh = Mesh("./structured_ice_shelf_z_triangle_dz1m_boundarydz_0.5m.msh")
@@ -348,34 +348,37 @@ mumps_solver_parameters = {
 }
 
 pressure_projection_solver_parameters = {
-    'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
-    'mat_type': 'matfree',
-    'pc_type': 'fieldsplit',
-    'pc_fieldsplit_type': 'schur',
-    'pc_fieldsplit_schur_fact_type': 'full',
-    # velocity mass block:
-    'fieldsplit_0': {
-        'ksp_type': 'gmres',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.AssembledPC',
-        'ksp_converged_reason': True,
-        'assembled_ksp_type': 'preonly',
-        'assembled_pc_type': 'bjacobi',
-        'assembled_sub_pc_type': 'ilu',
-         },
-    # schur system: explicitly assemble the schur system
-    # this only works with pressureprojectionicard if the velocity block is just the mass matrix
-    # and if the velocity is DG so that this mass matrix can be inverted explicitly
-    'fieldsplit_1': {
-        'ksp_type': 'preonly',
-        'pc_type': 'python',
-        'pc_python_type': 'thwaites.AssembledSchurPC',
-        'schur_ksp_type': 'cg',
-        'schur_ksp_max_it': 1000,
-        'schur_ksp_converged_reason': True,
-        'schur_pc_type': 'gamg',
-                                                                                                                    },
-                                                    }
+        'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
+        'mat_type': 'matfree',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'pc_fieldsplit_schur_fact_type': 'full',
+        # velocity mass block:
+        'fieldsplit_0': {
+            'ksp_type': 'gmres',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.AssembledPC',
+            'ksp_converged_reason': None,
+            'assembled_ksp_type': 'preonly',
+            'assembled_pc_type': 'bjacobi',
+            'assembled_sub_pc_type': 'ilu',
+            },
+        # schur system: explicitly assemble the schur system
+        # this only works with pressureprojectionicard if the velocity block is just the mass matrix
+        # and if the velocity is DG so that this mass matrix can be inverted explicitly
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'thwaites.AssembledSchurPC',
+            'schur_ksp_type': 'cg',
+            'schur_ksp_max_it': 1000,
+            'schur_ksp_rtol': 1e-7,
+            'schur_ksp_atol': 1e-9,
+            'schur_ksp_converged_reason': None,
+            'schur_pc_type': 'gamg',
+            'schur_pc_gamg_threshold': 0.01
+            },
+        }
 
 vp_solver_parameters = pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
@@ -451,7 +454,10 @@ output_step = output_dt/dt
 # Set up time stepping routines
 
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                          solver_parameters=vp_solver_parameters)
+                                                          solver_parameters=vp_solver_parameters,
+                                                          predictor_solver_parameters=u_solver_parameters,
+                                                          picard_iterations=2,
+                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
@@ -460,7 +466,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
+folder = "output/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative/"
