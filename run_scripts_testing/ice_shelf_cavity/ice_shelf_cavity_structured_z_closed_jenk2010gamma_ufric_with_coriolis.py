@@ -98,7 +98,7 @@ v_, p_ = m.split()  # function: y component of velocity, pressure
 v, p = split(m)  # expression: y component of velocity, pressure
 v_._name = "v_velocity"
 p_._name = "perturbation pressure"
-#u = Function(U, name="x velocity")  # x component of velocity
+u = Function(U, name="x velocity")  # x component of velocity
 
 rho = Function(K, name="density")
 temp = Function(K, name="temperature")
@@ -124,7 +124,7 @@ if DUMP:
         # Checkpoint file open for reading and writing
         chk.load(v_, name="v_velocity")
         chk.load(p_, name="perturbation_pressure")
-        #chk.load(u, name="u_velocity")
+        chk.load(u, name="u_velocity")
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
 
@@ -145,8 +145,8 @@ else:
     v_init = zero(mesh.geometric_dimension())
     v_.assign(v_init)
 
-    #u_init = Constant(0.0)
-    #u.interpolate(u_init)
+    u_init = Constant(0.0)
+    u.interpolate(u_init)
 
     # from holland et al 2008b. constant T below 200m depth. varying sal.
     T_200m_depth = 1.0
@@ -173,7 +173,7 @@ else:
 # Set up equations
 mom_eq = MomentumEquation(M.sub(0), M.sub(0))
 cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
-#u_eq = ScalarVelocity2halfDEquation(U, U)
+u_eq = ScalarVelocity2halfDEquation(U, U)
 temp_eq = ScalarAdvectionDiffusionEquation(K, K)
 sal_eq = ScalarAdvectionDiffusionEquation(S, S)
 
@@ -192,7 +192,7 @@ mom_source = as_vector((0., -g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - 
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
-#f = Constant(-1.409E-4)
+f = Constant(-1.409E-4)
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
@@ -247,8 +247,9 @@ mu = kappa
 ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
-#u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha,
+            'coriolis_frequency': f, 'u_velocity': u}
+u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
                'absorption coefficient': absorp_temp}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
@@ -257,7 +258,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_al
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5), HJ99Gamma=True)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5), HJ99Gamma=True, f=f)
 
 ##########
 
@@ -321,7 +322,7 @@ ice_drag = 0.0097
 
 vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
-#u_bcs = {2: {'q': Constant(0.0)}}
+u_bcs = {2: {'q': Constant(0.0)}}
 
 temp_bcs = {4: {'flux': -mp.T_flux_bc}}
 
@@ -396,7 +397,7 @@ velocity_depth_profile6km['Z_profile'] = z_profile6km
 
 
 def depth_profile_to_csv(profile, df, depth, t_str):
-    #df['U_t_' + t_str] = u.at(profile)
+    df['U_t_' + t_str] = u.at(profile)
     vw = np.array(v_.at(profile))
     vv = vw[:, 0]
     ww = vw[:, 1]
@@ -422,14 +423,14 @@ output_step = output_dt/dt
 vp_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                         solver_parameters=vp_solver_parameters, strong_bcs=strong_bcs)
 
-#u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
+u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
 sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
 
 ##########
 
 # Set up folder
-folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
+folder = "/data/2.5d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/"
@@ -445,8 +446,8 @@ v_file.write(v_)
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
 
-#u_file = File(folder+"u_velocity.pvd")
-#u_file.write(u)
+u_file = File(folder+"u_velocity.pvd")
+u_file.write(u)
 
 t_file = File(folder+"temperature.pvd")
 t_file.write(temp)
@@ -515,7 +516,7 @@ if PROFILING:
 else:
     while t < T - 0.5*dt:
        vp_timestepper.advance(t)
-       #u_timestepper.advance(t)
+       u_timestepper.advance(t)
        temp_timestepper.advance(t)
        sal_timestepper.advance(t)
     
@@ -530,7 +531,7 @@ else:
                # Checkpoint file open for reading and writing
                chk.store(v_, name="v_velocity")
                chk.store(p_, name="perturbation_pressure")
-               #chk.store(u, name="u_velocity")
+               chk.store(u, name="u_velocity")
                chk.store(temp, name="temperature")
                chk.store(sal, name="salinity")
     
@@ -550,7 +551,7 @@ else:
            # Write out files
            v_file.write(v_)
            p_file.write(p_)
-           #u_file.write(u)
+           u_file.write(u)
            t_file.write(temp)
            s_file.write(sal)
            rho_file.write(rho)
