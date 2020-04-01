@@ -170,6 +170,24 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         self._initialized = True
 
+    def initialize_pressure(self, solver_parameters):
+        """Perform pseude timestep to establish good initial pressure."""
+        self.solution_old.assign(self.solution)
+        u, p = firedrake.split(self.solution)
+        u_old, p_old = self.solution_old.split()
+        fields_init = self.fields.copy()
+        fields_init['pressure'] = p
+        fields_init['velocity'] = u
+
+        F_init = self.equations[0].mass_term(self.u_test, u)
+        F_init -= self.dt_const*self.equations[0].residual(self.u_test, u, u_old, fields_init, bcs=self.bcs)
+        F_init -= self.dt_const*self.equations[1].residual(self.p_test, p, p_old, fields_init, bcs=self.bcs)
+        firedrake.solve(F_init==0, self.solution, solver_parameters=solver_parameters,
+                                                           options_prefix='initial_'+self.name)
+        u_, p_ = self.solution.split()
+        # reset velocity to its initial value:
+        u_.assign(u_old)
+
     def advance(self, t, update_forcings=None):
         if not self._initialized:
             self.initialize(self.solution)

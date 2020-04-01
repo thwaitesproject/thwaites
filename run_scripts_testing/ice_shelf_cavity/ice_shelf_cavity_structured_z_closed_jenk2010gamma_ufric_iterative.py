@@ -338,6 +338,7 @@ strong_bcs = []#DirichletBC(M.sub(0).sub(1), 0, 2)]
 # Solver parameters
 mumps_solver_parameters = {
     'snes_monitor': None,
+    'snes_type': 'ksponly',
     'ksp_type': 'preonly',
     'pc_type': 'lu',
     'pc_factor_mat_solver_type': 'mumps',
@@ -348,6 +349,7 @@ mumps_solver_parameters = {
 }
 
 pressure_projection_solver_parameters = {
+        'snes_type': 'ksponly',
         'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
         'mat_type': 'matfree',
         'pc_type': 'fieldsplit',
@@ -456,8 +458,17 @@ output_step = output_dt/dt
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
                                                           predictor_solver_parameters=u_solver_parameters,
-                                                          picard_iterations=2,
+                                                          picard_iterations=1,
                                                           pressure_nullspace=VectorSpaceBasis(constant=True))
+
+# performs pseudo timestep to get good initial pressure
+# this is to avoid inconsistencies in terms (viscosity and advection) that
+# are meant to decouple from pressure projection, but won't if pressure is not initialised
+# do this here, so we can see the initial pressure in pressure_0.pvtu
+if not DUMP:
+    # should not be done when picking up
+    with timed_stage('initial_pressure'):
+        vp_timestepper.initialize_pressure(solver_parameters=mumps_solver_parameters)
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
@@ -532,34 +543,17 @@ depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 t = 0.0
 step = 0
 
-PROFILING=False
-
-if PROFILING:
-    while t < T - 0.5*dt:
-        with timed_stage('velocity-pressure'):
-            vp_timestepper.advance(t)
-            #u_timestepper.advance(t)
-        with timed_stage('temperature'):
-            temp_timestepper.advance(t)
-        with timed_stage('salinity'):
-            sal_timestepper.advance(t)
-        step += 1
-        t += dt
-        #with timed_region('output'):
-        # Output files
-         #   if step % output_step == 0:
-
-else:
-    while t < T - 0.5*dt:
-       vp_timestepper.advance(t)
-       #u_timestepper.advance(t)
-       temp_timestepper.advance(t)
-       sal_timestepper.advance(t)
-    
-       step += 1
-       t += dt
-    
-       # Output files
+while t < T - 0.5*dt:
+    with timed_stage('velocity-pressure'):
+        vp_timestepper.advance(t)
+        #u_timestepper.advance(t)
+    with timed_stage('temperature'):
+        temp_timestepper.advance(t)
+    with timed_stage('salinity'):
+        sal_timestepper.advance(t)
+    step += 1
+    t += dt
+    with timed_stage('output'):
        if step % output_step == 0:
            # dumb checkpoint for starting from spin up
     

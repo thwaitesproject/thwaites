@@ -147,7 +147,7 @@ class ViscosityTerm(BaseTerm):
                     u_tensor_jump += transpose(u_tensor_jump)
                 # this corresponds to the same 3 terms as the dS integrals for DG above:
                 F += sigma*inner(outer(n, phi), dot(diff_tensor, u_tensor_jump))*self.ds(id)
-                F += -inner(dot(diff_tensor, grad(phi)), u_tensor_jump)*self.ds(id)
+                F += -inner(dot(diff_tensor, nabla_grad(phi)), u_tensor_jump)*self.ds(id)
                 if 'u' in bc:
                     F += -inner(outer(n,phi), stress) * self.ds(id)
                 elif 'un' in bc:
