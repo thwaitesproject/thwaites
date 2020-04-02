@@ -39,7 +39,7 @@ class MomentumAdvectionTerm(BaseTerm):
             elif 'un' in bc:
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
-                u_in = as_vector((0,0))
+                u_in = as_vector(phi.ufl_shape[0]*(0,))
             F += conditional(dot(u_adv, n) < 0,
                              dot(phi, u_in)*dot(u_adv, n),
                              dot(phi, u)*dot(u_adv, n)) * self.ds(id)
@@ -86,8 +86,7 @@ class ViscosityTerm(BaseTerm):
             if 'rans_eddy_viscosity' in fields:
                 mu = mu + fields['rans_eddy_viscosity']
 
-            diff_tensor = as_matrix([[mu, 0, ],
-                                     [0, mu, ]])
+            diff_tensor = mu*Identity(test.ufl_shape[0])
         elif len(mu.ufl_shape) == 2:
             if 'rans_eddy_viscosity' in fields:
                 diff_tensor = mu + fields['rans_eddy_viscosity']*Identity(mu.ufl_shape[0])
