@@ -670,3 +670,40 @@ class DIRKLSPUM2(DIRKGeneric, DIRKLSPUM2Abstract):
 
 class DIRKLPUM2(DIRKGeneric, DIRKLPUM2Abstract):
     pass
+
+class RelaxToSteadyState(TimeIntegrator):
+
+    def __init__(self, equation, solution, fields, dt, bnd_conditions=None,
+                 solver_parameters={}):
+        super(RelaxToSteadyState, self).__init__(equation, solution, fields, dt, solver_parameters)
+        self._initialized = False
+        V = solution.function_space()
+        
+        assert V==equation.trial_space
+        self.solution_old = firedrake.Function(V, name='old solution')
+
+        trial = firedrake.TrialFunction(V)
+        self.a = self.dt_const*self.equation.mass_term(self.test, self.solution)
+        self.l = self.equation.residual(self.test, self.solution, self.solution_old, self.fields, bnd_conditions)
+        self.r = self.dt_const*self.equation.mass_term(self.test, self.solution_old)
+
+        prob = firedrake.NonlinearVariationalProblem(self.a-self.l-self.r, self.solution)
+        self.solver = firedrake.NonlinearVariationalSolver(prob, options_prefix=self.name,
+                                                   solver_parameters=self.solver_parameters)
+        
+    def solve_step(self):
+        self.solution.assign(self.solution_old)
+        self.solver.solve()
+        
+        
+    def advance(self, dt, t, update_forcings=None):
+        """Advances equations for one step."""
+        self.dt_const.assign(dt)
+        if not self._initialized:
+            self.initialize(self.solution)
+        self.solve_step()
+
+    def initialize(self, solution):
+        """Assigns initial conditions to all required fields."""
+        self.solution_old.assign(solution)
+        self._initialized = True
