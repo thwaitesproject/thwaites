@@ -98,7 +98,7 @@ v_, p_ = m.split()  # function: y component of velocity, pressure
 v, p = split(m)  # expression: y component of velocity, pressure
 v_._name = "v_velocity"
 p_._name = "perturbation pressure"
-u = Function(U, name="x velocity")  # x component of velocity
+#u = Function(U, name="x velocity")  # x component of velocity
 
 rho = Function(K, name="density")
 temp = Function(K, name="temperature")
@@ -124,7 +124,7 @@ if DUMP:
         # Checkpoint file open for reading and writing
         chk.load(v_, name="v_velocity")
         chk.load(p_, name="perturbation_pressure")
-        chk.load(u, name="u_velocity")
+        #chk.load(u, name="u_velocity")
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
 
@@ -145,8 +145,8 @@ else:
     v_init = zero(mesh.geometric_dimension())
     v_.assign(v_init)
 
-    u_init = Constant(0.0)
-    u.interpolate(u_init)
+    #u_init = Constant(0.0)
+    #u.interpolate(u_init)
 
     # from holland et al 2008b. constant T below 200m depth. varying sal.
     T_200m_depth = 1.0
@@ -173,7 +173,7 @@ else:
 # Set up equations
 mom_eq = MomentumEquation(M.sub(0), M.sub(0))
 cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
-u_eq = ScalarVelocity2halfDEquation(U, U)
+#u_eq = ScalarVelocity2halfDEquation(U, U)
 temp_eq = ScalarAdvectionDiffusionEquation(K, K)
 sal_eq = ScalarAdvectionDiffusionEquation(S, S)
 
@@ -192,7 +192,7 @@ mom_source = as_vector((0., -g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - 
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
-f = Constant(-1.409E-4)
+#f = Constant(-1.409E-4)
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
@@ -247,9 +247,8 @@ mu = kappa
 ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha,
-            'coriolis_frequency': f, 'u_velocity': u}
-u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
+#u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
                'absorption coefficient': absorp_temp}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
@@ -258,7 +257,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_al
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v) + pow(u, 2), 0.5), f=f)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5), HJ99Gamma=True)
 
 ##########
 
@@ -322,7 +321,7 @@ ice_drag = 0.0097
 
 vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
-u_bcs = {2: {'q': Constant(0.0)}, 3: {'drag': 0.0025}, 4: {'drag': ice_drag}}
+#u_bcs = {2: {'q': Constant(0.0)}}
 
 temp_bcs = {4: {'flux': -mp.T_flux_bc}}
 
@@ -349,7 +348,41 @@ mumps_solver_parameters = {
     'snes_atol': 1e-6,
 }
 
-vp_solver_parameters = mumps_solver_parameters
+pressure_projection_solver_parameters = {
+        'snes_type': 'ksponly',
+        'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
+        'mat_type': 'matfree',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'pc_fieldsplit_schur_fact_type': 'full',
+        # velocity mass block:
+        'fieldsplit_0': {
+            'ksp_type': 'gmres',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.AssembledPC',
+            'ksp_converged_reason': None,
+            'assembled_ksp_type': 'preonly',
+            'assembled_pc_type': 'bjacobi',
+            'assembled_sub_pc_type': 'ilu',
+            },
+        # schur system: explicitly assemble the schur system
+        # this only works with pressureprojectionicard if the velocity block is just the mass matrix
+        # and if the velocity is DG so that this mass matrix can be inverted explicitly
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'thwaites.AssembledSchurPC',
+            'schur_ksp_type': 'cg',
+            'schur_ksp_max_it': 1000,
+            'schur_ksp_rtol': 1e-7,
+            'schur_ksp_atol': 1e-9,
+            'schur_ksp_converged_reason': None,
+            'schur_pc_type': 'gamg',
+            'schur_pc_gamg_threshold': 0.01
+            },
+        }
+
+vp_solver_parameters = pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
 temp_solver_parameters = mumps_solver_parameters
 sal_solver_parameters = mumps_solver_parameters
@@ -398,7 +431,7 @@ velocity_depth_profile6km['Z_profile'] = z_profile6km
 
 
 def depth_profile_to_csv(profile, df, depth, t_str):
-    df['U_t_' + t_str] = u.at(profile)
+    #df['U_t_' + t_str] = u.at(profile)
     vw = np.array(v_.at(profile))
     vv = vw[:, 0]
     ww = vw[:, 1]
@@ -421,20 +454,33 @@ output_step = output_dt/dt
 ##########
 
 # Set up time stepping routines
-vp_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                        solver_parameters=vp_solver_parameters, strong_bcs=strong_bcs)
 
-u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
+vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
+                                                          solver_parameters=vp_solver_parameters,
+                                                          predictor_solver_parameters=u_solver_parameters,
+                                                          picard_iterations=1,
+                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+
+# performs pseudo timestep to get good initial pressure
+# this is to avoid inconsistencies in terms (viscosity and advection) that
+# are meant to decouple from pressure projection, but won't if pressure is not initialised
+# do this here, so we can see the initial pressure in pressure_0.pvtu
+if not DUMP:
+    # should not be done when picking up
+    with timed_stage('initial_pressure'):
+        vp_timestepper.initialize_pressure(solver_parameters=mumps_solver_parameters)
+
+#u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
 sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
 
 ##########
 
 # Set up folder
-folder = "/data/2.5d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricJ10_correctustar_correctudrag_dt"+str(dt)+\
+folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/"
+         +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative_pressure_fix/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -447,8 +493,8 @@ v_file.write(v_)
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
 
-u_file = File(folder+"u_velocity.pvd")
-u_file.write(u)
+#u_file = File(folder+"u_velocity.pvd")
+#u_file.write(u)
 
 t_file = File(folder+"temperature.pvd")
 t_file.write(temp)
@@ -497,34 +543,17 @@ depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 t = 0.0
 step = 0
 
-PROFILING=False
-
-if PROFILING:
-    while t < T - 0.5*dt:
-        with timed_stage('velocity-pressure'):
-            vp_timestepper.advance(t)
-            u_timestepper.advance(t)
-        with timed_stage('temperature'):
-            temp_timestepper.advance(t)
-        with timed_stage('salinity'):
-            sal_timestepper.advance(t)
-        step += 1
-        t += dt
-        #with timed_region('output'):
-        # Output files
-         #   if step % output_step == 0:
-
-else:
-    while t < T - 0.5*dt:
-       vp_timestepper.advance(t)
-       u_timestepper.advance(t)
-       temp_timestepper.advance(t)
-       sal_timestepper.advance(t)
-    
-       step += 1
-       t += dt
-    
-       # Output files
+while t < T - 0.5*dt:
+    with timed_stage('velocity-pressure'):
+        vp_timestepper.advance(t)
+        #u_timestepper.advance(t)
+    with timed_stage('temperature'):
+        temp_timestepper.advance(t)
+    with timed_stage('salinity'):
+        sal_timestepper.advance(t)
+    step += 1
+    t += dt
+    with timed_stage('output'):
        if step % output_step == 0:
            # dumb checkpoint for starting from spin up
     
@@ -532,7 +561,7 @@ else:
                # Checkpoint file open for reading and writing
                chk.store(v_, name="v_velocity")
                chk.store(p_, name="perturbation_pressure")
-               chk.store(u, name="u_velocity")
+               #chk.store(u, name="u_velocity")
                chk.store(temp, name="temperature")
                chk.store(sal, name="salinity")
     
@@ -552,7 +581,7 @@ else:
            # Write out files
            v_file.write(v_)
            p_file.write(p_)
-           u_file.write(u)
+           #u_file.write(u)
            t_file.write(temp)
            s_file.write(sal)
            rho_file.write(rho)

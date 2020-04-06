@@ -1,6 +1,6 @@
 from firedrake import conditional
 from firedrake import Constant
-from firedrake import Max,ln
+from firedrake import ln
 
 class MeltRateParam:
     """methods for calculating melt rate parameterisation used in ice-ocean boundary"""
@@ -89,10 +89,10 @@ class ThreeEqMeltRateParam(MeltRateParam):
                 #the base of an ice shelf. Journal of Physical Oceanography, 29(8), pp.1787-1800.
 
                 # Calculate friction velocity
-                print(u)
-                print(type(u))
                 if isinstance(u, float):
+                    print("Input velocity:", u)
                     u_bounded = max(u,1e-3)
+                    print("Bounded velocity:", u_bounded)
                 else:
                     u_bounded = conditional(u > 1e-3, u, 1e-3)
                 u_star = pow(self.C_d * pow(u_bounded, 2), 0.5)

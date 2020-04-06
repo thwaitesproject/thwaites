@@ -304,3 +304,15 @@ def test_ocean_heat_flux_sign():
         # if freezing then salt flux into ocean due to brine rejection
         assert mp.QS_mixed < 0.0
 
+
+
+#### does potential temperature conversion make a difference?
+
+mp = ThreeEqMeltRateParam(35, -0.0448, p, 1000, 0.001)
+print("Potential temperature = -0.0448degC. At 1000db and 35PSU In situ temperature = 0degC")
+print("Meltrate without conversion to insitu temp = ", mp.wb)
+
+mp_conv = ThreeEqMeltRateParam(35, 0.0, p, 1000, 0.001)
+print("Meltrate with conversion to insitu temp = ", mp_conv.wb)
+
+print("with conversion melt rate is {:.2f} times larger....".format(mp_conv.wb / mp.wb))

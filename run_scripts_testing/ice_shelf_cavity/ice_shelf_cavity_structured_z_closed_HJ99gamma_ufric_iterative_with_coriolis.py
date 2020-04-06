@@ -258,7 +258,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_al
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v) + pow(u, 2), 0.5), f=f)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v) + pow(u, 2), 0.5), HJ99Gamma=True, f=f)
 
 ##########
 
@@ -349,7 +349,41 @@ mumps_solver_parameters = {
     'snes_atol': 1e-6,
 }
 
-vp_solver_parameters = mumps_solver_parameters
+pressure_projection_solver_parameters = {
+        'snes_type': 'ksponly',
+        'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
+        'mat_type': 'matfree',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'pc_fieldsplit_schur_fact_type': 'full',
+        # velocity mass block:
+        'fieldsplit_0': {
+            'ksp_type': 'gmres',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.AssembledPC',
+            'ksp_converged_reason': None,
+            'assembled_ksp_type': 'preonly',
+            'assembled_pc_type': 'bjacobi',
+            'assembled_sub_pc_type': 'ilu',
+            },
+        # schur system: explicitly assemble the schur system
+        # this only works with pressureprojectionicard if the velocity block is just the mass matrix
+        # and if the velocity is DG so that this mass matrix can be inverted explicitly
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'thwaites.AssembledSchurPC',
+            'schur_ksp_type': 'cg',
+            'schur_ksp_max_it': 1000,
+            'schur_ksp_rtol': 1e-7,
+            'schur_ksp_atol': 1e-9,
+            'schur_ksp_converged_reason': None,
+            'schur_pc_type': 'gamg',
+            'schur_pc_gamg_threshold': 0.01
+            },
+        }
+
+vp_solver_parameters = pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
 temp_solver_parameters = mumps_solver_parameters
 sal_solver_parameters = mumps_solver_parameters
@@ -421,8 +455,21 @@ output_step = output_dt/dt
 ##########
 
 # Set up time stepping routines
-vp_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                        solver_parameters=vp_solver_parameters, strong_bcs=strong_bcs)
+
+vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
+                                                          solver_parameters=vp_solver_parameters,
+                                                          predictor_solver_parameters=u_solver_parameters,
+                                                          picard_iterations=1,
+                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+
+# performs pseudo timestep to get good initial pressure
+# this is to avoid inconsistencies in terms (viscosity and advection) that
+# are meant to decouple from pressure projection, but won't if pressure is not initialised
+# do this here, so we can see the initial pressure in pressure_0.pvtu
+if not DUMP:
+    # should not be done when picking up
+    with timed_stage('initial_pressure'):
+        vp_timestepper.initialize_pressure(solver_parameters=mumps_solver_parameters)
 
 u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
@@ -431,10 +478,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/2.5d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricJ10_correctustar_correctudrag_dt"+str(dt)+\
+folder = "/data/2.5d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/"
+         +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative_pressure_fix_coriolis/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -497,34 +544,17 @@ depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 t = 0.0
 step = 0
 
-PROFILING=False
-
-if PROFILING:
-    while t < T - 0.5*dt:
-        with timed_stage('velocity-pressure'):
-            vp_timestepper.advance(t)
-            u_timestepper.advance(t)
-        with timed_stage('temperature'):
-            temp_timestepper.advance(t)
-        with timed_stage('salinity'):
-            sal_timestepper.advance(t)
-        step += 1
-        t += dt
-        #with timed_region('output'):
-        # Output files
-         #   if step % output_step == 0:
-
-else:
-    while t < T - 0.5*dt:
-       vp_timestepper.advance(t)
-       u_timestepper.advance(t)
-       temp_timestepper.advance(t)
-       sal_timestepper.advance(t)
-    
-       step += 1
-       t += dt
-    
-       # Output files
+while t < T - 0.5*dt:
+    with timed_stage('velocity-pressure'):
+        vp_timestepper.advance(t)
+        u_timestepper.advance(t)
+    with timed_stage('temperature'):
+        temp_timestepper.advance(t)
+    with timed_stage('salinity'):
+        sal_timestepper.advance(t)
+    step += 1
+    t += dt
+    with timed_stage('output'):
        if step % output_step == 0:
            # dumb checkpoint for starting from spin up
     

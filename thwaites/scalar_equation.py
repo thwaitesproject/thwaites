@@ -138,6 +138,14 @@ class ScalarDiffusionTerm(BaseTerm):
                 # here we need only the third term, because we assume jump_q=0 (q_ext=q)
                 # the provided flux = kappa dq/dn = dot(n, dot(diff_tensor, grad(q))
                 F += -phi*bc['flux']*self.ds(id)
+            
+            if 'drag' in bc:  
+                # (bottom) drag of the form tau = -C_D u |u|
+                assert 'coriolis_frequency' in fields  # check 2.5d scalar advection diffusion equation for u.
+                C_D = bc['drag']
+                vw = fields['velocity']
+                unorm = pow(dot(vw, vw) + pow(trial_lagged, 2), 0.5)
+                F += dot(-phi, -C_D*unorm*trial) * self.ds(id)
 
         return -F
 
