@@ -7,6 +7,7 @@ from .coupled_integrators import CrankNicolsonSaddlePointTimeIntegrator, Pressur
 from .assembledschur import AssembledSchurPC
 from .meltrate_param import MeltRateParam
 from .rans import RANSModel
+from .actuators import ActuatorDiscFactory
 
 from ._version import get_versions
 __version__ = get_versions()['version']
