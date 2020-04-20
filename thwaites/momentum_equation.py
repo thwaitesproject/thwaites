@@ -45,9 +45,11 @@ class MomentumAdvectionTerm(BaseTerm):
                              dot(phi, u)*dot(u_adv, n)) * self.ds(id)
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u_adv)):
-            # this is the same trick as in the DG_advection firedrake demo
-            un = 0.5*(dot(u_adv, n) + abs(dot(u_adv, n)))
-            F += dot(phi('+') - phi('-'), un('+')*u('+') - un('-')*u('-'))*self.dS
+            # s=0: u.n(-)<0  =>  flow goes from '+' to '-' => '+' is upwind
+            # s=1: u.n(-)>0  =>  flow goes from '-' to '+' => '-' is upwind
+            s = 0.5*(sign(dot(avg(u),n('-'))) + 1.0)
+            u_up = u('-')*s + u('+')*(1-s)
+            F += dot(u_up, (dot(u_adv('+'), n('+'))*phi('+') + dot(u_adv('-'), n('-'))*phi('-'))) * self.dS
 
         return -F
 
@@ -144,7 +146,7 @@ class ViscosityTerm(BaseTerm):
                     u_tensor_jump += transpose(u_tensor_jump)
                 # this corresponds to the same 3 terms as the dS integrals for DG above:
                 F += sigma*inner(outer(n, phi), dot(diff_tensor, u_tensor_jump))*self.ds(id)
-                F += -inner(dot(diff_tensor, grad(phi)), u_tensor_jump)*self.ds(id)
+                F += -inner(dot(diff_tensor, nabla_grad(phi)), u_tensor_jump)*self.ds(id)
                 if 'u' in bc:
                     F += -inner(outer(n,phi), stress) * self.ds(id)
                 elif 'un' in bc:
@@ -158,8 +160,13 @@ class ViscosityTerm(BaseTerm):
                 F += dot(-phi, bc['stress']) * self.ds(id)
             if 'drag' in bc:  # (bottom) drag of the form tau = -C_D u |u|
                 C_D = bc['drag']
-                unorm = pow(dot(u_lagged, u_lagged),0.5)
-
+                if 'coriolis_frequency' in fields and self.dim == 2:
+                    assert 'u_velocity' in fields
+                    u_vel_component = fields['u_velocity']
+                    unorm = pow(dot(u_lagged, u_lagged) + pow(u_vel_component, 2), 0.5)
+                else:
+                    unorm = pow(dot(u_lagged, u_lagged),0.5)
+                
                 F += dot(-phi, -C_D*unorm*u) * self.ds(id)
             if 'wall_law_drag' in bc: # a linear drag calculated by the RANS model:
                 F += bc['wall_law_drag']*dot(phi, u) * self.ds(id)

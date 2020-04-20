@@ -128,12 +128,12 @@ def cavity_thickness(x,x0,y0,x1,y1):
     return y0 + m*x
 
 
-def get_top_boundary(cavity_length=5000., cavity_height=100., n=100):
+def get_top_boundary(cavity_length=5000., cavity_height=100., water_depth=1000., n=100):
     dx = cavity_length / float(n)
     shelf_boundary_points = []
     for i in range(n):
         x_i = i * dx
-        y_i = cavity_thickness(x_i, 0.0, 1.0, cavity_length, cavity_height) - 0.01
+        y_i = cavity_thickness(x_i, 0.0, 2.0, cavity_length, cavity_height) - water_depth - 0.01
         shelf_boundary_points.append([x_i, y_i])
 
     return shelf_boundary_points

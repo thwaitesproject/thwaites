@@ -146,7 +146,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
                                                                      options_prefix='predictor_' + self.name)
 
         # the correction solve, solving the coupled system:
-        #   u1 = u* + G ( p_theta - p_lag_theta)
+        #   u1 = u* - dt*G ( p_theta - p_lag_theta)
         #   div(u1) = 0
         self.F = self.equations[0].mass_term(self.u_test, u-self.u_star)
 
@@ -154,12 +154,12 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         pg_fields = self.fields.copy()
         # note that p_theta-p_lag_theta = theta*(p1-p_lag)
         pg_fields['pressure'] = self.theta * (p - p_lag)
-        self.F += pg_term.residual(self.u_test, u_theta, u_lag_theta, pg_fields, bcs=self.bcs)
+        self.F -= self.dt_const*pg_term.residual(self.u_test, u_theta, u_lag_theta, pg_fields, bcs=self.bcs)
 
         div_term = [term for term in self.equations[1]._terms if isinstance(term, DivergenceTerm)][0]
         div_fields = self.fields.copy()
         div_fields['velocity'] = u
-        self.F += div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
+        self.F -= self.dt_const*div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
 
         self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution)
         self.solver = firedrake.NonlinearVariationalSolver(self.problem,
@@ -169,6 +169,24 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
                                                            options_prefix=self.name)
 
         self._initialized = True
+
+    def initialize_pressure(self, solver_parameters):
+        """Perform pseude timestep to establish good initial pressure."""
+        self.solution_old.assign(self.solution)
+        u, p = firedrake.split(self.solution)
+        u_old, p_old = self.solution_old.split()
+        fields_init = self.fields.copy()
+        fields_init['pressure'] = p
+        fields_init['velocity'] = u
+
+        F_init = self.equations[0].mass_term(self.u_test, u)
+        F_init -= self.dt_const*self.equations[0].residual(self.u_test, u, u_old, fields_init, bcs=self.bcs)
+        F_init -= self.dt_const*self.equations[1].residual(self.p_test, p, p_old, fields_init, bcs=self.bcs)
+        firedrake.solve(F_init==0, self.solution, solver_parameters=solver_parameters,
+                                                           options_prefix='initial_'+self.name)
+        u_, p_ = self.solution.split()
+        # reset velocity to its initial value:
+        u_.assign(u_old)
 
     def advance(self, t, update_forcings=None):
         if not self._initialized:

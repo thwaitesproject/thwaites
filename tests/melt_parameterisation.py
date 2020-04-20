@@ -7,7 +7,7 @@ S = 33.5
 T = -2.5
 p = 0
 z = -1000.
-u = 0.1
+u = 0.0001
 
 ######################################################################
 
@@ -35,6 +35,60 @@ AND
 QSbrine = -m'.rho_sw.Sb''')
 print("This script: QSbrine = ", QSbrine)
 print("Melt rate param: -QSmixed = ", -mp.QS_mixed)
+
+######################################################################
+
+# Print out results for three equation parameterisation with H&J 1999 
+# friction velocity no coriolis.
+
+print("#"*40)
+print('''Test: Conservation of heat HJ1999 gamma(ufric), f = 0
+Qlatent = Qice - Qmixed
+AND
+Qlatent = -m'.rho_sw.L''')
+mp = ThreeEqMeltRateParam(S, T, p, z, u, HJ99Gamma=True)
+Qlat = -mp.wb*mp.rho0*mp.Lf
+QSbrine = -mp.rho0*mp.wb*mp.Sb
+
+
+print("Melt rate param: m' = ", mp.wb)
+print("Melt rate param: Qice = ", mp.Q_ice)
+print("Melt rate param: Qmixed = ", mp.Q_mixed)
+print("This script: Qlatent = ", Qlat)
+print("Melt rate param: Qice - Qmixed = ", mp.Q_latent)
+print("#"*40)
+print('''Test: Conservation of salt HJ1999 gamma(ufric), f = 0
+QSbrine = QSice - QSmixed
+QSice = 0
+AND
+QSbrine = -m'.rho_sw.Sb''')
+print("This script: QSbrine = ", QSbrine)
+print("Melt rate param: -QSmixed = ", -mp.QS_mixed)
+
+######################################################################                                                                                                                                                                                                                                                                                                                                                                # Print out results for three equation parameterisation with H&J 1999                                                                                                                                              # friction velocity and with coriolis.
+
+print("#"*40)
+print('''Test: Conservation of heat HJ1999 gamma(ufric), f = -1e-4s^-1
+Qlatent = Qice - Qmixed
+AND
+Qlatent = -m'.rho_sw.L''')
+mp = ThreeEqMeltRateParam(S, T, p, z, u, HJ99Gamma=True,f=-1e-4)
+Qlat = -mp.wb*mp.rho0*mp.Lf
+QSbrine = -mp.rho0*mp.wb*mp.Sb
+print("Melt rate param: m' = ", mp.wb)
+print("Melt rate param: Qice = ", mp.Q_ice)
+print("Melt rate param: Qmixed = ", mp.Q_mixed)
+print("This script: Qlatent = ", Qlat)
+print("Melt rate param: Qice - Qmixed = ", mp.Q_latent)
+print("#"*40)
+print('''Test: Conservation of salt HJ1999 gamma(ufric), f = -1e-4s^-1
+QSbrine = QSice - QSmixed
+QSice = 0
+AND
+QSbrine = -m'.rho_sw.Sb''')
+print("This script: QSbrine = ", QSbrine)
+print("Melt rate param: -QSmixed = ", -mp.QS_mixed)
+
 
 #####################################################################################
 
@@ -250,3 +304,15 @@ def test_ocean_heat_flux_sign():
         # if freezing then salt flux into ocean due to brine rejection
         assert mp.QS_mixed < 0.0
 
+
+
+#### does potential temperature conversion make a difference?
+
+mp = ThreeEqMeltRateParam(35, -0.0448, p, 1000, 0.001)
+print("Potential temperature = -0.0448degC. At 1000db and 35PSU In situ temperature = 0degC")
+print("Meltrate without conversion to insitu temp = ", mp.wb)
+
+mp_conv = ThreeEqMeltRateParam(35, 0.0, p, 1000, 0.001)
+print("Meltrate with conversion to insitu temp = ", mp_conv.wb)
+
+print("with conversion melt rate is {:.2f} times larger....".format(mp_conv.wb / mp.wb))
