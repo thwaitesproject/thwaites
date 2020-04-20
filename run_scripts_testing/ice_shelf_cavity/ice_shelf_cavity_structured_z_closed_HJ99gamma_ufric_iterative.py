@@ -116,7 +116,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 
 # Define a dump file
 #dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_checkpoint_3cores_67hours.h5"
-dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/dump.h5"
+dump_file = "/data/2d_mitgcm_comparison/14.04.20_3_eq_param_ufricHJ99_dt30.0_dtOutput30.0_T900.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative/dump_step_30.h5"
 
 DUMP = False
 if DUMP:
@@ -479,8 +479,8 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 # Set up folder
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative_pressure_fix/"
+         "_tres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
+         +"_dy50_dz1_closed_iterative/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -538,6 +538,73 @@ depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 
 ########
 
+# Extra outputs for matplotlib plotting
+
+def matplotlib_out(t):
+
+    v_array = v_.dat.data[:, 0]
+    w_array = v_.dat.data[:, 1]
+    temp_array = temp.dat.data
+    sal_array = sal.dat.data
+    rho_array = rho.dat.data
+        
+    # Gather all pieces to one array. 
+    v_array = mesh.comm.gather(v_array, root=0)
+    w_array = mesh.comm.gather(w_array, root=0)
+    temp_array = mesh.comm.gather(temp_array, root=0)
+    sal_array = mesh.comm.gather(sal_array, root=0)
+    rho_array = mesh.comm.gather(rho_array, root=0)
+
+    if mesh.comm.rank == 0:
+        # concatenate arrays
+        v_array_f = np.concatenate(v_array)
+        w_array_f = np.concatenate(w_array)
+        vel_mag_array_f = np.sqrt(v_array_f**2 + w_array_f**2)
+        temp_array_f = np.concatenate(temp_array)
+        sal_array_f = np.concatenate(sal_array)
+        rho_array_f = np.concatenate(rho_array)
+            
+        # Add concatenated arrays to data frame
+        matplotlib_df['v_array_{:.0f}hours'.format(t/3600)] = v_array_f
+        matplotlib_df['w_array_{:.0f}hours'.format(t/3600)] = w_array_f
+        matplotlib_df['vel_mag_array_{:.0f}hours'.format(t/3600)] = vel_mag_array_f
+        matplotlib_df['temp_array_{:.0f}hours'.format(t/3600)] = temp_array_f
+        matplotlib_df['sal_array_{:.0f}hours'.format(t/3600)] = sal_array_f
+        matplotlib_df['rho_array_{:.0f}hours'.format(t/3600)] = rho_array_f
+        
+        # write dataframe to output file
+        matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
+
+MATPLOTLIB_OUT = True
+
+if MATPLOTLIB_OUT:
+    
+    # Interpolate coordinates to arrays
+    y_array, z_array = interpolate(y, Function(U)).dat.data, interpolate(z, Function(U)).dat.data
+
+    # Gather pieces of array to process zero
+    y_array = mesh.comm.gather(y_array, root=0)
+    z_array = mesh.comm.gather(z_array, root=0) 
+
+    if mesh.comm.rank == 0:
+        # Concatanate arrays to have one complete array
+        y_array_f = np.concatenate(y_array)
+        z_array_f = np.concatenate(z_array)
+
+        # Create a data frame to store arrays for matplotlib plotting later
+        matplotlib_df = pd.DataFrame()
+
+        # Add concatenated arrays to data frame
+        matplotlib_df['y_array'] = y_array_f
+        matplotlib_df['z_array'] = z_array_f
+
+        # Write data frame to file
+        matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
+    
+    # Add initial conditions for v, w, temp, sal, and rho to data frame
+    matplotlib_out(0)
+
+########
 
 # Begin time stepping
 t = 0.0
@@ -553,10 +620,10 @@ while t < T - 0.5*dt:
         sal_timestepper.advance(t)
     step += 1
     t += dt
+
     with timed_stage('output'):
        if step % output_step == 0:
-           # dumb checkpoint for starting from spin up
-    
+           # dumb checkpoint for starting from last timestep reached
            with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
                # Checkpoint file open for reading and writing
                chk.store(v_, name="v_velocity")
@@ -577,21 +644,26 @@ while t < T - 0.5*dt:
     
            # Update density for plotting
            rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
-    
-           # Write out files
-           v_file.write(v_)
-           p_file.write(p_)
-           #u_file.write(u)
-           t_file.write(temp)
-           s_file.write(sal)
-           rho_file.write(rho)
-    
-           # Write melt rate functions
-           m_file.write(melt)
-           Q_mixed_file.write(Q_mixed)
-           full_pressure_file.write(full_pressure)
-           Qs_file.write(Q_s)
-           Q_ice_file.write(Q_ice)
+
+           if MATPLOTLIB_OUT:
+               # Write v, w, |u| temp, sal, rho to file for plotting later with matplotlib
+               matplotlib_out(t)
+           
+           else:
+               # Write out files
+               v_file.write(v_)
+               p_file.write(p_)
+               #u_file.write(u)
+               t_file.write(temp)
+               s_file.write(sal)
+               rho_file.write(rho)
+               
+               # Write melt rate functions
+               m_file.write(melt)
+               Q_mixed_file.write(Q_mixed)
+               full_pressure_file.write(full_pressure)
+               Qs_file.write(Q_s)
+               Q_ice_file.write(Q_ice)
     
            time_str = str(step)
            top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
@@ -605,3 +677,12 @@ while t < T - 0.5*dt:
            PETSc.Sys.Print("t=", t)
     
            PETSc.Sys.Print("integrated melt =", assemble(melt * ds(4)))
+
+    if step % (output_step * 24) == 0:
+        with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
+            # Checkpoint file open for reading and writing at regular interval
+            chk.store(v_, name="v_velocity")
+            chk.store(p_, name="perturbation_pressure")
+            #chk.store(u, name="u_velocity")
+            chk.store(temp, name="temperature")
+            chk.store(sal, name="salinity")
