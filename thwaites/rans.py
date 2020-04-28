@@ -642,7 +642,8 @@ class RANSModel(TurbulenceModel):
             cmu_dat, cmu_p_dat = self.stability_function.evaluate(self.fields.M2.dat.data, self.fields.N2.dat.data, self.tke.dat.data, self.psi.dat.data)
             self.C_mu.dat.data[:] = cmu_dat
             self.C_mu_p.dat.data[:] = cmu_p_dat
-            self.psi_flux.interpolate(self.psi_flux_expr)
+            if 'stress' in funcs:
+                self.psi_flux.interpolate(self.psi_flux_expr)
 
         #self.limiter.apply(self.tke)
         l_min = 1e-12

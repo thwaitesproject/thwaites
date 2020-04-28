@@ -13,13 +13,11 @@ import numpy as np
 from MITgcmutils import mds
 
 ##########
-firedrake_folder = "/data/2d_mitgcm_comparison/16.04.20_3_eq_param_ufricHJ99_dt600.0_dtOutput3600.0_T43200.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative/"
-#really this is dt = 600s
-mitgcm_folder = "/data/mitgcm_runs/ben_FRISP_wout_coriolis_T1.0days_original_Ks_check/run_dt30s/"
-# really this is constant gamma T and time averaging. Not the final comparison!!!
-firedrake_df = pd.read_csv(firedrake_folder+"matplotlib_arrays.csv")
+firedrake_folder = "/data/2d_mitgcm_comparison/20.04.20_3_eq_param_ufricHJ99_dt30.0_dtOutput3600.0_T4320000.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative/"
+mitgcm_folder = "/data/mitgcm_runs/ben_FRISP_wout_coriolis_T100.0days_original_Ks_check/run_dt30s_gamma_fric_snapshot_50years_1hour_output/"
+firedrake_df = pd.read_hdf(firedrake_folder+"matplotlib_arrays38days.h5", key="0")
 
-output_folder = "/data/mitgcm_comparison_videos/"
+output_folder = "/data/mitgcm_comparison_videos/38_days/"
 ##########
 
 # Get firedrake coordinates
@@ -71,7 +69,7 @@ if PLOT_MESH_FD:
 nz = 5
 dy = 50.0
 ip_factor = Constant(10.)
-dt_fd = 600.0
+dt_fd = 30.0
 restoring_time = 600.
 dt_mit = 30.0
 ##########
@@ -186,8 +184,8 @@ sal_levels = np.linspace(sal_fd_3hours.min(), sal_fd_3hours.max(), 25)
 rho_levels = np.linspace(rho_fd_3hours.min(), rho_fd_3hours.max(), 25)
 
 
-T_end_days = 0.5
-T_end_hours = int(0.5 * 24)
+T_end_days = 38
+T_end_hours = int(T_end_days * 24)
 
 
 
@@ -251,7 +249,7 @@ for t in range(1,T_end_hours+1):
     sal_fd = firedrake_df['sal_array_'+str(t)+'hours']
     rho_fd = firedrake_df['rho_array_'+str(t)+'hours']
 
-    if t % 6 ==0:
+    if t % 12 ==0:
         # Update colour bar levels
         v_levels = np.linspace(-np.abs(v_fd).max(), np.abs(v_fd).max(), 25)
         w_levels = np.linspace(-np.abs(w_fd).max(), np.abs(w_fd).max(), 25)

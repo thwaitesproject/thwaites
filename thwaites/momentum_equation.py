@@ -1,6 +1,6 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, Constant
-from firedrake import CellDiameter, as_vector, as_matrix, avg, jump, Identity, as_tensor
+from firedrake import CellDiameter, as_vector, as_matrix, avg, jump, Identity, as_tensor, sign
 from firedrake import Dx, zero
 from .utility import is_continuous, normal_is_continuous, tensor_jump
 from ufl import tensors, algebra
