@@ -15,9 +15,9 @@ from MITgcmutils import mds
 ##########
 firedrake_folder = "/data/2d_mitgcm_comparison/20.04.20_3_eq_param_ufricHJ99_dt30.0_dtOutput3600.0_T4320000.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative/"
 mitgcm_folder = "/data/mitgcm_runs/ben_FRISP_wout_coriolis_T100.0days_original_Ks_check/run_dt30s_gamma_fric_snapshot_50years_1hour_output/"
-firedrake_df = pd.read_hdf(firedrake_folder+"matplotlib_arrays38days.h5", key="0")
+firedrake_df = pd.read_hdf(firedrake_folder+"matplotlib_arrays.h5", key="0")
 
-output_folder = "/data/mitgcm_comparison_videos/38_days/"
+output_folder = "/data/mitgcm_comparison_videos/2d_50days_30.04.20_3_eq_param_ufricHJ99_dt30.0_dtOutput3600.0_T4320000.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative/"
 ##########
 
 # Get firedrake coordinates
@@ -184,7 +184,7 @@ sal_levels = np.linspace(sal_fd_3hours.min(), sal_fd_3hours.max(), 25)
 rho_levels = np.linspace(rho_fd_3hours.min(), rho_fd_3hours.max(), 25)
 
 
-T_end_days = 38
+T_end_days = 50
 T_end_hours = int(T_end_days * 24)
 
 
@@ -208,11 +208,12 @@ colors = ['#ADD8E6', '#87A96B', '#FF4F00']
 plt.rc('xtick', labelsize=14)
 plt.rc('ytick', labelsize=14)
 
-for t in range(1,T_end_hours+1):
+for t in range(960,961): #T_end_hours+1):
     print('Hour ' + str(t) + ' of ' + str(T_end_hours) + ' hours')
     
     # Get mitgcm results
     iter_mit = int(t * 3600 / dt_mit)
+    print(iter_mit)
     diag_U = mds.rdmds(mitgcm_folder + 'diag_U', itrs=iter_mit)
     U = diag_U[0, :, :, :]
     V = diag_U[1, :, :, :]
@@ -267,12 +268,35 @@ for t in range(1,T_end_hours+1):
     mag_vel_plot = [vel_mag_fd, vel_mag_mit, vel_mag_levels, "|u| / m/s", "mag_velocity_"]
     
     # Create comparison plots
-    MITgcm_Thwaites_comparison_plot(t, temperature_plot)
-    MITgcm_Thwaites_comparison_plot(t, salinity_plot)
-    MITgcm_Thwaites_comparison_plot(t, v_plot)
-    MITgcm_Thwaites_comparison_plot(t, w_plot)
+    #MITgcm_Thwaites_comparison_plot(t, temperature_plot)
+    #MITgcm_Thwaites_comparison_plot(t, salinity_plot)
+    #MITgcm_Thwaites_comparison_plot(t, v_plot)
+    #MITgcm_Thwaites_comparison_plot(t, w_plot)
 
-        
+            
+    year_in_seconds = 3600 * 24 * 365.25
+    top_boundary_firedrake = pd.read_csv(firedrake_folder+"top_boundary_data.csv")
+    n = 100
+    dx = 10000. / float(n)
+    x1 = np.array([i * dx for i in range(n)])
+
+    # Initialize plotting environment
+    fig = plt.figure(figsize=(16, 7))
+    ax_vy = plt.subplot()
+
+
+    #ax_vy.set_xlim((0.0, 8.0))
+    #ax_vy.set_ylim((0.0, 7.0))
+    ax_vy.set_xlabel(r'Distance from the grounding line (km)', fontsize=22)
+    ax_vy.set_ylabel(r'Melt rate (m a$^{-1}$)', fontsize=22)
+    ax_vy.plot(1e-3 * YC, MR * year_in_seconds, lw=1.5, label=r'MITgcm')
+
+
+    ax_vy.plot(1e-3 * x1, top_boundary_firedrake['Melt_t115200'] * year_in_seconds, label=r'Firedrake')
+
+    plt.legend()
+    plt.title('Melt rate along ice shelf boundary after 40 days')
+    plt.savefig(output_folder + "melt_rate_960_hours.png")
 
 '''
       year_in_seconds = 3600 * 24 * 365.25

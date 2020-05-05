@@ -225,7 +225,7 @@ absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
 
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
 kappa_h = Constant(args.Kh)
-kappa_v = Constant(1e-6)
+kappa_v = Constant(1e-4)
 #kappa_v = Constant(args.Kh*dz/dy)
 #grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
 #kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
@@ -325,8 +325,8 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
-          3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
+vp_bcs = {4: {'un': no_normal_flow, 'wall_law':0}, 2: {'un': no_normal_flow}, 
+        3: {'un': no_normal_flow, 'wall_law':0}, 1: {'un': no_normal_flow}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
 temp_bcs = {4: {'flux': -mp.T_flux_bc}}
