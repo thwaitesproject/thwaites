@@ -13,11 +13,11 @@ import numpy as np
 from MITgcmutils import mds
 
 ##########
-firedrake_folder = "/data/2.5d_mitgcm_comparison/06.05.20_3_eq_param_ufricHJ99_dt30.0_dtOutput3600.0_T43200.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative_pressure_fix_coriolis/"
-mitgcm_folder = "/data/mitgcm_runs/ben_FRISP_wout_coriolis_T100.0days_original_Ks_check/run_dt30s_gamma_fric_snapshot_50years_1hour_output/"
+firedrake_folder = "/data/2.5d_mitgcm_comparison/06.05.20_3_eq_param_ufricHJ99_dt30.0_dtOutput3600.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative_pressure_fix_coriolis/"
+mitgcm_folder = "/data/mitgcm_runs/ben_FRISP_wout_coriolis_T100.0days_original_Ks_check/run_dt30s_gamma_fric_snapshot_50years_1hour_output_2.5d/"
 firedrake_df = pd.read_hdf(firedrake_folder+"matplotlib_arrays.h5", key="0")
 
-output_folder = "/data/mitgcm_comparison_videos/2.5d_12hours_06.05.20_3_eq_param_ufricHJ99_dt30.0_dtOutput3600.0_T43200.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative_pressure_fix_coriolis/"
+output_folder = "/data/mitgcm_comparison_videos/2.5d_50days_13.05.20_3_eq_param_ufricHJ99_dt30.0_dtOutput3600.0_T43200.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative_pressure_fix_coriolis/"
 ##########
 
 # Get firedrake coordinates
@@ -210,7 +210,7 @@ colors = ['#ADD8E6', '#87A96B', '#FF4F00']
 plt.rc('xtick', labelsize=14)
 plt.rc('ytick', labelsize=14)
 
-for t in range(1,13): #T_end_hours+1):
+for t in range(960, 960+1): 
     print('Hour ' + str(t) + ' of ' + str(T_end_hours) + ' hours')
     
     # Get mitgcm results
@@ -280,7 +280,6 @@ for t in range(1,13): #T_end_hours+1):
     MITgcm_Thwaites_comparison_plot(t, v_plot)
     MITgcm_Thwaites_comparison_plot(t, w_plot)
 
-'''            
     year_in_seconds = 3600 * 24 * 365.25
     top_boundary_firedrake = pd.read_csv(firedrake_folder+"top_boundary_data.csv")
     n = 100
@@ -304,7 +303,6 @@ for t in range(1,13): #T_end_hours+1):
     plt.legend()
     plt.title('Melt rate along ice shelf boundary after 40 days')
     plt.savefig(output_folder + "melt_rate_960_hours.png")
-'''
 '''
       year_in_seconds = 3600 * 24 * 365.25
       top_boundary_firedrake = pd.read_csv("/data/2d_mitgcm_comparison/24.01.20_3EqParam_dt60.0_dtOutput172800.0_T8640000.0_ip50.0_tres600.0_Kh5.0_Kv2.0openocean_dy50.0_nz5/top_boundary_data.csv")
