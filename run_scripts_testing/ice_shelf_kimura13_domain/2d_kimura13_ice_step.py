@@ -233,12 +233,12 @@ absorp_sal = conditional(y > 90e3,
 
 
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
-kappa_h = Constant(1e2)
+kappa_h = Constant(100.0)
 open_ocean_kappa_v = Constant(args.Kv)
 #kappa_v = Constant(args.Kh*dz/dy)
 grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
 kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
-kappa_v = grounding_line_kappa_v + y*kappa_v_grad
+kappa_v = Constant(args.Kv)# grounding_line_kappa_v + y*kappa_v_grad
 
 #sponge_kappa_h = conditional(y > (1.0-sponge_fraction) * L,
 #                             1000. * kappa_h * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
@@ -462,7 +462,7 @@ sal_solver_parameters = mumps_solver_parameters
 ##########
 
 # define time steps
-dt = 200.0
+dt = 100.0
 T = args.T
 output_dt = args.output_dt
 output_step = output_dt/dt
@@ -495,7 +495,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 # Set up folder
 folder = "/data/2d_kimura13_icestep/"+str(args.date)+"_3_eq_param_ufricJ10_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_Kh"+str(kappa_h.values()[0])+"_Kv_lin_ramp"+str(open_ocean_kappa_v.values()[0])\
+         "_Kh"+str(kappa_h.values()[0])+"_Kv"+str(open_ocean_kappa_v.values()[0])\
          +"_2d_kimura13_closed_iterative/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
