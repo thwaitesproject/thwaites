@@ -118,7 +118,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 ##########
 
 # Define a dump file
-dump_file = "2d_50day_mitgcm_comparison_dump.h5"
+dump_file = "2d_50day_mitgcm_comparison_dump"
 
 DUMP = True
 if DUMP:
