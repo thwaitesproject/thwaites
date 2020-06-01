@@ -74,7 +74,11 @@ Plane Surface(1) = {11};
 Plane Surface(2) = {12};
 Plane Surface(3) = {13};
 
-Transfinite Surface {1,2,3};
+Transfinite Surface {1};
+Transfinite Surface {2};
+Transfinite Surface {3};
 
+
+Physical Surface(1) = {1,2,3};
 
 

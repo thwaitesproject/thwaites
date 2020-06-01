@@ -19,16 +19,16 @@ parser.add_argument("date", help="date format: dd.mm.yy")
                   #  type=float)
 #parser.add_argument("nz", help="no. of layers in vertical",
 #                    type=int)
-parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
+#parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
+#                    type=float)
+parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
                     type=float)
-#parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
-   #                 type=float)
 #parser.add_argument("restoring_time", help="restoring time in s",
                    # type=float)
 #parser.add_argument("ip_factor", help="dimensionless constant multiplying interior penalty alpha factor",
                   #  type=float)
-parser.add_argument("dt", help="time step in seconds",
-                    type=float)
+#parser.add_argument("dt", help="time step in seconds",
+#                    type=float)
 parser.add_argument("output_dt", help="output time step in seconds",
                     type=float)
 parser.add_argument("T", help="final simulation time in seconds",
@@ -39,35 +39,47 @@ args = parser.parse_args()
 
 ip_factor = Constant(50.)
 #dt = 1.0
-restoring_time = 86400.
 
 ##########
 
 #  Generate mesh
-L = 10E3
-H1 = 2.
-H2 = 102.
-dy = 50.0
+L = 100E3
+H1 = 100.
+H2 = 900.
+dy = 1e3
 ny = round(L/dy)
 #nz = 50
-dz = 1.0
+dz =  Constant(H1 / 9)
 
 # create mesh
-mesh = Mesh("./structured_ice_shelf_z_triangle_dz1m_boundarydz_0.5m.msh")
+mesh = Mesh("./2d_layered_ice_shelf_step_kimura13.msh")
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
+
+# Physical ids 
+# 1: seabed
+# 2: ice_base
+# 3: grounding_line
+# 4: open_ocean
+# 5: ocean_surface
+# 6: ice_front
+
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
-PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
+PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(3, domain=mesh)))
 
-PETSc.Sys.Print("Length of rhs", assemble(Constant(1.0)*ds(2, domain=mesh)))
+PETSc.Sys.Print("Length of rhs", assemble(Constant(1.0)*ds(4, domain=mesh)))
 
-PETSc.Sys.Print("Length of bottom", assemble(Constant(1.0)*ds(3, domain=mesh)))
+PETSc.Sys.Print("Length of bottom", assemble(Constant(1.0)*ds(1, domain=mesh)))
 
-PETSc.Sys.Print("Length of top", assemble(Constant(1.0)*ds(4, domain=mesh)))
+PETSc.Sys.Print("Length of ice base", assemble(Constant(1.0)*ds(2, domain=mesh)))
 
 
-water_depth = 600.0
+PETSc.Sys.Print("Length of ice front", assemble(Constant(1.0)*ds(6, domain=mesh)))
+
+PETSc.Sys.Print("Length of ocean surface", assemble(Constant(1.0)*ds(5, domain=mesh)))
+
+water_depth = 1100.0
 mesh.coordinates.dat.data[:, 1] -= water_depth
 
 
@@ -98,7 +110,7 @@ v_, p_ = m.split()  # function: y component of velocity, pressure
 v, p = split(m)  # expression: y component of velocity, pressure
 v_._name = "v_velocity"
 p_._name = "perturbation pressure"
-u = Function(U, name="x velocity")  # x component of velocity
+#u = Function(U, name="x velocity")  # x component of velocity
 
 rho = Function(K, name="density")
 temp = Function(K, name="temperature")
@@ -116,7 +128,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 
 # Define a dump file
 #dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_checkpoint_3cores_67hours.h5"
-dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/dump.h5"
+dump_file = "/data/2d_mitgcm_comparison/14.04.20_3_eq_param_ufricHJ99_dt30.0_dtOutput30.0_T900.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative/dump_step_30.h5"
 
 DUMP = False
 if DUMP:
@@ -124,7 +136,7 @@ if DUMP:
         # Checkpoint file open for reading and writing
         chk.load(v_, name="v_velocity")
         chk.load(p_, name="perturbation_pressure")
-        chk.load(u, name="u_velocity")
+        #chk.load(u, name="u_velocity")
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
 
@@ -145,16 +157,12 @@ else:
     v_init = zero(mesh.geometric_dimension())
     v_.assign(v_init)
 
-    u_init = Constant(0.0)
-    u.interpolate(u_init)
+    #u_init = Constant(0.0)
+    #u.interpolate(u_init)
 
-    # from holland et al 2008b. constant T below 200m depth. varying sal.
-    T_200m_depth = 1.0
-
-
-    #S_bottom = 34.8
-    #salinity_gradient = (S_bottom - S_200m_depth) / -H2
-    S_surface = 34.4 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
+    # case 1 from holland et al 2008b. constant T below 200m depth. varying sal.
+    T_200m_depth = 2.0
+    S_surface = 34.5 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
 
     T_restore = Constant(T_200m_depth)
     S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
@@ -162,7 +170,7 @@ else:
     temp_init = T_restore
     temp.interpolate(temp_init)
 
-    sal_init = Constant(34.4)
+    sal_init = Constant(34.5)
     #sal_init = S_restore
     sal.interpolate(sal_init)
 
@@ -173,7 +181,7 @@ else:
 # Set up equations
 mom_eq = MomentumEquation(M.sub(0), M.sub(0))
 cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
-u_eq = ScalarVelocity2halfDEquation(U, U)
+#u_eq = ScalarVelocity2halfDEquation(U, U)
 temp_eq = ScalarAdvectionDiffusionEquation(K, K)
 sal_eq = ScalarAdvectionDiffusionEquation(S, S)
 
@@ -182,49 +190,55 @@ sal_eq = ScalarAdvectionDiffusionEquation(S, S)
 # Terms for equation fields
 
 # momentum source: the buoyancy term Boussinesq approx. From mitgcm default
-T_ref = Constant(0.0)
+T_ref = Constant(1.0)
 S_ref = Constant(35)
-beta_temp = Constant(2.0E-4)
-beta_sal = Constant(7.4E-4)
+beta_temp = Constant(1.0E-4)
+beta_sal = Constant(7.6E-4)
 g = Constant(9.81)
 mom_source = as_vector((0., -g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) 
 
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
-f = Constant(-1.409E-4)
+#f = Constant(-1.409E-4)
 
 # Scalar source/sink terms at open boundary.
-absorption_factor = Constant(1.0/restoring_time)
-sponge_fraction = 0.06  # fraction of domain where sponge
+
+restoring_time_100km = 10 * 86400.
+restoring_time_90km = 30 * 86400.
+absorption_factor_100km = Constant(1.0/restoring_time_100km)
+absorption_factor_90km = Constant(1.0/restoring_time_90km)
+
+absorption_factor = absorption_factor_90km + (absorption_factor_100km-absorption_factor_90km)/10e3 * (y - 90e3)
+
 # Temperature source term
-source_temp = conditional(y > (1.0-sponge_fraction) * L,
+source_temp = conditional(y > 90e3,
                           absorption_factor * T_restore,
                           0.0)
 
 # Salinity source term
-source_sal = conditional(y > (1.0-sponge_fraction) * L,
+source_sal = conditional(y > 90e3,
                          absorption_factor * S_restore,
                          0.0)
 
 # Temperature absorption term
-absorp_temp = conditional(y > (1.0-sponge_fraction) * L,
+absorp_temp = conditional(y > 90e3,
                           absorption_factor,
                           0.0)
 
 # Salinity absorption term
-absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
+absorp_sal = conditional(y > 90e3,
                          absorption_factor,
                          0.0)
 
 
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
-kappa_h = Constant(args.Kh)
-kappa_v = Constant(args.Kh/10.)
+kappa_h = Constant(100.0)
+open_ocean_kappa_v = Constant(args.Kv)
 #kappa_v = Constant(args.Kh*dz/dy)
-#grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
-#kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
-#kappa_v = grounding_line_kappa_v + y*kappa_v_grad
+grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
+kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
+kappa_v = Constant(args.Kv)# grounding_line_kappa_v + y*kappa_v_grad
 
 #sponge_kappa_h = conditional(y > (1.0-sponge_fraction) * L,
 #                             1000. * kappa_h * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
@@ -247,9 +261,8 @@ mu = kappa
 ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha,
-            'coriolis_frequency': f, 'u_velocity': u}
-u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
+#u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
                'absorption coefficient': absorp_temp}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
@@ -258,7 +271,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_al
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v) + pow(u, 2), 0.5), HJ99Gamma=True, f=f)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5))
 
 ##########
 
@@ -276,8 +289,8 @@ full_pressure.interpolate(mp.P_full)
 ##########
 
 # Plotting top boundary.
-shelf_boundary_points = get_top_boundary(cavity_length=L, cavity_height=H2, water_depth=water_depth)
-top_boundary_mp = pd.DataFrame()
+#shelf_boundary_points = get_top_boundary(cavity_length=L, cavity_height=H2, water_depth=water_depth)
+#top_boundary_mp = pd.DataFrame()
 
 
 def top_boundary_to_csv(boundary_points, df, t_str):
@@ -310,7 +323,7 @@ Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
 Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
-ice_drag = 0.0097
+ice_drag = 0.0025 # kimura13. in isomip this is 0.0097
 
 
 # test stress open_boundary
@@ -319,14 +332,16 @@ ice_drag = 0.0097
 #sop_file = File(folder+"boundary_stress.pvd")
 #sop_file.write(sop)
 
+# Physical ids                                                                                                                                                                                                     # 1: seabed                                                                                                                                                                                                        # 2: ice_base                                                                                                                                                                                                      # 3: grounding_line                                                                                                                                                                                                # 4: open_ocean                                                                                                                                                                                                    # 5: ocean_surface                                                                                                                                                                                                 # 6: ice_front
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
-          3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
-u_bcs = {2: {'q': Constant(0.0)}, 3: {'drag': 0.0025}, 4: {'drag': ice_drag}}
+vp_bcs = {2: {'un': no_normal_flow, 'drag': ice_drag}, 3: {'un': no_normal_flow, 'drag': ice_drag}, 4: {'un': no_normal_flow}, 
+        1: {'un': no_normal_flow, 'drag': 0.0025}, 5: {'un': no_normal_flow, 'drag': ice_drag},
+        6: {'un': no_normal_flow, 'drag': ice_drag}}
+#u_bcs = {2: {'q': Constant(0.0)}}
 
-temp_bcs = {4: {'flux': -mp.T_flux_bc}}
+temp_bcs = {2: {'flux': -mp.T_flux_bc}, 6: {'flux': -mp.T_flux_bc}}
 
-sal_bcs = {4: {'flux': -mp.S_flux_bc}}
+sal_bcs = {2: {'flux': -mp.S_flux_bc}, 6: {'flux': -mp.S_flux_bc}}
 
 
 
@@ -391,63 +406,63 @@ sal_solver_parameters = mumps_solver_parameters
 ##########
 
 # Plotting depth profiles.
-z500m = cavity_thickness(5E2, 0., H1, L, H2)
-z1km = cavity_thickness(1E3, 0., H1, L, H2)
-z2km = cavity_thickness(2E3, 0., H1, L, H2)
-z4km = cavity_thickness(4E3, 0., H1, L, H2)
-z6km = cavity_thickness(6E3, 0., H1, L, H2)
+#z500m = cavity_thickness(5E2, 0., H1, L, H2)
+#z1km = cavity_thickness(1E3, 0., H1, L, H2)
+#z2km = cavity_thickness(2E3, 0., H1, L, H2)
+#z4km = cavity_thickness(4E3, 0., H1, L, H2)
+#z6km = cavity_thickness(6E3, 0., H1, L, H2)
 
 
-z_profile500m = np.linspace(z500m-water_depth-1., 1.-water_depth, 50)
-z_profile1km = np.linspace(z1km-water_depth-1., 1.-water_depth, 50)
-z_profile2km = np.linspace(z2km-water_depth-1., 1.-water_depth, 50)
-z_profile4km = np.linspace(z4km-water_depth-1., 1.-water_depth, 50)
-z_profile6km = np.linspace(z6km-water_depth-1., 1.-water_depth, 50)
+#z_profile500m = np.linspace(z500m-water_depth-1., 1.-water_depth, 50)
+#z_profile1km = np.linspace(z1km-water_depth-1., 1.-water_depth, 50)
+#z_profile2km = np.linspace(z2km-water_depth-1., 1.-water_depth, 50)
+#z_profile4km = np.linspace(z4km-water_depth-1., 1.-water_depth, 50)
+#z_profile6km = np.linspace(z6km-water_depth-1., 1.-water_depth, 50)
 
 
-depth_profile500m = []
-depth_profile1km = []
-depth_profile2km = []
-depth_profile4km = []
-depth_profile6km = []
+#depth_profile500m = []
+#depth_profile1km = []
+#depth_profile2km = []
+#depth_profile4km = []
+#depth_profile6km = []
 
-for d5e2, d1km, d2km, d4km, d6km in zip(z_profile500m, z_profile1km, z_profile2km, z_profile4km, z_profile6km):
-    depth_profile500m.append([5E2, d5e2])
-    depth_profile1km.append([1E3, d1km])
-    depth_profile2km.append([2E3, d2km])
-    depth_profile4km.append([4E3, d4km])
-    depth_profile6km.append([6E3, d6km])
-
-velocity_depth_profile500m = pd.DataFrame()
-velocity_depth_profile1km = pd.DataFrame()
-velocity_depth_profile2km = pd.DataFrame()
-velocity_depth_profile4km = pd.DataFrame()
-velocity_depth_profile6km = pd.DataFrame()
-
-velocity_depth_profile500m['Z_profile'] = z_profile500m
-velocity_depth_profile1km['Z_profile'] = z_profile1km
-velocity_depth_profile2km['Z_profile'] = z_profile2km
-velocity_depth_profile4km['Z_profile'] = z_profile4km
-velocity_depth_profile6km['Z_profile'] = z_profile6km
-
-
-def depth_profile_to_csv(profile, df, depth, t_str):
-    df['U_t_' + t_str] = u.at(profile)
-    vw = np.array(v_.at(profile))
-    vv = vw[:, 0]
-    ww = vw[:, 1]
-    df['V_t_' + t_str] = vv
-    df['W_t_' + t_str] = ww
-    if mesh.comm.rank == 0:
-        df.to_csv(folder+depth+"_profile.csv")
-
-
-
+#for d5e2, d1km, d2km, d4km, d6km in zip(z_profile500m, z_profile1km, z_profile2km, z_profile4km, z_profile6km):
+#   depth_profile500m.append([5E2, d5e2])
+#   depth_profile1km.append([1E3, d1km])
+#   depth_profile2km.append([2E3, d2km])
+#   depth_profile4km.append([4E3, d4km])
+#   depth_profile6km.append([6E3, d6km])
+#
+#velocity_depth_profile500m = pd.DataFrame()
+#velocity_depth_profile1km = pd.DataFrame()
+#velocity_depth_profile2km = pd.DataFrame()
+#velocity_depth_profile4km = pd.DataFrame()
+#velocity_depth_profile6km = pd.DataFrame()
+#
+#velocity_depth_profile500m['Z_profile'] = z_profile500m
+#velocity_depth_profile1km['Z_profile'] = z_profile1km
+#velocity_depth_profile2km['Z_profile'] = z_profile2km
+#velocity_depth_profile4km['Z_profile'] = z_profile4km
+#velocity_depth_profile6km['Z_profile'] = z_profile6km
+#
+#
+#def depth_profile_to_csv(profile, df, depth, t_str):
+#   #df['U_t_' + t_str] = u.at(profile)
+#   vw = np.array(v_.at(profile))
+#   vv = vw[:, 0]
+#   ww = vw[:, 1]
+#   df['V_t_' + t_str] = vv
+#   df['W_t_' + t_str] = ww
+#   if mesh.comm.rank == 0:
+#       df.to_csv(folder+depth+"_profile.csv")
+#
+#
+#
 
 ##########
 
 # define time steps
-dt = args.dt
+dt = 100.0
 T = args.T
 output_dt = args.output_dt
 output_step = output_dt/dt
@@ -471,17 +486,17 @@ if not DUMP:
     with timed_stage('initial_pressure'):
         vp_timestepper.initialize_pressure(solver_parameters=mumps_solver_parameters)
 
-u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
+#u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
 sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
 
 ##########
 
 # Set up folder
-folder = "/data/2.5d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
+folder = "/data/2d_kimura13_icestep/"+str(args.date)+"_3_eq_param_ufricJ10_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_iterative_pressure_fix_coriolis/"
+         "_Kh"+str(kappa_h.values()[0])+"_Kv"+str(open_ocean_kappa_v.values()[0])\
+         +"_2d_kimura13_closed_iterative/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -494,8 +509,8 @@ v_file.write(v_)
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
 
-u_file = File(folder+"u_velocity.pvd")
-u_file.write(u)
+#u_file = File(folder+"u_velocity.pvd")
+#u_file.write(u)
 
 t_file = File(folder+"temperature.pvd")
 t_file.write(temp)
@@ -528,29 +543,28 @@ full_pressure_file.write(full_pressure)
 
 # Extra outputs for plotting
 # Melt rate functions along ice-ocean boundary
-top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
+#top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
 
 # Depth profiles
-depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
+#depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
+#depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
+#depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
+#depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
+#depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 
 ########
 
 # Extra outputs for matplotlib plotting
 
 def matplotlib_out(t):
-    u_array = u.dat.data
+
     v_array = v_.dat.data[:, 0]
     w_array = v_.dat.data[:, 1]
     temp_array = temp.dat.data
     sal_array = sal.dat.data
     rho_array = rho.dat.data
         
-    # Gather all pieces ito one array. 
-    u_array = mesh.comm.gather(u_array, root=0)
+    # Gather all pieces to one array. 
     v_array = mesh.comm.gather(v_array, root=0)
     w_array = mesh.comm.gather(w_array, root=0)
     temp_array = mesh.comm.gather(temp_array, root=0)
@@ -559,7 +573,6 @@ def matplotlib_out(t):
 
     if mesh.comm.rank == 0:
         # concatenate arrays
-        u_array_f = np.concatenate(u_array)
         v_array_f = np.concatenate(v_array)
         w_array_f = np.concatenate(w_array)
         vel_mag_array_f = np.sqrt(v_array_f**2 + w_array_f**2)
@@ -568,7 +581,6 @@ def matplotlib_out(t):
         rho_array_f = np.concatenate(rho_array)
             
         # Add concatenated arrays to data frame
-        matplotlib_df['u_array_{:.0f}hours'.format(t/3600)] = u_array_f
         matplotlib_df['v_array_{:.0f}hours'.format(t/3600)] = v_array_f
         matplotlib_df['w_array_{:.0f}hours'.format(t/3600)] = w_array_f
         matplotlib_df['vel_mag_array_{:.0f}hours'.format(t/3600)] = vel_mag_array_f
@@ -579,7 +591,7 @@ def matplotlib_out(t):
         # write dataframe to output file
         matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
 
-MATPLOTLIB_OUT = True
+MATPLOTLIB_OUT = False
 
 if MATPLOTLIB_OUT:
     
@@ -617,22 +629,22 @@ step = 0
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
-        u_timestepper.advance(t)
+        #u_timestepper.advance(t)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
     step += 1
     t += dt
+
     with timed_stage('output'):
        if step % output_step == 0:
-           # dumb checkpoint for starting from spin up
-    
+           # dumb checkpoint for starting from last timestep reached
            with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
                # Checkpoint file open for reading and writing
                chk.store(v_, name="v_velocity")
                chk.store(p_, name="perturbation_pressure")
-               chk.store(u, name="u_velocity")
+               #chk.store(u, name="u_velocity")
                chk.store(temp, name="temperature")
                chk.store(sal, name="salinity")
     
@@ -648,16 +660,16 @@ while t < T - 0.5*dt:
     
            # Update density for plotting
            rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
-    
+
            if MATPLOTLIB_OUT:
-               # Write u,v, w, |u| temp, sal, rho to file for plotting later with matplotlib
+               # Write v, w, |u| temp, sal, rho to file for plotting later with matplotlib
                matplotlib_out(t)
            
            else:
                # Write out files
                v_file.write(v_)
                p_file.write(p_)
-               u_file.write(u)
+               #u_file.write(u)
                t_file.write(temp)
                s_file.write(sal)
                rho_file.write(rho)
@@ -670,23 +682,25 @@ while t < T - 0.5*dt:
                Q_ice_file.write(Q_ice)
     
            time_str = str(step)
-           top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
+#           top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
     
-           depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
-           depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
-           depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
-           depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
-           depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
+#           depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
+#           depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
+#           depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
+#           depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
+#           depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
     
            PETSc.Sys.Print("t=", t)
-    
-           PETSc.Sys.Print("integrated melt =", assemble(melt * ds(4)))
 
-    if step % (output_step * 24) == 0:
-        with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
-            # Checkpoint file open for reading and writing at regular interval
-            chk.store(v_, name="v_velocity")
-            chk.store(p_, name="perturbation_pressure")
-            chk.store(u, name="u_velocity")
-            chk.store(temp, name="temperature")
-            chk.store(sal, name="salinity")
+           PETSc.Sys.Print("integrated melt ice base =", assemble(melt * ds(2)))
+           PETSc.Sys.Print("integrated melt ice front =", assemble(melt * ds(6)))
+           PETSc.Sys.Print("integrated melt total =", assemble(melt * ds(2) + melt*ds(6)))
+
+#   if step % (output_step * 24) == 0:
+#       with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
+#           # Checkpoint file open for reading and writing at regular interval
+#           chk.store(v_, name="v_velocity")
+#           chk.store(p_, name="perturbation_pressure")
+#           #chk.store(u, name="u_velocity")
+#           chk.store(temp, name="temperature")
+#           chk.store(sal, name="salinity")
