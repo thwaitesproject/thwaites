@@ -7,20 +7,58 @@ from thwaites.utility import ice_thickness, cavity_thickness, get_top_boundary
 ##########
 
 folder = "./"  # output folder.
-L = 5*1e3
-H1 = 1
+L = 4.75
+H1 = 2
 H2 = 100
 dx = 50
 nx = round(L/dx)
 nz = 10
 dz = H1/nz
-mesh = Mesh("./test_unstructured_rectangle.msh")
+mesh = Mesh("./initial_mesh.msh")
+
+
+
+Q = FunctionSpace(mesh, "DG", 1)  # melt function space
+m = Function(Q)
+##########
+
+m.assign(Constant(0))
+
+##########
+
+# Output files for velocity, pressure, temperature and salinity
+initial_mesh_file = File(folder+"initial_mesh.pvd")
+initial_mesh_file.write(m)
+
+
+
+##########
+
+Lnew = 10000.
+lhs_stretching = 10.0
+rhs_stretching = Lnew/L
 x = mesh.coordinates.dat.data[:,0]
 y = mesh.coordinates.dat.data[:,1]
-mesh.coordinates.dat.data[:,1] = ((x/L)*(H2-H1) + H1)*y
+mesh.coordinates.dat.data[:,0] = ((rhs_stretching - lhs_stretching) * x / L + lhs_stretching) * x
 
 
-x, z = SpatialCoordinate(mesh)
+Q2 = FunctionSpace(mesh, "DG", 1)  # melt function space
+q2 = Function(Q)
+##########
+
+q2.assign(Constant(0))
+
+##########
+
+# Output files for velocity, pressure, temperature and salinity
+stretched_yx_file = File(folder+"stretched_x_mesh.pvd")
+stretched_yx_file.write(q2)
+
+
+
+x = mesh.coordinates.dat.data[:,0]
+y = mesh.coordinates.dat.data[:,1]
+mesh.coordinates.dat.data[:,1] = ((x/Lnew)*(H2-H1) + H1)*y
 
 
 ##########
@@ -28,14 +66,13 @@ x, z = SpatialCoordinate(mesh)
 # Set up function spaces
 
 Q = FunctionSpace(mesh, "DG", 1)  # melt function space
-q = Function(mesh,"DG",1)
+q = Function(Q)
 ##########
 
 q.assign(Constant(0))
 
-##########
+
 
 # Output files for velocity, pressure, temperature and salinity
-u_file = File(folder+"mesh.pvd")
-u_file.write(q)
-
+stretched_y_file = File(folder+"stretched_xy_mesh.pvd")
+stretched_y_file.write(q)
