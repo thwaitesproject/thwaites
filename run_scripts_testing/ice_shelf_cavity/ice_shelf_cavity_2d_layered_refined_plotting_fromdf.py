@@ -226,7 +226,7 @@ colors = ['#ADD8E6', '#87A96B', '#FF4F00']
 plt.rc('xtick', labelsize=14)
 plt.rc('ytick', labelsize=14)
 
-for t in range(1,T_end_hours+1):
+for t in range(960,961):
     print('Hour ' + str(t) + ' of ' + str(T_end_hours) + ' hours')
     
     # Get mitgcm results
@@ -302,18 +302,23 @@ for t in range(1,T_end_hours+1):
     mag_vel_plot = [vel_mag_fd, vel_mag_fd_layered, vel_mag_fd_layered_refined, vel_mag_levels, "|u| / m/s", "mag_velocity_"]
     
     # Create comparison plots
-    Three_comparison_plot(t, temperature_plot)
-    Three_comparison_plot(t, salinity_plot)
-    Three_comparison_plot(t, v_plot)
-    Three_comparison_plot(t, w_plot)
-'''
+#    Three_comparison_plot(t, temperature_plot)
+#    Three_comparison_plot(t, salinity_plot)
+#    Three_comparison_plot(t, v_plot)
+#    Three_comparison_plot(t, w_plot)
+
             
     year_in_seconds = 3600 * 24 * 365.25
     top_boundary_firedrake = pd.read_csv(firedrake_folder+"top_boundary_data.csv")
+    top_boundary_firedrake_layered = pd.read_csv(firedrake_folder_layered+"top_boundary_data.csv")
+    top_boundary_firedrake_layered_refined = pd.read_csv(firedrake_folder_layered_refined+"top_boundary_data.csv")
     n = 100
     dx = 10000. / float(n)
     x1 = np.array([i * dx for i in range(n)])
-
+    
+    n = 400
+    dx = 10000. / float(n)
+    x2 = np.array([i * dx for i in range(n)])
     # Initialize plotting environment
     fig = plt.figure(figsize=(16, 7))
     ax_vy = plt.subplot()
@@ -326,13 +331,14 @@ for t in range(1,T_end_hours+1):
     ax_vy.plot(1e-3 * YC, MR * year_in_seconds, lw=1.5, label=r'MITgcm')
 
 
-    ax_vy.plot(1e-3 * x1, top_boundary_firedrake['Melt_t115200'] * year_in_seconds, label=r'Firedrake')
+    ax_vy.plot(1e-3 * x1, top_boundary_firedrake['Melt_t115200'] * year_in_seconds, label=r'Firedrake constant dz = 1m')
+    ax_vy.plot(1e-3 * x2, top_boundary_firedrake_layered['Melt_t28800'] * year_in_seconds, label=r'Firedrake 10 layers')
+    ax_vy.plot(1e-3 * x2, top_boundary_firedrake_layered_refined['Melt_t28800'] * year_in_seconds, label=r'Firedrake 10 layers refined 0.2m')
 
     plt.legend()
     plt.title('Melt rate along ice shelf boundary after 40 days')
     plt.savefig(output_folder + "melt_rate_960_hours.png")
-'''
-'''
+    '''
       year_in_seconds = 3600 * 24 * 365.25
       top_boundary_firedrake = pd.read_csv("/data/2d_mitgcm_comparison/24.01.20_3EqParam_dt60.0_dtOutput172800.0_T8640000.0_ip50.0_tres600.0_Kh5.0_Kv2.0openocean_dy50.0_nz5/top_boundary_data.csv")
       profile_4km_firedrake = pd.read_csv(
@@ -358,32 +364,39 @@ for t in range(1,T_end_hours+1):
       plt.legend()
       plt.title('Melt rate along ice shelf boundary after 60 days')
       #plt.savefig(output_folder + "fig1_melt_after_30days_dt864.png")
+    '''
+    profile_4km_firedrake = pd.read_csv(firedrake_folder+"4km_profile.csv")
+    profile_4km_firedrake_layered = pd.read_csv(firedrake_folder_layered+"4km_profile.csv")
+    profile_4km_firedrake_layered_refined = pd.read_csv(firedrake_folder_layered_refined+"4km_profile.csv")
 
-      # Initialize plotting environment
-      fig = plt.figure(figsize=(16, 7))
-      ax_vy = plt.subplot()
-      # ax_vy.set_xlim((0.0, 8.0))
-      # ax_vy.set_ylim((0.0, 7.0))
-      ax_vy.set_xlabel(r'Meridional velocity / m/s ', fontsize=22)
-      ax_vy.set_ylabel(r'Depth / m', fontsize=22)
+    # Initialize plotting environment
+    fig = plt.figure(figsize=(16, 7))
+    ax_vy = plt.subplot()
+    # ax_vy.set_xlim((0.0, 8.0))
+    # ax_vy.set_ylim((0.0, 7.0))
+    ax_vy.set_xlabel(r'Meridional velocity / m/s ', fontsize=22)
+    ax_vy.set_ylabel(r'Normalised Depth', fontsize=22)
 
-      bathymetry = profile_4km_firedrake['Z_profile'][49]
-      ice_depth  = profile_4km_firedrake['Z_profile'][0]
-      print("bathy:", bathymetry)
-      print("ice bathy:", ice_depth)
+    bathymetry = profile_4km_firedrake['Z_profile'][49]
+    ice_depth  = profile_4km_firedrake['Z_profile'][0]
+    print("bathy:", bathymetry)
+    print("ice bathy:", ice_depth)
 
-      cav_height = ice_depth - bathymetry
-      hfrac_firedrake = (profile_4km_firedrake['Z_profile'] - bathymetry)/cav_height
+    cav_height = ice_depth - bathymetry
+    hfrac_firedrake = (profile_4km_firedrake['Z_profile'] - bathymetry)/cav_height
+    hfrac_firedrake_layered = (profile_4km_firedrake_layered['Z_profile'] - bathymetry)/cav_height
+    hfrac_firedrake_layered_refined = (profile_4km_firedrake_layered_refined['Z_profile'] - bathymetry)/cav_height
 
-      ax_vy.plot(profile_4km_firedrake['V_t_95040'], hfrac_firedrake, 'bo',label=r'Firedrake')
-      ax_vy.plot(V[mask, 120, 0], hfrac[mask], 'o-', label='MITgcm')
-      ax_vy.set_ylim(0,1)
-      plt.legend()
-      plt.title('Meridonal velocity 6km from gl after 60 days ')
-      plt.savefig('meridonal_velocity6km_fromGL18days.png')
+    ax_vy.plot(profile_4km_firedrake['V_t_115200'], hfrac_firedrake, 'bo',label=r'Firedrake constant dz = 1m')
+    ax_vy.plot(profile_4km_firedrake_layered['V_t_28800'], hfrac_firedrake_layered, 'o',label=r'Firedrake 10 layers')
+    ax_vy.plot(profile_4km_firedrake_layered_refined['V_t_28800'], hfrac_firedrake_layered_refined, 'o',label=r'Firedrake 10 layers refined dz=0.2m')
+    #ax_vy.plot(V[mask, 80, 0], hfrac[mask], 'o-', label='MITgcm constant dz = 1m')
+    ax_vy.set_ylim(0,1)
+    plt.legend()
+    plt.title('Meridional velocity 4km from gl after 40 days ')
+    plt.savefig(output_folder+'meridional_velocity4km_fromGL40days.png')
 
-     # plt.show()
+   # plt.show()
 
 
 
-'''
