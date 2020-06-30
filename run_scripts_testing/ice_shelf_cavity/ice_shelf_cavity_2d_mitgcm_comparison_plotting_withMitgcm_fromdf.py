@@ -275,8 +275,10 @@ for t in range(960,961): #T_end_hours+1):
 
             
     year_in_seconds = 3600 * 24 * 365.25
-    top_boundary_firedrake = pd.read_csv(firedrake_folder+"top_boundary_data.csv")
-    n = 100
+    # because of bodging melt rate sampling have re run so that from checkpoint at 40 days so that melt rate is 
+    # sampled with 400 points. Need to update this for whole melt rate run.
+    top_boundary_firedrake = pd.read_csv("/data/2d_mitgcm_comparison/22.06.20_3_eq_param_ufricHJ99_dt30.0_dtOutput3000.0_T30.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative_meltrate_bodge_correction_sampling_for_FRISP2020/"+"top_boundary_data.csv")
+    n = 400
     dx = 10000. / float(n)
     x1 = np.array([i * dx for i in range(n)])
 
@@ -292,11 +294,11 @@ for t in range(960,961): #T_end_hours+1):
     ax_vy.plot(1e-3 * YC, MR * year_in_seconds, lw=1.5, label=r'MITgcm')
 
 
-    ax_vy.plot(1e-3 * x1, top_boundary_firedrake['Melt_t115200'] * year_in_seconds, label=r'Firedrake')
+    ax_vy.plot(1e-3 * x1, top_boundary_firedrake['Melt_t0.0'] * year_in_seconds, label=r'Firedrake')
 
     plt.legend()
     plt.title('Melt rate along ice shelf boundary after 40 days')
-    plt.savefig(output_folder + "melt_rate_960_hours.png")
+    plt.savefig(output_folder + "melt_rate_960_hours_correct_firedrake_sampling.png")
 
 '''
       year_in_seconds = 3600 * 24 * 365.25
