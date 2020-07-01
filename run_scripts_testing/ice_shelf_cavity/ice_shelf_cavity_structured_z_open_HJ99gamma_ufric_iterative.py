@@ -199,22 +199,22 @@ absorption_factor = Constant(1.0/restoring_time)
 sponge_fraction = 0.06  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor * T_restore,
+                          absorption_factor * T_restore,
                           0.0)
 
 # Salinity source term
 source_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor * S_restore,
+                         absorption_factor * S_restore,
                          0.0)
 
 # Temperature absorption term
 absorp_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor,
+                          absorption_factor,
                           0.0)
 
 # Salinity absorption term
 absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor,
+                         absorption_factor,
                          0.0)
 
 
@@ -319,13 +319,13 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
+vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary}, 
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
-temp_bcs = {4: {'flux': -mp.T_flux_bc}}
+temp_bcs = {4: {'flux': -mp.T_flux_bc}, 2:{'q': T_restore}}
 
-sal_bcs = {4: {'flux': -mp.S_flux_bc}}
+sal_bcs = {4: {'flux': -mp.S_flux_bc}, 2:{'q': S_restore}}
 
 
 
@@ -458,8 +458,7 @@ output_step = output_dt/dt
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
                                                           predictor_solver_parameters=u_solver_parameters,
-                                                          picard_iterations=1,
-                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+                                                          picard_iterations=1)
 
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
@@ -479,8 +478,8 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 # Set up folder
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_linearTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dy50_dz1_closed_iterative/"
+         "_constanttres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
+         +"_dy50_dz1_open_iterative/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -575,7 +574,7 @@ def matplotlib_out(t):
         # write dataframe to output file
         matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
 
-MATPLOTLIB_OUT = True
+MATPLOTLIB_OUT = False
 
 if MATPLOTLIB_OUT:
     
