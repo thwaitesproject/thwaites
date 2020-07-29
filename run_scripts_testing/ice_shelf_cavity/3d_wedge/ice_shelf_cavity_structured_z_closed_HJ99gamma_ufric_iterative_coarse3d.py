@@ -2,7 +2,7 @@
 # beneath ice shelf. Wedge geometry. 5km
 # viscosity = temp diffusivity = sal diffusivity: varies linearly over the domain, vertical is 10x weaker.
 from thwaites import *
-from thwaites.utility import get_top_boundary, cavity_thickness
+from thwaites.utility import get_top_surface, cavity_thickness
 from firedrake.petsc import PETSc
 from firedrake import FacetNormal
 import pandas as pd
@@ -52,18 +52,22 @@ ny = round(L/dy)
 dz = 2.0
 
 # create mesh
-mesh = Mesh("./coarse3d.msh")
+mesh = Mesh("./3d_structured_wedge_dx500m_dz2m.msh")
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
-PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
+PETSc.Sys.Print("Area of South side (Gl wall) should be 2*5e3 = 1e4m^2: ", assemble(Constant(1.0)*ds(1, domain=mesh)))
 
-PETSc.Sys.Print("Length of rhs", assemble(Constant(1.0)*ds(2, domain=mesh)))
+PETSc.Sys.Print("Area of North side (open ocean) should be 102*5e3=5.1e5m^2: ", assemble(Constant(1.0)*ds(2, domain=mesh)))
 
-PETSc.Sys.Print("Length of bottom", assemble(Constant(1.0)*ds(3, domain=mesh)))
+PETSc.Sys.Print("Area of bottom: should be 5e3*1e4 =5e7m^2: ", assemble(Constant(1.0)*ds(3, domain=mesh)))
 
-PETSc.Sys.Print("Length of top", assemble(Constant(1.0)*ds(4, domain=mesh)))
+PETSc.Sys.Print("Area of top", assemble(Constant(1.0)*ds(4, domain=mesh)))
+
+PETSc.Sys.Print("Area of East side should be 0.5(a+b)*h=5.2e5", assemble(Constant(1.0)*ds(5, domain=mesh)))
+
+PETSc.Sys.Print("Area of West side should also be 5.2e5", assemble(Constant(1.0)*ds(6, domain=mesh)))
 
 
 water_depth = 600.0
@@ -229,7 +233,7 @@ kappa_v = Constant(2e-4)
 #                             1000. * kappa_v * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
 #                             kappa_v)
 
-kappa = as_tensor([[kappa_h, 0, 0], [0, kappa_h, 0], [0, kappa_v]])
+kappa = as_tensor([[kappa_h, 0, 0], [0, kappa_h, 0], [0, 0, kappa_v]])
 
 kappa_temp = kappa
 kappa_sal = kappa
@@ -314,8 +318,8 @@ ice_drag = 0.0097
 
 
 vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
-          3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
-#u_bcs = {2: {'q': Constant(0.0)}}
+        3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}, 
+        5: {'un': no_normal_flow}, 6: {'un': no_normal_flow}}
 
 temp_bcs = {4: {'flux': -mp.T_flux_bc}}
 
@@ -472,7 +476,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
+folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3d_3_eq_param_ufricHJ99_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dxy500_dz2_closed_iterative/"
@@ -487,9 +491,6 @@ v_file.write(v_)
 
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
-
-#u_file = File(folder+"u_velocity.pvd")
-#u_file.write(u)
 
 t_file = File(folder+"temperature.pvd")
 t_file.write(temp)
@@ -574,7 +575,7 @@ def matplotlib_out(t):
         # write dataframe to output file
         matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
 
-MATPLOTLIB_OUT = True
+MATPLOTLIB_OUT = False
 
 if MATPLOTLIB_OUT:
     
