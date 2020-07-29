@@ -199,22 +199,22 @@ absorption_factor = Constant(1.0/restoring_time)
 sponge_fraction = 0.06  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor * T_restore,
+                          absorption_factor * T_restore, #* ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0.0)
 
 # Salinity source term
 source_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor * S_restore,
+                         absorption_factor * S_restore, #* ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                          0.0)
 
 # Temperature absorption term
 absorp_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor,
+                          absorption_factor, # * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0.0)
 
 # Salinity absorption term
 absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor,
+                         absorption_factor, # * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                          0.0)
 
 
@@ -479,7 +479,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 # Set up folder
 folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_linearTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
+         "_constantTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dy500_dz2_closed_iterative/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
