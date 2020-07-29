@@ -2,7 +2,7 @@
 A module with utitity functions for Thwaites
 """
 from firedrake import outer
-
+import numpy as np
 
 def is_continuous(ufl):
     elem = ufl.ufl_element()
@@ -63,3 +63,17 @@ def get_top_boundary(cavity_length=5000., cavity_height=100., water_depth=1000.,
         shelf_boundary_points.append([x_i, y_i])
 
     return shelf_boundary_points
+
+def get_top_surface(cavity_xlength=5000.,cavity_ylength=5000., cavity_height=100., water_depth=1000., dx=500.0,dy=500.):
+    nx = round(cavity_xlength / (0.5*dx)) + 1
+    ny = round(cavity_ylength / (0.5*dy)) + 1
+    shelf_boundary_points = []
+    for i in range(nx):
+        x_i = i * dx * 0.5
+        for j in range(ny):
+            y_i = j * dy * 0.5
+            z_i = cavity_thickness(y_i, 0.0, 2.0, cavity_ylength, cavity_height) - water_depth - 0.01
+            shelf_boundary_points.append([x_i, y_i,z_i])
+
+    return shelf_boundary_points
+
