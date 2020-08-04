@@ -434,10 +434,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "output/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
+folder = "/data2/wis15/phd_output/adjoint_timing/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/"
+         +"_structured_dy500_dz2_no_limiter_closed_timing_adjoint/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -595,7 +595,8 @@ J.adj_value = 1.0
 # evaluate all adjoint blocks to ensure we get complete adjoint solution
 # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
 #    meshtype derivative (line 204) is broken, so just return None instead
-tape.evaluate_adj()
+with timed_stage('adjoint'):
+    tape.evaluate_adj()
 #grad = rf.derivative()
 #File(folder+'grad.pvd').write(grad)
 
