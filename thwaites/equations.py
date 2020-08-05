@@ -8,21 +8,24 @@ class BaseEquation(ABC):
     """This should be a list of BaseTerm sub-classes that form the terms of the equation."""
     terms = []
 
-    def __init__(self, test_space, trial_space):
+    def __init__(self, test_space, trial_space, quad_degree=None):
         """
         :arg test_space: the test functionspace
         :arg trial_space: The trial functionspace
         test and trial space are only used to determine the the discretisation that's used (ufl_element)
         not what test and trial functions are actually used (these are provided seperately in residual())
+        :arg quad_degree: quadrature degree, default is 2*p+1 where p is the polynomial degree of trial_space
         """
         self.test_space = test_space
         self.trial_space = trial_space
         self.mesh = trial_space.mesh()
 
-        # use default quadrature for now
-        self.dx = firedrake.dx(domain=self.mesh)
-        self.ds = firedrake.ds(domain=self.mesh)
-        self.dS = firedrake.dS(domain=self.mesh)
+        if quad_degree is None:
+            p = trial_space.ufl_element().degree()
+            quad_degree = 2*p + 1
+        self.dx = firedrake.dx(domain=self.mesh, degree=quad_degree)
+        self.ds = firedrake.ds(domain=self.mesh, degree=quad_degree)
+        self.dS = firedrake.dS(domain=self.mesh, degree=quad_degree)
 
         # self._terms stores the actual instances of the BaseTerm-classes in self.terms
         self._terms = []
@@ -30,7 +33,7 @@ class BaseEquation(ABC):
             self._terms.append(TermClass(test_space, trial_space, self.dx, self.ds, self.dS))
 
     def mass_term(self, test, trial):
-        """Return the UFL for the mass term \int test * trial * dx typically used in the time term."""
+        r"""Return the UFL for the mass term \int test * trial * dx typically used in the time term."""
         return firedrake.inner(test, trial) * self.dx
 
     def residual(self, test, trial, trial_lagged=None, fields=None, bcs=None):
