@@ -627,8 +627,6 @@ step = 0
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
-        v_file.write(v_)
-        p_file.write(p_)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
