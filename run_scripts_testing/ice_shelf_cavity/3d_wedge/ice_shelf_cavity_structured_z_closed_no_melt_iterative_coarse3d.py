@@ -52,8 +52,8 @@ ny = round(L/dy)
 dz = 2.0
 
 # create mesh
-mesh = Mesh("./3d_structured_wedge_dx500m_dz2m.msh")
-
+#mesh = Mesh("./3d_structured_wedge_dx500m_dz2m.msh")
+mesh = BoxMesh(10,10,20,5000,5000,40)
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
@@ -317,13 +317,13 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
-        3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}, 
-        5: {'un': no_normal_flow}, 6: {'un': no_normal_flow}}
+vp_bcs = {6: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
+        5: {'un': no_normal_flow}, 1: {'un': no_normal_flow}, 
+        3: {'un': no_normal_flow}, 4: {'un': no_normal_flow}}
 
-temp_bcs = {4: {'flux': -mp.T_flux_bc}}
+temp_bcs = {6: {'flux': 0.0}}
 
-sal_bcs = {4: {'flux': -mp.S_flux_bc}}
+sal_bcs = {6: {'flux': 0.0}}
 
 
 
@@ -476,10 +476,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3d_3_eq_param_ufricHJ99_dt"+str(dt)+\
+folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3d_no_melt_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dxy500_dz2_closed_iterative/"
+         +"_dxy500_dz2_closed_iterative_box_no_drag/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -523,14 +523,14 @@ full_pressure_file.write(full_pressure)
 
 # Extra outputs for plotting
 # Melt rate functions along ice-ocean boundary
-top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
+#top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
 
 # Depth profiles
-depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
+#depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
+#depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
+#depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
+#depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
+#depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 
 ########
 
@@ -620,12 +620,12 @@ while t < T - 0.5*dt:
         vp_timestepper.advance(t)
         v_file.write(v_)
         p_file.write(p_)
-    with timed_stage('temperature'):
-        temp_timestepper.advance(t)
-        t_file.write(temp)
-    with timed_stage('salinity'):
-        sal_timestepper.advance(t)
-        s_file.write(sal)
+    #with timed_stage('temperature'):
+    #    temp_timestepper.advance(t)
+    #    t_file.write(temp)
+    #with timed_stage('salinity'):
+    #    sal_timestepper.advance(t)
+    #    s_file.write(sal)
     step += 1
     t += dt
 
@@ -672,13 +672,13 @@ while t < T - 0.5*dt:
                Q_ice_file.write(Q_ice)
     
            time_str = str(step)
-           top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
+           #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
     
-           depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
-           depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
-           depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
-           depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
-           depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
+           #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
+           #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
+           #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
+           #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
+           #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
     
            PETSc.Sys.Print("t=", t)
     

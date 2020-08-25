@@ -53,7 +53,7 @@ dz = 2.0
 
 # create mesh
 mesh = Mesh("./3d_structured_wedge_dx500m_dz2m.msh")
-
+#mesh = BoxMesh(10,10,20,5000,5000,40)
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
@@ -118,7 +118,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 
 # Define a dump file
 #dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_checkpoint_3cores_67hours.h5"
-dump_file = "/data/2d_mitgcm_comparison/14.04.20_3_eq_param_ufricHJ99_dt30.0_dtOutput30.0_T900.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative/dump_step_30.h5"
+dump_file = "/data/3d_mitgcm_comparison/19.08.20_3d_HJ99_gammafric_dt300.0_dtOutput43200.0_T1728000.0_ip50.0_constantTres86400.0_Kh0.01_Kv0.0002_dxy500_dz2_closed_iterative_direct_initial_solve_coriolis/dump.h5"
 
 DUMP = False
 if DUMP:
@@ -191,7 +191,7 @@ mom_source = as_vector((0.,0., -g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
-#f = Constant(-1.409E-4)
+f = Constant(-1.409E-4)
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
@@ -246,7 +246,7 @@ mu = kappa
 ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
                'absorption coefficient': absorp_temp}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
@@ -326,7 +326,6 @@ temp_bcs = {4: {'flux': -mp.T_flux_bc}}
 sal_bcs = {4: {'flux': -mp.S_flux_bc}}
 
 
-
 # STRONGLY Enforced BCs
 # open ocean (RHS): no tangential flow because viscosity of outside ocean resists vertical flow.
 strong_bcs = []#DirichletBC(M.sub(0).sub(1), 0, 2)]
@@ -380,10 +379,20 @@ pressure_projection_solver_parameters = {
             },
         }
 
+gmres_solver_parameters = {
+        'snes_monitor': None,
+        'snes_type': 'ksponly',
+        'ksp_type': 'gmres',
+        'pc_type': 'sor',
+        'ksp_monitor': None, # or `ksp_converged_reason`: None if this is too noisy
+        'ksp_rtol': 1e-5,
+        'ksp_max_it': 300,
+        }
+
 vp_solver_parameters = pressure_projection_solver_parameters
-u_solver_parameters = mumps_solver_parameters
-temp_solver_parameters = mumps_solver_parameters
-sal_solver_parameters = mumps_solver_parameters
+u_solver_parameters = gmres_solver_parameters
+temp_solver_parameters = gmres_solver_parameters
+sal_solver_parameters = gmres_solver_parameters
 
 ##########
 
@@ -467,7 +476,7 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
 if not DUMP:
     # should not be done when picking up
     with timed_stage('initial_pressure'):
-        vp_timestepper.initialize_pressure(solver_parameters=pressure_projection_solver_parameters)
+        vp_timestepper.initialize_pressure(solver_parameters=mumps_solver_parameters)
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
@@ -476,10 +485,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3d_3_eq_param_ufricHJ99_dt"+str(dt)+\
+folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dxy500_dz2_closed_iterative/"
+         +"_dxy500_dz2_closed_iterative_direct_initial_solve_coriolis/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -523,14 +532,14 @@ full_pressure_file.write(full_pressure)
 
 # Extra outputs for plotting
 # Melt rate functions along ice-ocean boundary
-top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
+#top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
 
 # Depth profiles
-depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
+#depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
+#depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
+#depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
+#depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
+#depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 
 ########
 
@@ -622,10 +631,8 @@ while t < T - 0.5*dt:
         p_file.write(p_)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
-        t_file.write(temp)
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
-        s_file.write(sal)
     step += 1
     t += dt
 
@@ -672,13 +679,13 @@ while t < T - 0.5*dt:
                Q_ice_file.write(Q_ice)
     
            time_str = str(step)
-           top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
+           #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
     
-           depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
-           depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
-           depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
-           depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
-           depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
+           #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
+           #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
+           #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
+           #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
+           #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
     
            PETSc.Sys.Print("t=", t)
     

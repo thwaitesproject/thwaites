@@ -43,7 +43,7 @@ restoring_time = 86400.
 ##########
 
 #  Generate mesh
-L = 10E3
+L = 5E3
 H1 = 2.
 H2 = 102.
 dy = 500.0
@@ -52,8 +52,8 @@ ny = round(L/dy)
 dz = 2.0
 
 # create mesh
-mesh = Mesh("./3d_structured_wedge_dx500m_dz2m.msh")
-
+#mesh = Mesh("./3d_structured_wedge_dx500m_dz2m.msh")
+mesh = BoxMesh(10,10,20,5000,5000,40)
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
@@ -153,7 +153,7 @@ else:
 
     #S_bottom = 34.8
     #salinity_gradient = (S_bottom - S_200m_depth) / -H2
-    S_surface = 34.4 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
+    S_surface = 34.5 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
 
     T_restore = Constant(T_200m_depth)
     S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
@@ -195,25 +195,25 @@ rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
-sponge_fraction = 0.06  # fraction of domain where sponge
+sponge_fraction = 0.1  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(y > (1.0-sponge_fraction) * L,
-                           absorption_factor * T_restore,# *((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                           absorption_factor * T_restore * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0.0)
 
 # Salinity source term
 source_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor * S_restore, # *((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)), 
+                         absorption_factor * S_restore * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)), 
                          0.0)
 
 # Temperature absorption term
 absorp_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          absorption_factor, #*((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                          absorption_factor * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0.0)
 
 # Salinity absorption term
 absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor, #* ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                         absorption_factor * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                          0.0)
 
 
@@ -233,11 +233,11 @@ kappa_v = Constant(2e-4)
 #                             1000. * kappa_v * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
 #                             kappa_v)
 
-kappa = as_tensor([[kappa_h, 0, 0], [0, kappa_h, 0], [0, 0, kappa_v]])
+#kappa = as_tensor([[kappa_h, 0, 0], [0, kappa_h, 0], [0, 0, kappa_v]])
 
-kappa_temp = kappa
-kappa_sal = kappa
-mu = kappa
+kappa_temp = kappa_h
+kappa_sal = kappa_h
+mu = kappa_h
 
 
 # Interior penalty term
@@ -317,13 +317,13 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
-        3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}, 
-        5: {'un': no_normal_flow}, 6: {'un': no_normal_flow}}
+vp_bcs = {6: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
+        5: {'un': no_normal_flow}, 1: {'un': no_normal_flow}, 
+        3: {'un': no_normal_flow}, 4: {'un': no_normal_flow}}
 
-temp_bcs = {4: {'flux': -mp.T_flux_bc}}
+temp_bcs = {6: {'flux': 0.0}}
 
-sal_bcs = {4: {'flux': -mp.S_flux_bc}}
+sal_bcs = {6: {'flux': 0.0}}
 
 
 
@@ -380,7 +380,7 @@ pressure_projection_solver_parameters = {
             },
         }
 
-vp_solver_parameters = pressure_projection_solver_parameters
+vp_solver_parameters = mumps_solver_parameters #pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
 temp_solver_parameters = mumps_solver_parameters
 sal_solver_parameters = mumps_solver_parameters
@@ -453,21 +453,17 @@ output_step = output_dt/dt
 ##########
 
 # Set up time stepping routines
-
-vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                          solver_parameters=vp_solver_parameters,
-                                                          predictor_solver_parameters=u_solver_parameters,
-                                                          picard_iterations=1,
-                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+vp_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
+                                                          solver_parameters=vp_solver_parameters, strong_bcs=strong_bcs)
 
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
 # are meant to decouple from pressure projection, but won't if pressure is not initialised
 # do this here, so we can see the initial pressure in pressure_0.pvtu
-if not DUMP:
+#if not DUMP:
     # should not be done when picking up
-    with timed_stage('initial_pressure'):
-        vp_timestepper.initialize_pressure(solver_parameters=pressure_projection_solver_parameters)
+#    with timed_stage('initial_pressure'):
+#        vp_timestepper.initialize_pressure(solver_parameters=pressure_projection_solver_parameters)
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
@@ -476,10 +472,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3d_3_eq_param_ufricHJ99_dt"+str(dt)+\
+folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3d_no_melt_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_constantTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dxy500_dz2_closed_iterative/"
+         "_linearTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
+         +"_dxy500_dz2_closed_direct_box_no_drag_forcingdelPSU0.1/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -523,14 +519,14 @@ full_pressure_file.write(full_pressure)
 
 # Extra outputs for plotting
 # Melt rate functions along ice-ocean boundary
-top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
+#top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
 
 # Depth profiles
-depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
+#depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
+#depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
+#depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
+#depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
+#depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 
 ########
 
@@ -618,14 +614,10 @@ step = 0
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
-        v_file.write(v_)
-        p_file.write(p_)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
-        t_file.write(temp)
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
-        s_file.write(sal)
     step += 1
     t += dt
 
@@ -672,13 +664,13 @@ while t < T - 0.5*dt:
                Q_ice_file.write(Q_ice)
     
            time_str = str(step)
-           top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
+           #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
     
-           depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
-           depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
-           depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
-           depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
-           depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
+           #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
+           #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
+           #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
+           #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
+           #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
     
            PETSc.Sys.Print("t=", t)
     
