@@ -107,6 +107,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
                  predictor_solver_parameters={}, picard_iterations=1, pressure_nullspace=None):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         self.theta = firedrake.Constant(theta)
+        self.theta_p = 1 # should not be used for now - maybe revisit with free surface terms
         self.predictor_solver_parameters = predictor_solver_parameters
         self.picard_iterations = picard_iterations
         self.pressure_nullspace = pressure_nullspace
@@ -129,10 +130,10 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         u_old, p_old = self.solution_old.split()
         u_star_theta = (1-self.theta)*u_old + self.theta*self.u_star
         u_theta = (1-self.theta)*u_old + self.theta*u
-        p_theta = (1-self.theta)*p_old + self.theta*p
+        p_theta = (1-self.theta_p)*p_old + self.theta_p*p
         u_lag, p_lag = self.solution_lag.split()
         u_lag_theta = (1-self.theta)*u_old + self.theta*u_lag
-        p_lag_theta = (1-self.theta)*p_old + self.theta*p_lag
+        p_lag_theta = (1-self.theta_p)*p_old + self.theta_p*p_lag
 
         # setup predictor solve, this solves for u_start only using a fixed p_lag_theta for pressure
         self.fields_star = self.fields.copy()
@@ -152,7 +153,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         pg_term = [term for term in self.equations[0]._terms if isinstance(term, PressureGradientTerm)][0]
         pg_fields = self.fields.copy()
-        # note that p_theta-p_lag_theta = theta*(p1-p_lag)
+        # note that p_theta-p_lag_theta = theta_p*(p1-p_lag)
         pg_fields['pressure'] = self.theta * (p - p_lag)
         self.F -= self.dt_const*pg_term.residual(self.u_test, u_theta, u_lag_theta, pg_fields, bcs=self.bcs)
 
@@ -171,22 +172,23 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         self._initialized = True
 
     def initialize_pressure(self, solver_parameters):
-        """Perform pseude timestep to establish good initial pressure."""
-        self.solution_old.assign(self.solution)
-        u, p = firedrake.split(self.solution)
+        """Perform pseudo timestep to establish good initial pressure."""
+        if not self._initialized:
+            self.initialize(self.solution)
+        u, p = self.solution.split()
         u_old, p_old = self.solution_old.split()
-        fields_init = self.fields.copy()
-        fields_init['pressure'] = p
-        fields_init['velocity'] = u
-
-        F_init = self.equations[0].mass_term(self.u_test, u)
-        F_init -= self.dt_const*self.equations[0].residual(self.u_test, u, u_old, fields_init, bcs=self.bcs)
-        F_init -= self.dt_const*self.equations[1].residual(self.p_test, p, p_old, fields_init, bcs=self.bcs)
-        firedrake.solve(F_init==0, self.solution, solver_parameters=solver_parameters,
-                                                           options_prefix='initial_'+self.name)
-        u_, p_ = self.solution.split()
+        # solve predictor step, but now fully explicit
+        Fstar = self.equations[0].mass_term(self.u_star_test, self.u_star-u_old)
+        Fstar -= self.dt_const*self.equations[0].residual(self.u_star_test, u_old, u_old, self.fields_star, bcs=self.bcs)
+        # as an explicit solve this is now a trivial mass matrix solve, but let's just borrow the solver parameters of the normal predictor solve
+        firedrake.solve(Fstar==0, self.u_star, solver_parameters=self.predictor_solver_parameters,
+                options_prefix='predictor_' + self.name)
+        # now do the usual pressure projection step
+        # note that the combination of these two is equivalent with solving the fully coupled
+        # system but with all momentum terms handled explicitly on the rhs
+        self.solver.solve()
         # reset velocity to its initial value:
-        u_.assign(u_old)
+        u.assign(u_old)
 
     def advance(self, t, update_forcings=None):
         if not self._initialized:
