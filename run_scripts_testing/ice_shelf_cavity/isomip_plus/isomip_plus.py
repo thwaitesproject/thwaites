@@ -290,7 +290,7 @@ def top_boundary_to_csv(boundary_points, df, t_str):
     df['P_t_' + t_str] = full_pressure.at(boundary_points)
     df['Sal_t_' + t_str] = sal.at(boundary_points)
     df['Temp_t_' + t_str] = temp.at(boundary_points)
-    df["integrated_melt_t_ " + t_str] = assemble(melt * ds(4))
+    df["integrated_melt_t_ " + t_str] = assemble(melt * ds(106))
 
     if mesh.comm.rank == 0:
         top_boundary_mp.to_csv(folder+"top_boundary_data.csv")
@@ -702,7 +702,7 @@ while t < T - 0.5*dt:
     
            PETSc.Sys.Print("t=", t)
     
-           PETSc.Sys.Print("integrated melt =", assemble(melt * ds(4)))
+           PETSc.Sys.Print("integrated melt =", assemble(melt * ds(106)))
 
     if step % (output_step * 24) == 0:
         with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
