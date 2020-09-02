@@ -476,7 +476,7 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
 if not DUMP:
     # should not be done when picking up
     with timed_stage('initial_pressure'):
-        vp_timestepper.initialize_pressure(solver_parameters=mumps_solver_parameters)
+        vp_timestepper.initialize_pressure(solver_parameters=gmres_solver_parameters)
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
@@ -488,7 +488,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/3d_mitgcm_comparison/"+str(args.date)+"_3d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dxy500_dz2_closed_iterative_direct_initial_solve_coriolis/"
+         +"_dxy500_dz2_closed_iterative_initial_solve_coriolis/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
