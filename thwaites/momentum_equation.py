@@ -1,7 +1,7 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor, sign
 from firedrake import CellDiameter, avg, Identity, zero
-from .utility import is_continuous, normal_is_continuous, tensor_jump
+from .utility import is_continuous, normal_is_continuous, tensor_jump, cell_size
 from ufl import tensors, algebra
 #import numpy as np
 """
@@ -101,7 +101,7 @@ class ViscosityTerm(BaseTerm):
                 diff_tensor = mu * Identity(self.dim)
         phi = test
         n = self.n
-        cellsize = CellDiameter(self.mesh)
+        cellsize = cell_size(self.mesh)
         u = trial
         u_lagged = trial_lagged
 
@@ -124,6 +124,8 @@ class ViscosityTerm(BaseTerm):
         # sigma = 6.93 = 3.5*p*(p+1)
 
         degree = self.trial_space.ufl_element().degree()
+        if not isinstance(degree, int):
+            degree = max(degree[0], degree[1])
         alpha = fields.get('interior_penalty', 5.0)
         sigma = alpha*degree*(degree + 1)/cellsize
         if degree == 0:

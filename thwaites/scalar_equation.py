@@ -1,7 +1,7 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, div, grad, CellDiameter, as_tensor, avg, jump, Constant, sign
 from firedrake import min_value, max_value, split, FacetNormal, Identity
-from .utility import is_continuous, normal_is_continuous
+from .utility import is_continuous, normal_is_continuous, cell_size
 from ufl import tensors, algebra
 """
 This module contains the scalar terms and equations (e.g. for temperature and salinity transport)
@@ -96,7 +96,7 @@ class ScalarDiffusionTerm(BaseTerm):
 
         phi = test
         n = self.n
-        cellsize = CellDiameter(self.mesh)
+        cellsize = cell_size(self.mesh)
         q = trial
 
         grad_test = grad(phi)
@@ -115,6 +115,8 @@ class ScalarDiffusionTerm(BaseTerm):
         # sigma = 6.93 = 3.5*p*(p+1)
 
         degree = self.trial_space.ufl_element().degree()
+        if not isinstance(degree, int):
+            degree = max(degree[0], degree[1])
         alpha = fields.get('interior_penalty', 5.0)
         sigma = alpha*degree*(degree + 1)/cellsize
         if degree == 0:

@@ -1,31 +1,67 @@
 """
 A module with utitity functions for Thwaites
 """
-from firedrake import outer
+from firedrake import outer, ds_v, ds_t, ds_b, CellDiameter, CellVolume, sqrt
 import numpy as np
+import ufl
+
+class CombinedSurfaceMeasure(ufl.Measure):
+    def __init__(self, domain, degree):
+        self.ds_v = ds_v(domain=domain, degree=degree)
+        self.ds_t = ds_t(domain=domain, degree=degree)
+        self.ds_b = ds_b(domain=domain, degree=degree)
+
+    def __call__(self, subdomain_id, **kwargs):
+        if subdomain_id == 'top':
+            return self.ds_t(**kwargs)
+        elif subdomain_id == 'bottom':
+            return self.ds_b(**kwargs)
+        else:
+            return self.ds_v(subdomain_id, **kwargs)
+
+    def __rmul__(self, other):
+        return other*self.ds_v + other*self.ds_t + other*self.ds_b
+
+def _get_element(ufl_or_element):
+    if isinstance(ufl_or_element, ufl.FiniteElementBase):
+        return ufl_or_element
+    else:
+        return ufl_or_element.ufl_element()
 
 def is_continuous(ufl):
-    elem = ufl.ufl_element()
+    elem = _get_element(ufl)
 
     family = elem.family()
     if family == 'Lagrange':
         return True
     elif family == 'Discontinuous Lagrange' or family == 'DQ':
         return False
+    elif family == 'TensorProductElement':
+        elem_h, elem_v = elem.sub_elements()
+        return is_continuous(elem_h) and is_continuous(elem_v)
     else:
         raise NotImplemented('Unknown finite element family')
 
 
 def normal_is_continuous(ufl):
-    elem = ufl.ufl_element()
+    elem = _get_element(ufl)
 
     family = elem.family()
     if family == 'Lagrange':
         return True
     elif family == 'Discontinuous Lagrange' or family == 'DQ':
         return False
+    elif family == 'TensorProductElement':
+        elem_h, elem_v = elem.sub_elements()
+        return normal_is_continuous(elem_h) and normal_is_continuous(elem_v)
     else:
         raise NotImplemented('Unknown finite element family')
+
+def cell_size(mesh):
+    if hasattr(mesh.ufl_cell(), 'sub_cells'):
+        return sqrt(CellVolume(mesh))
+    else:
+        return CellDiameter(mesh)
 
 
 def tensor_jump(v, n):
