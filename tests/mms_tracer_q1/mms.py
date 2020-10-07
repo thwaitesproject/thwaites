@@ -3,14 +3,35 @@
 from thwaites import *
 from thwaites.equations import BaseEquation
 import numpy as np
+from math import ceil
 
 polynomial_order = 1
 number_of_grids = 4
-output_freq = 1
+output_freq = 100
+H1 = 0.04
+H2 = 0.4
+L = 0.5
 
 def error(nx):
+    dx = L/nx
+    dz = H2/nx
     mesh1d = IntervalMesh(nx, 0.5)
-    mesh = ExtrudedMesh(mesh1d, nx, layer_height=0.4/nx)
+    layers = []
+    cell = 0
+    xr = 0
+    min_dz = 0.01*dz # if top cell is thinner than this, merge with cell below
+    tiny_dz = 1e-9*dz #  workaround for zero measure exterior facets (fd issue #1858)
+    for i in range(nx):
+        xr += dx  # y of right-node (assumed to be the higher one)
+        height = H1 + xr/L * (H2-H1)
+        ncells = ceil((height-min_dz)/dz)
+        layers.append([0, ncells])
+        cell += ncells
+    mesh = ExtrudedMesh(mesh1d, layers, layer_height=dz)
+    y = mesh.coordinates.dat.data_ro[:,0]
+    z = mesh.coordinates.dat.data_ro[:,1]
+    height = np.maximum(H1 + y/L * (H2-H1), H1 + tiny_dz)
+    mesh.coordinates.dat.data[:,1] = np.minimum(height, z)
 
     mesh.coordinates.dat.data[:] += (0.1,-0.3)
 
@@ -58,11 +79,12 @@ def error(nx):
     # so Dirichlet, with others specifying a flux
     left_id, right_id, bottom_id, top_id = 1, 2, "bottom", "top"
     one = Constant(1.0)
+    n = FacetNormal(mesh)
     bcs = {
         left_id: {'q': q_ana},
         bottom_id: {'q': q_ana},
-        right_id:  {'flux':  kappa*grad(q_ana)[0]},
-        top_id: {'flux': kappa*grad(q_ana)[1]}
+        right_id:  {'flux':  kappa*dot(n, grad(q_ana))},
+        top_id: {'flux': kappa*dot(n, grad(q_ana))},
     }
 
     timestepper = BackwardEuler(eq, q, fields, dt, bcs, 
