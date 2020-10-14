@@ -49,10 +49,10 @@ restoring_time = 86400.
 L = 10E3
 H1 = 2.
 H2 = 102.
-dy = 200.0
+dy = 50.0
 ny = round(L/dy)
 #nz = 50
-dz = 2.0
+dz = 1.0
 
 # create mesh
 mesh1d = IntervalMesh(ny, L)
@@ -218,28 +218,28 @@ absorption_factor = Constant(1.0/restoring_time)
 sponge_fraction = 0.06  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          absorption_factor * T_restore, #* ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                          ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor * T_restore,
                           0.0)
 
 # Salinity source term
 source_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor * S_restore, #* ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                         ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor * S_restore,
                          0.0)
 
 # Temperature absorption term
 absorp_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          absorption_factor, # * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                          ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor,
                           0.0)
 
 # Salinity absorption term
 absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor, # * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                         ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)) * absorption_factor,
                          0.0)
 
 
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
-kappa_h = Constant(1e-2)
-kappa_v = Constant(2e-4)
+kappa_h = Constant(args.Kh)
+kappa_v = Constant(args.Kh/10.)
 #kappa_v = Constant(args.Kh*dz/dy)
 #grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
 #kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
@@ -499,10 +499,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
+folder = "outputs_"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_constantTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dy500_dz2_closed_iterative/"
+         "_linearTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
+         +"_dy50_dz1_closed_iterative/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 folder = 'outputs/'
 folder = 'tmp/'
