@@ -26,8 +26,8 @@ oceanlength=160*km;
 oceanwidth=80*km;
 
 // Southern boundary
-Point(1) = {0,0.5*oceanwidth,0};
-Extrude {0,0, oceandepthminusfront} {
+Point(1) = {0,0,0};
+Extrude {0, oceandepthminusfront, 0} {
 Point{1}; Layers{15};
 }
 
@@ -47,7 +47,7 @@ Line{2}; Layers{40};
 //Line(6) = {5,6};
 //Line(7) = {3,5};
 //Line(8) = {4,6};
-Extrude {0,0, iceshelffrontdepth} {
+Extrude {0,iceshelffrontdepth, 0} {
 Line{8}; Layers{3};
 }
 //Line(10) = {4,7};
