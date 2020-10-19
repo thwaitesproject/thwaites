@@ -77,11 +77,11 @@ Line{8}; Layers{3};
 // Ocean free surface
 Physical Line(101) = {10};
 // Bottom
-Physical Line(102) = {4,7};
+Physical Line(102) = {3,7};
 // South
 Physical Line(103) = {1};
 // North
-Physical Line(104) = {6,-11};
+Physical Line(104) = {6,12};
 // Ice front
 Physical Line(105) = {11};
 // Ice slope
