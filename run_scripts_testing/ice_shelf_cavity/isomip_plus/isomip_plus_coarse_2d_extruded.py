@@ -67,24 +67,19 @@ tiny_dz = 0.01*dz # workaround zero measure facet issue (fd issue #1858)
 for i in range(ny):
     yr += dy  # y of right-node (assumed to be the higher one)
     if yr <= shelf_length:
-        height = H1 + yr/L * (H2-H1)
+        height = H1 + yr/shelf_length * (H2-H1)
     else:
-        height = H3 
+        height = H3
     ncells = ceil((height-min_dz)/dz)
     layers.append([0, ncells])
 
 mesh = ExtrudedMesh(mesh1d, layers, layer_height=dz)
 
-# Scale the mesh to make ice shelf slope
-Vc = mesh.coordinates.function_space()
-x, z = SpatialCoordinate(mesh)
-f = Function(Vc).interpolate(as_vector([x, conditional(x < shelf_length, H1 + (x/shelf_length)*(H2-H1), z)]))
-mesh.coordinates.assign(f)
-
 # Implement hack at GL (fd issue #1858)
 x = mesh.coordinates.dat.data_ro[:,0]
 z = mesh.coordinates.dat.data_ro[:,1]
-height = np.maximum(H1 + x/shelf_length * (H2-H1), H1 + tiny_dz)  # Outside the cavity this gives the wrong height. But since call minimum cf existing z on next line should be fine...
+height = np.where(x<shelf_length, H1 + x/shelf_length * (H2-H1), H3) # actual height we want
+height = np.maximum(height, H1 + tiny_dz) # workaround height
 mesh.coordinates.dat.data[:,1] = np.minimum(height, z)
 
 ds = CombinedSurfaceMeasure(mesh, 5)
@@ -374,6 +369,7 @@ mumps_solver_parameters = {
     'ksp_type': 'preonly',
     'pc_type': 'lu',
     'pc_factor_mat_solver_type': 'mumps',
+    "mat_mumps_icntl_14": 200,
     'mat_type': 'aij',
     'snes_max_it': 100,
     'snes_rtol': 1e-8,
@@ -424,10 +420,10 @@ gmres_solver_parameters = {
         'ksp_max_it': 300,
         }
 
-vp_solver_parameters = pressure_projection_solver_parameters
-u_solver_parameters = gmres_solver_parameters
-temp_solver_parameters = gmres_solver_parameters
-sal_solver_parameters = gmres_solver_parameters
+vp_solver_parameters   = mumps_solver_parameters
+u_solver_parameters    = mumps_solver_parameters
+temp_solver_parameters = mumps_solver_parameters
+sal_solver_parameters  = mumps_solver_parameters
 
 ##########
 
@@ -525,6 +521,7 @@ folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dx4km_18layers_gl_wall_60m_closed_iterative_initial_solve_coriolis_hypre_pc_press_corr/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
+folder = 'outputs_tmp/'
 
 
 ###########
