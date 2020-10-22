@@ -12,7 +12,7 @@ from math import ceil
 from pyop2.profiling import timed_stage
 ##########
 
-PETSc.Sys.popErrorHandler() 
+PETSc.Sys.popErrorHandler()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("date", help="date format: dd.mm.yy")
@@ -61,7 +61,7 @@ mesh1d = IntervalMesh(ny, L)
 layers = []
 cell = 0
 yr = 0
-min_dz = 0.01*dz # if top cell is thinner than this, merge with cell below
+min_dz = 0.5*dz # if top cell is thinner than this, merge with cell below
 tiny_dz = 0.01*dz # workaround zero measure facet issue (fd issue #1858)
 
 for i in range(ny):
@@ -75,12 +75,15 @@ for i in range(ny):
 
 mesh = ExtrudedMesh(mesh1d, layers, layer_height=dz)
 
-# Implement hack at GL (fd issue #1858)
-x = mesh.coordinates.dat.data_ro[:,0]
-z = mesh.coordinates.dat.data_ro[:,1]
-height = np.where(x<shelf_length, H1 + x/shelf_length * (H2-H1), H3) # actual height we want
-height = np.maximum(height, H1 + tiny_dz) # workaround height
-mesh.coordinates.dat.data[:,1] = np.minimum(height, z)
+nlayers_column1 = layers[0][1]
+# top-left corner node should be at least tiny_dz above height of node below
+min_height_corner_node = (nlayers_column1-1)*dz + tiny_dz
+
+# move top nodes to correct position:
+cfs = mesh.coordinates.function_space()
+x, y = SpatialCoordinate(mesh)
+bc = DirichletBC(cfs, as_vector((x, Max(conditional(x>shelf_length, H3, H1+x/shelf_length * (H2-H1)), min_height_corner_node))), "top")
+bc.apply(mesh.coordinates)
 
 ds = CombinedSurfaceMeasure(mesh, 5)
 

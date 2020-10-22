@@ -49,7 +49,7 @@ restoring_time = 86400.
 L = 10E3
 H1 = 2.
 H2 = 102.
-dy = 200.0
+dy = 500.0
 ny = round(L/dy)
 #nz = 50
 dz = 2.0
@@ -59,8 +59,8 @@ mesh1d = IntervalMesh(ny, L)
 layers = []
 cell = 0
 yr = 0
-min_dz = 0.01*dz # if top cell is thinner than this, merge with cell below
-tiny_dz = 0.01*dz # workaround zero measure facet issue (fd issue #1858)
+min_dz = 0.5*dz # if top cell is thinner than this, merge with cell below
+tiny_dz = 0.01*dz
 for i in range(ny):
     yr += dy  # y of right-node (assumed to be the higher one)
     height = H1 + yr/L * (H2-H1)
@@ -69,10 +69,16 @@ for i in range(ny):
     cell += ncells
 
 mesh = ExtrudedMesh(mesh1d, layers, layer_height=dz)
-y = mesh.coordinates.dat.data_ro[:,0]
-z = mesh.coordinates.dat.data_ro[:,1]
-height = np.maximum(H1 + y/L * (H2-H1), H1 + tiny_dz)
-mesh.coordinates.dat.data[:,1] = np.minimum(height, z)
+
+nlayers_column1 = layers[0][1]
+# top-left corner node should be at least tiny_dz above height of node below
+min_height_corner_node = (nlayers_column1-1)*dz + tiny_dz
+
+# move top nodes to correct position:
+cfs = mesh.coordinates.function_space()
+y, z = SpatialCoordinate(mesh)
+bc = DirichletBC(cfs, as_vector((y, Max(H1+y/L * (H2-H1), min_height_corner_node))), "top")
+bc.apply(mesh.coordinates)
 
 ds = CombinedSurfaceMeasure(mesh, 5)
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
@@ -403,7 +409,7 @@ pressure_projection_solver_parameters = {
             },
         }
 
-vp_solver_parameters = mumps_solver_parameters
+vp_solver_parameters = pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
 temp_solver_parameters = mumps_solver_parameters
 sal_solver_parameters = mumps_solver_parameters
