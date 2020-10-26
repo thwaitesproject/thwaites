@@ -522,9 +522,8 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dx4km_18layers_gl_wall_60m_closed_iterative_initial_solve_coriolis_hypre_pc_press_corr/"
+         +"_dx4km_dz40_gl_wall_80m_slope_step_closed_direct_initial_solve_press_corr/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
-folder = 'outputs_tmp/'
 
 
 ###########
