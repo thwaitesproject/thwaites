@@ -687,8 +687,8 @@ while t < T - 0.5*dt:
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
 
-#    limiter.apply(sal)
-#    limiter.apply(temp)
+    limiter.apply(sal)
+    limiter.apply(temp)
 #    v_comp.interpolate(v[0])
 #    limiter.apply(v_comp)
 #    w_comp.interpolate(v[1])
@@ -707,10 +707,6 @@ while t < T - 0.5*dt:
                chk.store(p_, name="perturbation_pressure")
                chk.store(temp, name="temperature")
                chk.store(sal, name="salinity")
-
-           # Apply limiters
-           limiter.apply(sal)
-           limiter.apply(temp)
 
            # Update melt rate functions
            Q_ice.interpolate(mp.Q_ice)
