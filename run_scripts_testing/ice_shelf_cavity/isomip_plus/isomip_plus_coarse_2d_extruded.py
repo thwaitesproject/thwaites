@@ -110,16 +110,18 @@ PETSc.Sys.Print("Length of iceslope: should be 320000.64m: ", assemble(condition
 ##########
 
 # Set up function spaces
-V = VectorFunctionSpace(mesh, "DQ", 1)  # velocity space
+v_ele = FiniteElement("RTCE", mesh.ufl_cell(), 2, variant="equispaced")
+#v_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
+V = FunctionSpace(mesh, v_ele) # Velocity space
 W = FunctionSpace(mesh, "Q", 2)  # pressure space
 M = MixedFunctionSpace([V, W])
 
 # u velocity function space.
-U = FunctionSpace(mesh, "DQ", 1)
-
-Q = FunctionSpace(mesh, "DQ", 1)  # melt function space
-K = FunctionSpace(mesh, "DQ", 1)    # temperature space
-S = FunctionSpace(mesh, "DQ", 1)    # salinity space
+ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
+U = FunctionSpace(mesh, ele)
+Q = FunctionSpace(mesh, ele)
+K = FunctionSpace(mesh, ele)
+S = FunctionSpace(mesh, ele)
 
 ##########
 
@@ -198,11 +200,13 @@ else:
 ##########
 
 # Set up equations
-mom_eq = MomentumEquation(M.sub(0), M.sub(0))
-cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
+qdeg = 20
+
+mom_eq = MomentumEquation(M.sub(0), M.sub(0), quad_degree=qdeg)
+cty_eq = ContinuityEquation(M.sub(1), M.sub(1), quad_degree=qdeg)
 #u_eq = ScalarVelocity2halfDEquation(U, U)
-temp_eq = ScalarAdvectionDiffusionEquation(K, K)
-sal_eq = ScalarAdvectionDiffusionEquation(S, S)
+temp_eq = ScalarAdvectionDiffusionEquation(K, K, quad_degree=qdeg)
+sal_eq = ScalarAdvectionDiffusionEquation(S, S, quad_degree=qdeg)
 
 ##########
 
@@ -522,7 +526,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dx4km_dz40_gl_wall_80m_slope_step_closed_direct_initial_solve_press_corr/"
+         +"_dx4km_dz40_gl_wall_80m_slope_step_closed_direct_initial_solve_press_corr_TSlims_wtracer_space_equispaceRTCE_qdeg20/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -663,6 +667,12 @@ if MATPLOTLIB_OUT:
     # Add initial conditions for v, w, temp, sal, and rho to data frame
     matplotlib_out(0)
 
+####################
+
+# Add limiter for DG functions
+limiter = VertexBasedLimiter(U)
+v_comp = Function(U)
+w_comp = Function(U)
 ########
 
 # Begin time stepping
@@ -676,6 +686,15 @@ while t < T - 0.5*dt:
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
+
+#    limiter.apply(sal)
+#    limiter.apply(temp)
+#    v_comp.interpolate(v[0])
+#    limiter.apply(v_comp)
+#    w_comp.interpolate(v[1])
+#    limiter.apply(w_comp)
+#    v_.interpolate(as_vector((v_comp, w_comp)))
+
     step += 1
     t += dt
 
@@ -688,7 +707,11 @@ while t < T - 0.5*dt:
                chk.store(p_, name="perturbation_pressure")
                chk.store(temp, name="temperature")
                chk.store(sal, name="salinity")
-    
+
+           # Apply limiters
+           limiter.apply(sal)
+           limiter.apply(temp)
+
            # Update melt rate functions
            Q_ice.interpolate(mp.Q_ice)
            Q_mixed.interpolate(mp.Q_mixed)
