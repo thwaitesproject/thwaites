@@ -154,7 +154,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 
 dump_file = "2d_isomip_plus_coarse_Kv1e-2_100days_dump"
 
-DUMP = False
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -163,6 +163,7 @@ if DUMP:
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
 
+        c = Control(sal)
         # from holland et al 2008b. constant T below 200m depth. varying sal.
         T_200m_depth = 1.0
 
@@ -200,8 +201,8 @@ else:
     #sal_init = S_restore
     sal.interpolate(sal_init)
 
+    c = Control(sal)
 
-c = Control(sal)
 
 ##########
 
@@ -362,13 +363,15 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, ice_drag, 0.0)}, 
+vp_bcs = {"top": {'un': no_normal_flow},#, 'drag': conditional(x < shelf_length, ice_drag, 0.0)}, 
         1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 0.0025}} 
 
-temp_bcs = {"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
+#temp_bcs = {"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
+temp_bcs = {"top": {'flux': -mp.T_flux_bc}}
 
-sal_bcs = {"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
+#sal_bcs = {"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
+sal_bcs = {"top": {'flux': -mp.S_flux_bc}}
 
 
 # STRONGLY Enforced BCs
@@ -512,7 +515,7 @@ output_step = output_dt/dt
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
                                                           predictor_solver_parameters=u_solver_parameters,
-                                                          picard_iterations=1,
+                                                         picard_iterations=1,
                                                           pressure_nullspace=VectorSpaceBasis(constant=True))
 
 # performs pseudo timestep to get good initial pressure
@@ -531,7 +534,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/2d_isomip_plus/adjoint/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
+folder = "/data2/wis15/phd_outputs/2d_isomip_plus/adjoint/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dx4km_dz40_gl_wall_80m_slope_step_closed_direct_TSlims_equiDQ1_noequiDQ1Q2/"
@@ -789,7 +792,8 @@ while t < T - 0.5*dt:
 
 
 melt.project(mp.wb)
-J = assemble(conditional(x < shelf_length, mp.wb, 0.0) * ds("top"))
+#J = assemble(conditional(x < shelf_length, mp.wb, 0.0) * ds("top"))
+J = assemble(mp.wb * ds("top"))
 print(J)
 rf = ReducedFunctional(J, c)
 

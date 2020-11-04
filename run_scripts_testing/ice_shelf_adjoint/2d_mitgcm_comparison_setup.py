@@ -129,7 +129,7 @@ if DUMP:
         #chk.load(u, name="u_velocity")
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
-
+        c = Control(sal)
         # from holland et al 2008b. constant T below 200m depth. varying sal.
         T_200m_depth = 1.0
 
