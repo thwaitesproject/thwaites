@@ -55,7 +55,7 @@ def normal_is_continuous(ufl):
         elem_h, elem_v = elem.sub_elements()
         return normal_is_continuous(elem_h) and normal_is_continuous(elem_v)
     else:
-        raise NotImplemented('Unknown finite element family')
+        return False #raise NotImplemented('Unknown finite element family')
 
 def cell_size(mesh):
     if hasattr(mesh.ufl_cell(), 'sub_cells'):
