@@ -273,8 +273,8 @@ kappa_v = Constant(Kv)
 #                             kappa_v)
 
 
-kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
-mu_tensor = as_tensor([[kappa_h, 0], [0, mu_v]])
+kappa = Constant([[kappa_h, 0], [0, kappa_v]])
+mu_tensor = Constant([[kappa_h, 0], [0, mu_v]])
 
 TP1 = TensorFunctionSpace(mesh, "CG", 1)
 kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa)
