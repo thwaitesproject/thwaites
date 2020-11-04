@@ -36,6 +36,8 @@ parser.add_argument("dt", help="time step in seconds",
                     type=float)
 parser.add_argument("output_dt", help="output time step in seconds",
                     type=float)
+parser.add_argument("adj_output_dt", help="output time step in seconds for adjoint",
+                    type=float)
 parser.add_argument("T", help="final simulation time in seconds",
                     type=float)
 args = parser.parse_args()
@@ -520,7 +522,8 @@ dt = args.dt
 T = args.T
 output_dt = args.output_dt
 output_step = output_dt/dt
-
+adj_output_dt = args.adj_output_dt
+adj_output_step = adj_output_dt/dt
 ##########
 
 # Set up time stepping routines
@@ -547,7 +550,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data2/wis15/phd_outputs/2d_isomip_plus/adjoint/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
+folder = "/data/2d_isomip_plus/adjoint/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dx4km_dz40_gl_wall_80m_slope_step_closed_direct_TSlims_equiDQ1_noequiDQ1Q2/"
@@ -604,17 +607,17 @@ with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
 tape = get_working_tape()
 
 adj_s_file = File(folder+"adj_salinity.pvd")
-tape.add_block(DiagnosticBlock(adj_s_file, sal))
+tape.add_block(DiagnosticBlock(adj_s_file, sal,output_step=True))
 
 adj_t_file = File(folder+"adj_temperature.pvd")
-tape.add_block(DiagnosticBlock(adj_t_file, temp))
+tape.add_block(DiagnosticBlock(adj_t_file, temp,output_step=True))
 
 adj_visc_file = File(folder+"adj_viscosity.pvd")
-tape.add_block(DiagnosticBlock(adj_visc_file, mu))
+tape.add_block(DiagnosticBlock(adj_visc_file, mu,output_step=True))
 adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
+tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp, output_step=True))
 adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
+tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal, output_step=True))
 
 ########
 
@@ -719,14 +722,13 @@ t = 0.0
 step = 0
 
 while t < T - 0.5*dt:
+
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
-    tape.add_block(DiagnosticBlock(adj_t_file, temp))
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
-    tape.add_block(DiagnosticBlock(adj_s_file, sal))
 
     limiter.apply(sal)
     limiter.apply(temp)
@@ -738,6 +740,13 @@ while t < T - 0.5*dt:
 
     step += 1
     t += dt
+    if step % adj_output_step == 0:
+        adj_out = True
+    else:
+        adj_out = False
+
+    tape.add_block(DiagnosticBlock(adj_t_file, temp, output_step=adj_out))
+    tape.add_block(DiagnosticBlock(adj_s_file, sal, output_step=adj_out))
 
     with timed_stage('output'):
        if step % output_step == 0:
