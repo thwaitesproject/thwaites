@@ -163,7 +163,7 @@ else:
     S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
 
     temp_init = T_restore
-    temp.interpolate(temp_init)
+    temp.assign(temp_init)
 
     sal_init = Constant(34.4)
     #sal_init = S_restore
