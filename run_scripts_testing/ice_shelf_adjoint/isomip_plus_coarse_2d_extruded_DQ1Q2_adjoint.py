@@ -2,7 +2,7 @@
 #Buoyancy driven overturning circulation
 # beneath ice shelf.
 from thwaites import *
-from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure
+from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, offset_backward_step_approx
 from firedrake.petsc import PETSc
 from firedrake import FacetNormal
 import pandas as pd
@@ -111,6 +111,19 @@ PETSc.Sys.Print("Length of bottom: should be 480e3m: ", assemble(Constant(1.0)*d
 PETSc.Sys.Print("length of ocean surface should be 160e3m", assemble(conditional(x > shelf_length, Constant(1.0), 0.0)*ds("top", domain=mesh)))
 
 PETSc.Sys.Print("Length of iceslope: should be 320000.64m: ", assemble(conditional(x < shelf_length, Constant(1.0), 0.0)*ds("top", domain=mesh)))
+
+
+# don't want to integrate over the entire top surface 
+# and conditional doesnt seem to work in adjoint when used in J...
+# wavelength of the step = x distance that fucntion goes from zero to 1. 
+lambda_step = 2 * dy
+k = 2.0 * np.pi / lambda_step 
+x0 = shelf_length - 0.5 * lambda_step  # this is the centre of the step.
+
+
+PETSc.Sys.Print("Alternatively using approx step function, length of iceslope: should be 320000.64m: ", assemble( Constant(1.0)*offset_backward_step_approx(x,k,x0)*ds("top", domain=mesh)))
+
+PETSc.Sys.Print("Alternatively using approx step function, length of bottom up to ice shelf: should equal x0 = {}m and hopefully be close to shelf length: ".format(x0), assemble( Constant(1.0)*offset_backward_step_approx(x,k,x0)*ds("bottom", domain=mesh)))
 ##########
 
 # Set up function spaces
@@ -363,15 +376,15 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {"top": {'un': no_normal_flow},#, 'drag': conditional(x < shelf_length, ice_drag, 0.0)}, 
+vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, ice_drag, 0.0)}, 
         1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 0.0025}} 
 
-#temp_bcs = {"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
-temp_bcs = {"top": {'flux': -mp.T_flux_bc}}
+temp_bcs = {"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
+#temp_bcs = {"top": {'flux': -mp.T_flux_bc}}
 
-#sal_bcs = {"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
-sal_bcs = {"top": {'flux': -mp.S_flux_bc}}
+sal_bcs = {"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
+#sal_bcs = {"top": {'flux': -mp.S_flux_bc}}
 
 
 # STRONGLY Enforced BCs
@@ -780,6 +793,7 @@ while t < T - 0.5*dt:
            PETSc.Sys.Print("t=", t)
     
            PETSc.Sys.Print("integrated melt =", assemble(conditional(x < shelf_length, melt, 0.0) * ds("top")))
+           PETSc.Sys.Print("alternatively integrated melt =", assemble(melt * offset_backward_step_approx(x,k,x0) * ds("top")))
 
     if step % (output_step * 24) == 0:
         with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
@@ -793,7 +807,7 @@ while t < T - 0.5*dt:
 
 melt.project(mp.wb)
 #J = assemble(conditional(x < shelf_length, mp.wb, 0.0) * ds("top"))
-J = assemble(mp.wb * ds("top"))
+J = assemble(mp.wb * offset_backward_step_approx(x,k,x0) * ds("top"))
 print(J)
 rf = ReducedFunctional(J, c)
 

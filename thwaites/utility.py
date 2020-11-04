@@ -1,7 +1,7 @@
 """
 A module with utitity functions for Thwaites
 """
-from firedrake import outer, ds_v, ds_t, ds_b, CellDiameter, CellVolume, sqrt
+from firedrake import outer, ds_v, ds_t, ds_b, CellDiameter, CellVolume, sqrt, exp
 import numpy as np
 import ufl
 
@@ -113,3 +113,6 @@ def get_top_surface(cavity_xlength=5000.,cavity_ylength=5000., cavity_height=100
 
     return shelf_boundary_points
 
+
+def offset_backward_step_approx(x, k=1.0, x0 = 0.0):
+    return 1.0 / (1.0 + exp(2.0*k*(x-x0)))
