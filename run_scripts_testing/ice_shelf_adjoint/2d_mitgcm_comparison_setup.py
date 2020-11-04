@@ -120,7 +120,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 # Define a dump file
 dump_file = "2d_50day_mitgcm_comparison_dump"
 
-DUMP = True
+DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -162,7 +162,7 @@ else:
     S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
 
     temp_init = T_restore
-    temp.interpolate(temp_init)
+    temp.assign(temp_init)
 
     sal_init = Constant(34.4)
     #sal_init = S_restore
