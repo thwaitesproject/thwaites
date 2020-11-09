@@ -27,6 +27,7 @@ class AssembledSchurPC(PCBase):
         a = ctx.appctx['a']
         self.schur_nullspace = ctx.appctx.get('schur_nullspace')
         options_prefix = pc.getOptionsPrefix()
+        dm = pc.getDM()
 
         test, trial = a.arguments()
         W = test.function_space()
@@ -47,6 +48,8 @@ class AssembledSchurPC(PCBase):
         self.A10 = None
         self.A11 = None
         self.ksp = PETSc.KSP().create()
+        schur_pc = self.ksp.getPC()
+        schur_pc.setDM(pc.getDM())
         self.ksp.setOptionsPrefix(options_prefix + 'schur_')
         self.ksp.setFromOptions()
         self.update(pc)
@@ -70,6 +73,7 @@ class AssembledSchurPC(PCBase):
 
         if self.schur_nullspace is not None:
             self.schur_plus.setNullSpace(self.schur_nullspace.nullspace())
+            self.schur_plus.setTransposeNullSpace(self.schur_nullspace.nullspace())
         self.ksp.setOperators(self.schur_plus)
 
     def apply(self, pc, X, Y):

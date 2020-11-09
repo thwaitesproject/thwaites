@@ -162,11 +162,16 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         div_fields['velocity'] = u
         self.F -= self.dt_const*div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
 
+        W = self.solution.function_space()
+        mixed_nullspace = firedrake.MixedVectorSpaceBasis(W, [W.sub(0), self.pressure_nullspace])
+
         self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution)
         self.solver = firedrake.NonlinearVariationalSolver(self.problem,
                                                            solver_parameters=self.solver_parameters,
                                                            appctx = {'a': firedrake.derivative(self.F, self.solution),
-                                                                     'schur_nullspace': self.pressure_nullspace},
+                                                                     'schur_nullspace': self.pressure_nullspace,
+                                                                     'dt': self.dt_const, 'dx': self.equations[1].dx},
+                                                           nullspace = mixed_nullspace, transpose_nullspace = mixed_nullspace,
                                                            options_prefix=self.name)
 
         self._initialized = True

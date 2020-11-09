@@ -6,6 +6,10 @@ import numpy as np
 import ufl
 
 class CombinedSurfaceMeasure(ufl.Measure):
+    """
+    A surface measure that combines ds_v, the integral over vertical boundary facets, and ds_t and ds_b,
+    the integral over horizontal top and bottom facets. The vertical boundary facets are identified with
+    the same surface ids as ds_v. The top and bottom surfaces are identified via the "top" and "bottom" ids."""
     def __init__(self, domain, degree):
         self.ds_v = ds_v(domain=domain, degree=degree)
         self.ds_t = ds_t(domain=domain, degree=degree)
@@ -20,6 +24,8 @@ class CombinedSurfaceMeasure(ufl.Measure):
             return self.ds_v(subdomain_id, **kwargs)
 
     def __rmul__(self, other):
+        """This is to handle terms to be integrated over all surfaces in the form of other*ds.
+        Here the CombinedSurfaceMeasure ds is not called, instead we just split it up as below."""
         return other*self.ds_v + other*self.ds_t + other*self.ds_b
 
 def _get_element(ufl_or_element):
@@ -28,34 +34,44 @@ def _get_element(ufl_or_element):
     else:
         return ufl_or_element.ufl_element()
 
-def is_continuous(ufl):
-    elem = _get_element(ufl)
+def is_continuous(expr):
+    elem = _get_element(expr)
 
     family = elem.family()
     if family == 'Lagrange':
         return True
     elif family == 'Discontinuous Lagrange' or family == 'DQ':
+        return False
+    elif isinstance(elem, ufl.HCurlElement) or isinstance(elem, ufl.HDivElement):
         return False
     elif family == 'TensorProductElement':
         elem_h, elem_v = elem.sub_elements()
         return is_continuous(elem_h) and is_continuous(elem_v)
+    elif family == 'EnrichedElement':
+        return all(is_continuous(e) for e in elem._elements)
     else:
-        raise NotImplemented('Unknown finite element family')
+        raise NotImplementedError("Unknown finite element family")
 
 
-def normal_is_continuous(ufl):
-    elem = _get_element(ufl)
+def normal_is_continuous(expr):
+    elem = _get_element(expr)
 
     family = elem.family()
     if family == 'Lagrange':
         return True
     elif family == 'Discontinuous Lagrange' or family == 'DQ':
         return False
+    elif isinstance(elem, ufl.HCurlElement):
+        return False
+    elif isinstance(elem, ufl.HDivElement):
+        return True
     elif family == 'TensorProductElement':
         elem_h, elem_v = elem.sub_elements()
         return normal_is_continuous(elem_h) and normal_is_continuous(elem_v)
+    elif family == 'EnrichedElement':
+        return all(normal_is_continuous(e) for e in elem._elements)
     else:
-        return False #raise NotImplemented('Unknown finite element family')
+        raise NotImplementedError("Unknown finite element family")
 
 def cell_size(mesh):
     if hasattr(mesh.ufl_cell(), 'sub_cells'):
