@@ -104,12 +104,13 @@ y, z = SpatialCoordinate(mesh)
 ##########
 
 # Set up function spaces
-V = VectorFunctionSpace(mesh, "DQ", 1)  # velocity space
+V = FunctionSpace(mesh, "RTCE", 2)  # velocity space
 W = FunctionSpace(mesh, "Q", 2)  # pressure space
 M = MixedFunctionSpace([V, W])
 
 # u velocity function space.
 U = FunctionSpace(mesh, "DQ", 1)
+VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
 
 Q = FunctionSpace(mesh, "DQ", 1)  # melt function space
 K = FunctionSpace(mesh, "DQ", 1)    # temperature space
@@ -124,6 +125,7 @@ v, p = split(m)  # expression: y component of velocity, pressure
 v_._name = "v_velocity"
 p_._name = "perturbation pressure"
 #u = Function(U, name="x velocity")  # x component of velocity
+vdg = Function(VDG, name="velocity")
 
 rho = Function(K, name="density")
 temp = Function(K, name="temperature")
@@ -196,11 +198,11 @@ else:
 ##########
 
 # Set up equations
-mom_eq = MomentumEquation(M.sub(0), M.sub(0))
-cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
-#u_eq = ScalarVelocity2halfDEquation(U, U)
-temp_eq = ScalarAdvectionDiffusionEquation(K, K)
-sal_eq = ScalarAdvectionDiffusionEquation(S, S)
+mom_eq = MomentumEquation(M.sub(0), M.sub(0), quad_degree=10)
+cty_eq = ContinuityEquation(M.sub(1), M.sub(1), quad_degree=10)
+#u_eq = ScalarVelocity2halfDEquation(U, U, quad_degree=10)
+temp_eq = ScalarAdvectionDiffusionEquation(K, K, quad_degree=10)
+sal_eq = ScalarAdvectionDiffusionEquation(S, S, quad_degree=10)
 
 ##########
 
@@ -384,13 +386,12 @@ pressure_projection_solver_parameters = {
         'pc_fieldsplit_schur_fact_type': 'full',
         # velocity mass block:
         'fieldsplit_0': {
-            'ksp_type': 'gmres',
+            'ksp_type': 'preonly',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
-            'ksp_converged_reason': None,
             'assembled_ksp_type': 'preonly',
-            'assembled_pc_type': 'bjacobi',
-            'assembled_sub_pc_type': 'ilu',
+            'assembled_pc_type': 'lu',
+            'pc_factor_mat_solver_type': 'mumps'
             },
         # schur system: explicitly assemble the schur system
         # this only works with pressureprojectionicard if the velocity block is just the mass matrix
@@ -398,16 +399,24 @@ pressure_projection_solver_parameters = {
         'fieldsplit_1': {
             'ksp_type': 'preonly',
             'pc_type': 'python',
-            'pc_python_type': 'thwaites.AssembledSchurPC',
-            'schur_ksp_type': 'cg',
-            'schur_ksp_max_it': 1000,
-            'schur_ksp_rtol': 1e-7,
-            'schur_ksp_atol': 1e-9,
+            'pc_python_type': 'thwaites.LaplacePC',
             'schur_ksp_converged_reason': None,
-            'schur_pc_type': 'gamg',
-            'schur_pc_gamg_threshold': 0.01
-            },
+            'laplace_pc_type': 'ksp',
+            'laplace_ksp_ksp_type': 'cg',
+            'laplace_ksp_ksp_rtol': 1e-7,
+            'laplace_ksp_ksp_atol': 1e-9,
+            'laplace_ksp_ksp_monitor_true_residual': None,
+            'laplace_ksp_pc_type': 'python',
+            'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
+    }
+if False:
+    fs1 = pressure_projection_solver_parameters['fieldsplit_1']
+    fs1['ksp_type'] = 'cg'
+    fs1['ksp_rtol'] = 1e-7
+    fs1['ksp_atol'] = 1e-9
+    fs1['ksp_monitor_true_residual'] = None
+    fs1['laplace_ksp_ksp_type'] = 'preonly'
 
 vp_solver_parameters = pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
@@ -510,7 +519,6 @@ folder = "/data/2d_mitgcm_comparison/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"
          "_constantTres"+str(restoring_time)+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dy500_dz2_closed_iterative/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
-folder = 'outputs/'
 folder = 'tmp/'
 
 
@@ -519,6 +527,10 @@ folder = 'tmp/'
 # Output files for velocity, pressure, temperature and salinity
 v_file = File(folder+"vw_velocity.pvd")
 v_file.write(v_)
+
+# Output files for velocity, pressure, temperature and salinity
+vdg_file = File(folder+"vwdg_velocity.pvd")
+vdg_file.write(vdg)
 
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
@@ -578,7 +590,7 @@ def matplotlib_out(t):
     sal_array = sal.dat.data
     rho_array = rho.dat.data
         
-    # Gather all pieces to one array. 
+    # Gather all pieces to one array.
     v_array = mesh.comm.gather(v_array, root=0)
     w_array = mesh.comm.gather(w_array, root=0)
     temp_array = mesh.comm.gather(temp_array, root=0)
@@ -656,7 +668,7 @@ while t < T - 0.5*dt:
            # dumb checkpoint for starting from last timestep reached
            with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
                # Checkpoint file open for reading and writing
-               chk.store(v_, name="v_velocity")
+               #chk.store(v_, name="v_velocity")
                chk.store(p_, name="perturbation_pressure")
                #chk.store(u, name="u_velocity")
                chk.store(temp, name="temperature")
@@ -682,6 +694,8 @@ while t < T - 0.5*dt:
            else:
                # Write out files
                v_file.write(v_)
+               vdg.project(v_)
+               vdg_file.write(vdg)
                p_file.write(p_)
                #u_file.write(u)
                t_file.write(temp)
