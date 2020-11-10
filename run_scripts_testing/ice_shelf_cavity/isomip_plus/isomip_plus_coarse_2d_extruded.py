@@ -119,6 +119,8 @@ M = MixedFunctionSpace([V, W])
 # u velocity function space.
 ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 U = FunctionSpace(mesh, ele)
+VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
+
 Q = FunctionSpace(mesh, ele)
 K = FunctionSpace(mesh, ele)
 S = FunctionSpace(mesh, ele)
@@ -131,6 +133,7 @@ v_, p_ = m.split()  # function: velocity, pressure
 v, p = split(m)  # expression: velocity, pressure
 v_._name = "velocity"
 p_._name = "perturbation pressure"
+vdg = Function(VDG, name="velocity")
 
 rho = Function(K, name="density")
 temp = Function(K, name="temperature")
@@ -200,7 +203,7 @@ else:
 ##########
 
 # Set up equations
-qdeg = 20
+qdeg = 10
 
 mom_eq = MomentumEquation(M.sub(0), M.sub(0), quad_degree=qdeg)
 cty_eq = ContinuityEquation(M.sub(1), M.sub(1), quad_degree=qdeg)
@@ -292,7 +295,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_al
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5), HJ99Gamma=True)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), HJ99Gamma=True)
 
 ##########
 
@@ -392,13 +395,12 @@ pressure_projection_solver_parameters = {
         'pc_fieldsplit_schur_fact_type': 'full',
         # velocity mass block:
         'fieldsplit_0': {
-            'ksp_type': 'gmres',
+            'ksp_type': 'preonly',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
-            'ksp_converged_reason': None,
             'assembled_ksp_type': 'preonly',
-            'assembled_pc_type': 'bjacobi',
-            'assembled_sub_pc_type': 'ilu',
+            'assembled_pc_type': 'lu',
+            'pc_factor_mat_solver_type': 'mumps'
             },
         # schur system: explicitly assemble the schur system
         # this only works with pressureprojectionicard if the velocity block is just the mass matrix
@@ -406,31 +408,39 @@ pressure_projection_solver_parameters = {
         'fieldsplit_1': {
             'ksp_type': 'preonly',
             'pc_type': 'python',
-            'pc_python_type': 'thwaites.AssembledSchurPC',
-            'schur_ksp_type': 'cg',
-            'schur_ksp_max_it': 1000,
-            'schur_ksp_rtol': 1e-7,
-            'schur_ksp_atol': 1e-9,
+            'pc_python_type': 'thwaites.LaplacePC',
             'schur_ksp_converged_reason': None,
-            'schur_pc_type': 'hypre',
-            'schur_pc_gamg_threshold': 0.01
-            },
+            'laplace_pc_type': 'ksp',
+            'laplace_ksp_ksp_type': 'cg',
+            'laplace_ksp_ksp_rtol': 1e-7,
+            'laplace_ksp_ksp_atol': 1e-9,
+            'laplace_ksp_ksp_monitor_true_residual': None,
+            'laplace_ksp_pc_type': 'python',
+            'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
+    }
+if False:
+    fs1 = pressure_projection_solver_parameters['fieldsplit_1']
+    fs1['ksp_type'] = 'cg'
+    fs1['ksp_rtol'] = 1e-7
+    fs1['ksp_atol'] = 1e-9
+    fs1['ksp_monitor_true_residual'] = None
+    fs1['laplace_ksp_ksp_type'] = 'preonly'
 
 gmres_solver_parameters = {
         'snes_monitor': None,
         'snes_type': 'ksponly',
         'ksp_type': 'gmres',
         'pc_type': 'sor',
-        'ksp_monitor': None, # or `ksp_converged_reason`: None if this is too noisy
+        'ksp_converged_reason': None,
         'ksp_rtol': 1e-5,
         'ksp_max_it': 300,
         }
 
-vp_solver_parameters   = mumps_solver_parameters
-u_solver_parameters    = mumps_solver_parameters
-temp_solver_parameters = mumps_solver_parameters
-sal_solver_parameters  = mumps_solver_parameters
+vp_solver_parameters = pressure_projection_solver_parameters
+u_solver_parameters = gmres_solver_parameters
+temp_solver_parameters = gmres_solver_parameters
+sal_solver_parameters = gmres_solver_parameters
 
 ##########
 
@@ -528,6 +538,7 @@ folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dx4km_dz40_gl_wall_80m_slope_step_closed_direct_initial_solve_press_corr_TSlims_wtracer_space_equispaceRTCE_qdeg20/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
+folder = 'tmp/'
 
 
 ###########
@@ -535,6 +546,10 @@ folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d
 # Output files for velocity, pressure, temperature and salinity
 v_file = File(folder+"velocity.pvd")
 v_file.write(v_)
+
+# Output files for velocity, pressure, temperature and salinity
+vdg_file = File(folder+"dg_velocity.pvd")
+vdg_file.write(vdg)
 
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
@@ -709,6 +724,7 @@ while t < T - 0.5*dt:
                chk.store(sal, name="salinity")
 
            # Update melt rate functions
+           vdg.project(v_)
            Q_ice.interpolate(mp.Q_ice)
            Q_mixed.interpolate(mp.Q_mixed)
            Q_latent.interpolate(mp.Q_latent)
@@ -728,6 +744,7 @@ while t < T - 0.5*dt:
            else:
                # Write out files
                v_file.write(v_)
+               vdg_file.write(vdg)
                p_file.write(p_)
                t_file.write(temp)
                s_file.write(sal)
