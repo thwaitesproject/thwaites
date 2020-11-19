@@ -409,7 +409,7 @@ pressure_projection_solver_parameters = {
             'ksp_type': 'preonly',
             'pc_type': 'python',
             'pc_python_type': 'thwaites.LaplacePC',
-            'schur_ksp_converged_reason': None,
+            #'schur_ksp_converged_reason': None,
             'laplace_pc_type': 'ksp',
             'laplace_ksp_ksp_type': 'cg',
             'laplace_ksp_ksp_rtol': 1e-7,
@@ -536,9 +536,9 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dx4km_dz40_gl_wall_80m_slope_step_closed_direct_initial_solve_press_corr_TSlims_wtracer_space_equispaceRTCE_qdeg20/"
+         +"_dx4km_dz40_gl_wall_80m_slope_step_closed_iterative_lump/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
-folder = 'tmp/'
+#folder = 'tmp/'
 
 
 ###########
@@ -697,6 +697,7 @@ step = 0
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
+        vdg.project(v_)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
@@ -724,7 +725,6 @@ while t < T - 0.5*dt:
                chk.store(sal, name="salinity")
 
            # Update melt rate functions
-           vdg.project(v_)
            Q_ice.interpolate(mp.Q_ice)
            Q_mixed.interpolate(mp.Q_mixed)
            Q_latent.interpolate(mp.Q_latent)
