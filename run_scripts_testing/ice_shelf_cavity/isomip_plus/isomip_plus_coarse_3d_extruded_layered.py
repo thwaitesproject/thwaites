@@ -442,9 +442,10 @@ pressure_projection_solver_parameters = {
             'ksp_type': 'preonly',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
-            'assembled_ksp_type': 'preonly',
-            'assembled_pc_type': 'lu',
-            'pc_factor_mat_solver_type': 'mumps'
+            'assembled_ksp_type': 'cg',
+            'assembled_ksp_converged_reason': None # just for initial debugging, remove when things are working
+            'assembled_pc_type': 'bjacobi',
+            'assembled_sub_pc_type': 'sor',
             },
         # schur system: explicitly assemble the schur system
         # this only works with pressureprojectionicard if the velocity block is just the mass matrix
