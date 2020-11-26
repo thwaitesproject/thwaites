@@ -105,14 +105,10 @@ class ScalarDiffusionTerm(BaseTerm):
         F = 0
         F += inner(grad_test, diff_flux)*self.dx
 
-        # Interior Penalty method by
-        # Epshteyn (2007) doi:10.1016/j.cam.2006.08.029
-        # sigma = 3*k_max**2/k_min*p*(p+1)*cot(Theta)
-        # k_max/k_min  - max/min diffusivity
-        # p            - polynomial degree
-        # Theta        - min angle of triangles
-        # assuming k_max/k_min=2, Theta=pi/3
-        # sigma = 6.93 = 3.5*p*(p+1)
+        # Interior Penalty method
+        #
+        # see https://www.researchgate.net/publication/260085826 for details
+        # on the choice of sigma
 
         degree = self.trial_space.ufl_element().degree()
         if not isinstance(degree, int):
@@ -120,7 +116,8 @@ class ScalarDiffusionTerm(BaseTerm):
         # safety factor: 1.0 is theoretical minimum
         alpha = fields.get('interior_penalty', 2.0)
         if degree == 0:
-            sigma = 1.5
+            # probably only works for orthog. quads and hexes
+            sigma = 1.0
         else:
             nf = self.mesh.ufl_cell().num_facets()
             sigma = alpha * cell_edge_integral_ratio(self.mesh, degree-1) * nf

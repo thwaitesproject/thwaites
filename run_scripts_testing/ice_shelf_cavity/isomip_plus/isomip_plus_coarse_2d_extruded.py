@@ -283,13 +283,12 @@ mu = as_tensor([[kappa_h, 0], [0, mu_v]])
 #dz_gl = Constant(H1/nz_cavity)
 #dz_ocean = Constant(water_depth/nz_ocean)
 #dz = Function(Q).interpolate(conditional(x < shelf_length, dz_gl + x * (dz_ocean - dz_gl) / shelf_length, dz_ocean))
-ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
+vp_fields = {'viscosity': mu, 'source': mom_source}
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
                'absorption coefficient': absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
               'absorption coefficient': absorp_sal}
 
 ##########
@@ -538,7 +537,7 @@ folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dx4km_dz40_gl_wall_80m_slope_step_closed_iterative_lump/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
-#folder = 'tmp/'
+folder = 'tmp/'
 
 
 ###########
