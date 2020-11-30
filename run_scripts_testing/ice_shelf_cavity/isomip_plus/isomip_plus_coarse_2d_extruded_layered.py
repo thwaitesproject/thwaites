@@ -281,20 +281,14 @@ kappa_temp = kappa
 kappa_sal = kappa
 mu = as_tensor([[kappa_h, 0], [0, mu_v]])
 
+##########
 
-# Interior penalty term
-# 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
-
-dz_gl = Constant(H1/nz_cavity)
-dz_ocean = Constant(water_depth/nz_ocean)
-ip_dz = Function(Q).interpolate(conditional(x < shelf_length, dz_gl + x * (dz_ocean - dz_gl) / shelf_length, dz_ocean))
-ip_alpha = 3*dy/ip_dz*2*ip_factor
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
+vp_fields = {'viscosity': mu, 'source': mom_source}
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
                'absorption coefficient': absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
               'absorption coefficient': absorp_sal}
 
 ##########
@@ -537,11 +531,11 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 ##########
 
-# Set up folder
+# Set up Vectorfolder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ipdef"+\
          "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_ooMuv"+str(open_ocean_kappa_v.values()[0])+"_ooKv"+str(open_ocean_kappa_v.values()[0])\
-         +"_dx4km_lay15_glwall80m_closed_iterative_lump/"
+         +"_dx4km_lay15_glwall80m_closed_iter_lumpRTCE/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
