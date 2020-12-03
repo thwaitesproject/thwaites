@@ -40,7 +40,7 @@ args = parser.parse_args()
 
 ip_factor = Constant(50.)
 #dt = 1.0
-restoring_time = 86400.
+restoring_time = 0.1*86400.
 Kv = args.Kv
 ##########
 
@@ -52,8 +52,8 @@ H2 = 600.
 H3 = 720.
 dy = 4000.0
 ny = round(L/dy)
-nz_cavity = 15.
-nz_ocean = 18.
+nz_cavity = 15
+nz_ocean = 18
 dz = 40.0
 
 # create mesh
@@ -225,6 +225,41 @@ mom_source = as_vector((0.,-g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S
 
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
+
+class VerticalDensityGradientSolver:
+    """Computes vertical density gradient.
+                                                                                                                                                                                                                       """
+    def __init__(self, rho, solution):
+        self.rho = rho
+        self.solution = solution
+        
+        self.fs = self.solution.function_space()
+        self.mesh = self.fs.mesh()
+        self.n = FacetNormal(self.mesh)
+        
+        test = TestFunction(self.fs)
+        tri = TrialFunction(self.fs)
+        vert_dim = self.mesh.geometric_dimension()-1
+        
+        a = test*tri*dx
+        L = -Dx(test, vert_dim)*self.rho*dx + test*self.n[vert_dim]*self.rho*ds_tb #+ avg(rho) * jump(gradrho_test, n[dim]) * dS_h (this is zero because jump(phi,n) = 0 for continuous P1 test function!)
+       
+        prob = LinearVariationalProblem(a, L, self.solution, constant_jacobian=True)
+        self.weak_grad_solver = LinearVariationalSolver(prob) # #, solver_parameters=solver_parameters)
+       
+    def solve(self):
+        self.weak_grad_solver.solve()
+
+P1fs = FunctionSpace(mesh, "CG", 1) 
+gradrho = Function(P1fs)
+grad_rho_solver = VerticalDensityGradientSolver(rho, gradrho)        
+
+grad_rho_solver.solve()
+
+
+
+
+
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
 f = Constant(-1.409E-4)
 
@@ -233,29 +268,30 @@ absorption_factor = Constant(1.0/restoring_time)
 sponge_fraction = 0.02  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(x > (1.0-sponge_fraction) * L,
-                           absorption_factor * T_restore,# *((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                           absorption_factor * T_restore,# *((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0.0)
 
 # Salinity source term
 source_sal = conditional(x > (1.0-sponge_fraction) * L,
-                         absorption_factor * S_restore, # *((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)), 
+                         absorption_factor * S_restore,# *((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)), 
                          0.0)
 
 # Temperature absorption term
 absorp_temp = conditional(x > (1.0-sponge_fraction) * L,
-                          absorption_factor, #*((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                          absorption_factor,#*((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0.0)
 
 # Salinity absorption term
 absorp_sal = conditional(x > (1.0-sponge_fraction) * L,
-                         absorption_factor, #* ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                         absorption_factor,# * ((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                          0.0)
 
 
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
 kappa_h = Constant(6.0)
-mu_v = Constant(1*Kv)
-kappa_v = Constant(Kv)
+#mu_v = Constant(1*Kv)
+kappa_v = Function(P1fs) 
+kappa_v.assign(conditional(gradrho < 1e-6, 1e-3, 1e-1))
 #kappa_v = Constant(args.Kh*dz/dy)
 #grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
 #kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
@@ -274,7 +310,7 @@ kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 kappa_temp = kappa
 kappa_sal = kappa
-mu = as_tensor([[kappa_h, 0], [0, mu_v]])
+mu = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 
 # Interior penalty term
@@ -533,11 +569,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up folder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_dx4km_dz40_gl_wall_80m_slope_step_closed_iterative_lump/"
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_constTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MuKv1e-3switch"\
+         +"_dx4kmdz40_gl0m_closed_iterlump_RTCE2/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
-folder = 'tmp/'
+#folder = 'tmp/'
 
 
 ###########
@@ -562,6 +597,11 @@ s_file.write(sal)
 rho_file = File(folder+"density.pvd")
 rho_file.write(rho)
 
+rhograd_file = File(folder+"density_grad.pvd")
+rhograd_file.write(gradrho)
+
+kappav_file = File(folder+"kappav.pvd")
+kappav_file.write(kappa_v)
 ##########
 
 # Output files for melt functions
@@ -710,6 +750,10 @@ while t < T - 0.5*dt:
 #    limiter.apply(w_comp)
 #    v_.interpolate(as_vector((v_comp, w_comp)))
 
+    rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
+    grad_rho_solver.solve()
+    kappa_v.assign(conditional(gradrho < 1e-6, 1e-3, 1e-1))
+
     step += 1
     t += dt
 
@@ -734,7 +778,6 @@ while t < T - 0.5*dt:
            full_pressure.interpolate(mp.P_full)
     
            # Update density for plotting
-           rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
 
            if MATPLOTLIB_OUT:
                # Write u, v, w, |u| temp, sal, rho to file for plotting later with matplotlib
@@ -749,6 +792,8 @@ while t < T - 0.5*dt:
                s_file.write(sal)
                rho_file.write(rho)
                
+               rhograd_file.write(gradrho)
+               kappav_file.write(kappa_v)
                # Write melt rate functions
                m_file.write(melt)
                Q_mixed_file.write(Q_mixed)
