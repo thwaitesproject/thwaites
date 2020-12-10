@@ -2,11 +2,11 @@
 Slope limiters for discontinuous fields
 """
 from __future__ import absolute_import
-from .utility import *
 from firedrake import VertexBasedLimiter, FunctionSpace, TrialFunction, LinearSolver, TestFunction, dx, assemble
 import numpy as np
 import ufl
 from pyop2.profiling import timed_region, timed_function, timed_stage  # NOQA
+from pyop2 import op2
 
 
 def assert_function_space(fs, family, degree):
@@ -47,6 +47,28 @@ def assert_function_space(fs, family, degree):
             'degree of function space must be {0:d}'.format(degree)
 
 
+def get_facet_mask(function_space, mode='geometric', facet='bottom'):
+    """
+    Returns the top/bottom nodes of extruded 3D elements.
+
+    :arg function_space: Firedrake :class:`FunctionSpace` object
+    :kwarg str mode: 'topological', to retrieve nodes that lie on the facet, or
+        'geometric' for nodes whose basis functions do not vanish on the facet.
+    :kwarg str facet: 'top' or 'bottom'
+
+    .. note::
+        The definition of top/bottom depends on the direction of the extrusion.
+        Here we assume that the mesh has been extruded upwards (along positive
+        z axis).
+    """
+    section, iset, facets = function_space.cell_boundary_masks[mode]
+    ifacet = -2 if facet == 'bottom' else -1
+    off = section.getOffset(facets[ifacet])
+    dof = section.getDof(facets[ifacet])
+    indices = iset[off:off+dof]
+    return indices
+
+
 class VertexBasedP1DGLimiter(VertexBasedLimiter):
     """
     Vertex based limiter for P1DG tracer fields, see Kuzmin (2010)
@@ -72,7 +94,8 @@ class VertexBasedP1DGLimiter(VertexBasedLimiter):
         else:
             super(VertexBasedP1DGLimiter, self).__init__(p1dg_space)
         self.mesh = self.P0.mesh()
-        self.is_2d = self.mesh.geometric_dimension() == 2
+        self.dim = self.mesh.geometric_dimension()
+        self.extruded = hasattr(self.mesh.ufl_cell(), 'sub_cells')
         self.time_dependent_mesh = time_dependent_mesh
 
     def _construct_centroid_solver(self):
@@ -114,10 +137,10 @@ class VertexBasedP1DGLimiter(VertexBasedLimiter):
         # This is OK for P1DG triangles, but not exact for the extruded case (quad facets)
         from finat.finiteelementbase import entity_support_dofs
 
-        if self.is_2d:
-            entity_dim = 1  # get 1D facets
+        if self.extruded:
+            entity_dim = (self.dim-2, 1)  # get vertical facets
         else:
-            entity_dim = (1, 1)  # get vertical facets
+            entity_dim = self.dim-1
         boundary_dofs = entity_support_dofs(self.P1DG.finat_element, entity_dim)
         local_facet_nodes = np.array([boundary_dofs[e] for e in sorted(boundary_dofs.keys())])
         n_bnd_nodes = local_facet_nodes.shape[1]
@@ -145,7 +168,7 @@ class VertexBasedP1DGLimiter(VertexBasedLimiter):
                      field.dat(op2.READ, field.exterior_facet_node_map()),
                      self.P1DG.mesh().exterior_facets.local_facet_dat(op2.READ),
                      local_facet_idx(op2.READ))
-        if not self.is_2d:
+        if self.extruded:
             # Add nodal values from surface/bottom boundaries
             # NOTE calling firedrake par_loop with measure=ds_t raises an error
             bottom_nodes = get_facet_mask(self.P1CG, 'geometric', 'bottom')
