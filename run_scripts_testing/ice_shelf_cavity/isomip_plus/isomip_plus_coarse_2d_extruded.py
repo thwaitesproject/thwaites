@@ -125,6 +125,7 @@ Q = FunctionSpace(mesh, ele)
 K = FunctionSpace(mesh, ele)
 S = FunctionSpace(mesh, ele)
 
+P1 = FunctionSpace(mesh, "CG", 1)
 ##########
 
 # Set up functions
@@ -136,7 +137,6 @@ p_._name = "perturbation pressure"
 vdg = Function(VDG, name="velocity")
 
 rho = Function(K, name="density")
-rho_anomaly = Function(K, name="density anomaly")
 temp = Function(K, name="temperature")
 sal = Function(S, name="salinity")
 melt = Function(Q, name="melt rate")
@@ -148,6 +148,7 @@ Tb = Function(Q, name="boundary freezing temperature")
 Sb = Function(Q, name="boundary salinity")
 full_pressure = Function(M.sub(1), name="full pressure")
 
+rho_anomaly = Function(P1, name="density anomaly")
 ##########
 
 # Define a dump file
@@ -223,37 +224,10 @@ mom_source = as_vector((0.,-g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S
 
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
-rho_anomaly.interpolate(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
+rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
 
-class VerticalDensityGradientSolver:
-    """Computes vertical density gradient.
-                                                                                                                                                                                                                       """
-    def __init__(self, rho, solution):
-        self.rho = rho
-        self.solution = solution
-        
-        self.fs = self.solution.function_space()
-        self.mesh = self.fs.mesh()
-        self.n = FacetNormal(self.mesh)
-        
-        test = TestFunction(self.fs)
-        tri = TrialFunction(self.fs)
-        vert_dim = self.mesh.geometric_dimension()-1
-        
-        a = test*tri*dx
-        L = -Dx(test, vert_dim)*self.rho*dx + test*self.n[vert_dim]*self.rho*ds_tb #+ avg(rho) * jump(gradrho_test, n[dim]) * dS_h (this is zero because jump(phi,n) = 0 for continuous P1 test function!)
-       
-        prob = LinearVariationalProblem(a, L, self.solution, constant_jacobian=True)
-        self.weak_grad_solver = LinearVariationalSolver(prob) # #, solver_parameters=solver_parameters)
-       
-    def solve(self):
-        self.weak_grad_solver.solve()
-
-P1fs = FunctionSpace(mesh, "CG", 1) 
-gradrho = Function(P1fs)  # vertical component of gradient of density anomaly units m^-1
-grad_rho_solver = VerticalDensityGradientSolver(rho_anomaly, gradrho)        
-
-grad_rho_solver.solve()
+gradrho = Function(P1)  # vertical component of gradient of density anomaly units m^-1
+gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
 
 
 
@@ -289,7 +263,7 @@ absorp_sal = conditional(x > (1.0-sponge_fraction) * L,
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
 kappa_h = Constant(6.0)
 #mu_v = Constant(1*Kv)
-kappa_v = Function(P1fs) 
+kappa_v = Function(P1) 
 DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinity over restoring region
 gradrho_scale = DeltaS * beta_sal / water_depth  # rough oredr of magnitude estimate for vertical gradient of density anomaly. units m^-1
 kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-3, 1e-3, 1e-1))
@@ -572,8 +546,8 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up folder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MuKvOldswitchDGsolve"+str(Kv)\
-         +"_dx4kmdz40_closed_iterlump_RTCE2/"
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MuKvSwitch0.1limProject"+str(Kv)\
+         +"_dx4kmdz40_closed_iterlump_P1dglim/"
 #folder = 'tmp/'
 
 
@@ -726,7 +700,7 @@ if MATPLOTLIB_OUT:
 ####################
 
 # Add limiter for DG functions
-limiter = VertexBasedLimiter(U)
+limiter = VertexBasedP1DGLimiter(U, time_dependent_mesh=False)
 v_comp = Function(U)
 w_comp = Function(U)
 ########
@@ -752,9 +726,9 @@ while t < T - 0.5*dt:
 #    limiter.apply(w_comp)
 #    v_.interpolate(as_vector((v_comp, w_comp)))
 
-    rho_anomaly.interpolate(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
-    grad_rho_solver.solve()
-    kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-3, 1e-3, 1e-1))
+    rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
+    gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
+    kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
 
     step += 1
     t += dt

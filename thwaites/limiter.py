@@ -3,7 +3,7 @@ Slope limiters for discontinuous fields
 """
 from __future__ import absolute_import
 from .utility import *
-from firedrake import VertexBasedLimiter, FunctionSpace, TrialFunction, LinearSolver
+from firedrake import VertexBasedLimiter, FunctionSpace, TrialFunction, LinearSolver, TestFunction, dx, assemble
 import numpy as np
 import ufl
 from pyop2.profiling import timed_region, timed_function, timed_stage  # NOQA

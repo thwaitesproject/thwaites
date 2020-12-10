@@ -8,7 +8,7 @@ from .coupled_integrators import CrankNicolsonSaddlePointTimeIntegrator, Pressur
 from .assembledschur import AssembledSchurPC
 from .vertical_lumping import VerticallyLumpedPC, LaplacePC
 from .meltrate_param import MeltRateParam, ThreeEqMeltRateParam
-
+from thwaites.limiter import VertexBasedP1DGLimiter
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
