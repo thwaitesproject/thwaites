@@ -96,6 +96,10 @@ class VertexBasedP1DGLimiter(VertexBasedLimiter):
         self.mesh = self.P0.mesh()
         self.dim = self.mesh.geometric_dimension()
         self.extruded = hasattr(self.mesh.ufl_cell(), 'sub_cells')
+        assert not self.extruded or len(p1dg_space.ufl_element().sub_elements()) > 0, \
+            "Extruded mesh requires extruded function space"
+        assert not self.extruded or all(e.variant() == 'equispaced' for e in p1dg_space.ufl_element().sub_elements()), \
+            "Extruded function space must be equivariant"
         self.time_dependent_mesh = time_dependent_mesh
 
     def _construct_centroid_solver(self):
