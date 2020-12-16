@@ -12,11 +12,11 @@ _extruded_mesh_3d = ExtrudedMesh(_triangular_mesh_2d, 10)
 def _create_extruded_cavity_mesh():
     #  Generate mesh
     L = 1
-    shelf_length = 0.6
+    shelf_length = 0.61
     H1 = 0.2
     H2 = 0.8
     H3 = 1.
-    dy = 0.1
+    dy = 0.05
     ny = round(L/dy)
     dz = 0.1
     layers = []
@@ -81,7 +81,7 @@ def test_limit_linear_slope(mesh):
         mix_ele = TensorProductElement(h_ele, v_ele)
         V = FunctionSpace(mesh, mix_ele)
 
-    limiter = VertexBasedP1DGLimiter(V, time_dependent_mesh=False)
+    limiter = VertexBasedP1DGLimiter(V, squeezed_triangles=mesh.variable_layers)
     # uncomment to compare with standard limiter:
     # limiter = VertexBasedLimiter(V)
 
@@ -99,5 +99,6 @@ def test_limit_linear_slope(mesh):
         try:
             assert e < 1e-12
         except:
-            File('tmp.pvd').write(u_before, u_after)
+            diff = Function(u_before).assign(u_after-u_before)
+            File('tmp.pvd').write(u_before, u_after, diff)
             raise
