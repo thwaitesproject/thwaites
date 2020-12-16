@@ -40,7 +40,7 @@ args = parser.parse_args()
 
 ip_factor = Constant(50.)
 #dt = 1.0
-restoring_time = 0.1*86400.
+restoring_time = 86400.
 Kv = args.Kv
 ##########
 
@@ -127,6 +127,7 @@ Q = FunctionSpace(mesh, ele)
 K = FunctionSpace(mesh, ele)
 S = FunctionSpace(mesh, ele)
 
+P1 = FunctionSpace(mesh, "CG", 1)
 ##########
 
 # Set up functions
@@ -149,6 +150,7 @@ Tb = Function(Q, name="boundary freezing temperature")
 Sb = Function(Q, name="boundary salinity")
 full_pressure = Function(M.sub(1), name="full pressure")
 
+rho_anomaly = Function(P1, name="density anomaly")
 ##########
 
 # Define a dump file
@@ -164,16 +166,15 @@ if DUMP:
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
 
-        # from holland et al 2008b. constant T below 200m depth. varying sal.
-        T_200m_depth = 1.0
+        # ISOMIP+ warm conditions .
+        T_surface = -1.9
+        T_bottom = 1.0
 
-        S_200m_depth = 34.4
-        #S_bottom = 34.8
-        #salinity_gradient = (S_bottom - S_200m_depth) / -H2
-        #S_surface = S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
-
-        T_restore = Constant(T_200m_depth)
-        S_restore = Constant(S_200m_depth) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
+        S_surface = 33.8
+        S_bottom = 34.7
+        
+        T_restore = T_surface + (T_bottom - T_surface) * (z / -water_depth)
+        S_restore = S_surface + (S_bottom - S_surface) * (z / -water_depth)
 
 
 else:
@@ -182,22 +183,20 @@ else:
     v_.assign(v_init)
 
 
-    # from holland et al 2008b. constant T below 200m depth. varying sal.
-    T_200m_depth = 1.0
+    # ISOMIP+ warm conditions .
+    T_surface = -1.9
+    T_bottom = 1.0
 
+    S_surface = 33.8
+    S_bottom = 34.7
 
-    #S_bottom = 34.8
-    #salinity_gradient = (S_bottom - S_200m_depth) / -H2
-    S_surface = 34.4 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
-
-    T_restore = Constant(T_200m_depth)
-    S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
+    T_restore = T_surface + (T_bottom - T_surface) * (z / -water_depth)
+    S_restore = S_surface + (S_bottom - S_surface) * (z / -water_depth)
 
     temp_init = T_restore
     temp.interpolate(temp_init)
 
-    sal_init = Constant(34.4)
-    #sal_init = S_restore
+    sal_init = S_restore
     sal.interpolate(sal_init)
 
 
@@ -227,6 +226,12 @@ mom_source = as_vector((0.,-g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S
 
 rho0 = 1030.
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
+rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
+
+gradrho = Function(P1)  # vertical component of gradient of density anomaly units m^-1
+gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
+
+
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
 f = Constant(-1.409E-4)
 
@@ -265,22 +270,22 @@ absorption_factor = Constant(1.0/restoring_time)
 sponge_fraction = 0.02  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(x > (1.0-sponge_fraction) * L,
-                           absorption_factor * T_restore,# *((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                           absorption_factor * T_restore *((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0.0)
 
 # Salinity source term
 source_sal = conditional(x > (1.0-sponge_fraction) * L,
-                         absorption_factor * S_restore, # *((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)), 
+                         absorption_factor * S_restore  *((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)), 
                          0.0)
 
 # Temperature absorption term
 absorp_temp = conditional(x > (1.0-sponge_fraction) * L,
-                          absorption_factor, #*((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                          absorption_factor * ((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0.0)
 
 # Salinity absorption term
 absorp_sal = conditional(x > (1.0-sponge_fraction) * L,
-                         absorption_factor, #* ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                         absorption_factor * ((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                          0.0)
 
 
@@ -292,22 +297,11 @@ kappa_v_grad = (open_ocean_kappa_v - grounding_line_kappa_v) / shelf_length
 kappa_v_cond = conditional(x < shelf_length, grounding_line_kappa_v + x * kappa_v_grad, open_ocean_kappa_v)
 
 
-kappa_v = Function(P1fs) 
-kappa_v.assign(conditional(gradrho < 1e-6, 1e-3, 1e-1))
-#mu_v = kappa_v
-#kappa_v = Constant(args.Kh*dz/dy)
-#grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
-#kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
-#kappa_v = grounding_line_kappa_v + y*kappa_v_grad
-
-#sponge_kappa_h = conditional(y > (1.0-sponge_fraction) * L,
-#                             1000. * kappa_h * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
-#                             kappa_h)
-
-#sponge_kappa_v = conditional(y > (1.0-sponge_fraction) * L,
-#                             1000. * kappa_v * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
-#                             kappa_v)
-
+#kappa_v = Function(P1fs) 
+DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinity over restoring region
+gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude estimate for vertical gradient of density anomaly. units m^-1
+#kappa_v.assign(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1))
+kappa_v = Constant(Kv)
 
 kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
@@ -567,9 +561,9 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up Vectorfolder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ipdef"+\
-         "_constantTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MKuv1e-3switch"\
-         +"_dx4km_lay15_glwall80m_closed_iter_lumpRTCE/"
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef"+\
+         "_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MKuvfix"+str(Kv)\
+         +"_dx4km_lay15_glwall80m_closed_iterlumpRTCE/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -596,11 +590,11 @@ s_file.write(sal)
 rho_file = File(folder+"density.pvd")
 rho_file.write(rho)
 
-rhograd_file = File(folder+"density_grad.pvd")
+rhograd_file = File(folder+"density_anomaly_grad.pvd")
 rhograd_file.write(gradrho)
 
-kappav_file = File(folder+"kappav.pvd")
-kappav_file.write(kappa_v)
+#kappav_file = File(folder+"kappav.pvd")
+#kappav_file.write(kappa_v)
 ##########
 
 # Output files for melt functions
@@ -749,9 +743,9 @@ while t < T - 0.5*dt:
 #    limiter.apply(w_comp)
 #    v_.interpolate(as_vector((v_comp, w_comp)))
 
-    rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
-    grad_rho_solver.solve()
-    kappa_v.assign(conditional(gradrho < 1e-6, 1e-3, 1e-1))
+    rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
+    gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
+    #kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
     
     step += 1
     t += dt
@@ -767,6 +761,7 @@ while t < T - 0.5*dt:
                chk.store(sal, name="salinity")
 
            # Update melt rate functions
+           rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
            Q_ice.interpolate(mp.Q_ice)
            Q_mixed.interpolate(mp.Q_mixed)
            Q_latent.interpolate(mp.Q_latent)
@@ -791,7 +786,7 @@ while t < T - 0.5*dt:
                rho_file.write(rho)
                
                rhograd_file.write(gradrho)
-               kappav_file.write(kappa_v)
+               #kappav_file.write(kappa_v)
                # Write melt rate functions
                m_file.write(melt)
                Q_mixed_file.write(Q_mixed)
