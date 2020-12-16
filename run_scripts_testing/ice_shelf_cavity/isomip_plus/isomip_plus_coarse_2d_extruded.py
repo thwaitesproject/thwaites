@@ -152,8 +152,7 @@ rho_anomaly = Function(P1, name="density anomaly")
 ##########
 
 # Define a dump file
-
-dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/08.12.20_2d_HJ99_gammafric_dt1800.0_dtOut3600.0_T8640000.0_ipdef_StratLinTres86400.0_KMuh6.0_MuKv0.001_dx4kmdz40_closed_iterlump_RTCE2/dump.h5"
+dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/10.12.20_2d_HJ99_gammafric_dt1800.0_dtOut3600.0_T8640000.0_ipdef_StratLinTres86400.0_KMuh6.0_MuKvSwitch0.1limProject0.001_dx4kmdz40_closed_iterlump_RTCE2/dump.h5"
 DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
@@ -263,25 +262,11 @@ absorp_sal = conditional(x > (1.0-sponge_fraction) * L,
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
 kappa_h = Constant(6.0)
 #mu_v = Constant(1*Kv)
-kappa_v = Function(P1) 
+#kappa_v = Function(P1) 
 DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinity over restoring region
 gradrho_scale = DeltaS * beta_sal / water_depth  # rough oredr of magnitude estimate for vertical gradient of density anomaly. units m^-1
-kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-3, 1e-3, 1e-1))
-#kappa_v = Constant(Kv)
-
-#kappa_v = Constant(args.Kh*dz/dy)
-#grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
-#kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
-#kappa_v = grounding_line_kappa_v + y*kappa_v_grad
-
-#sponge_kappa_h = conditional(y > (1.0-sponge_fraction) * L,
-#                             1000. * kappa_h * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
-#                             kappa_h)
-
-#sponge_kappa_v = conditional(y > (1.0-sponge_fraction) * L,
-#                             1000. * kappa_v * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
-#                             kappa_v)
-
+#kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-3, 1e-3, 1e-1))
+kappa_v = Constant(Kv)
 
 kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
@@ -546,8 +531,8 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up folder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MuKvSwitch0.1limProject"+str(Kv)\
-         +"_dx4kmdz40_closed_iterlump_P1dglim/"
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MuKv"+str(Kv)\
+         +"_dx4kmdz40_closed_iterlump_NoLim/"
 #folder = 'tmp/'
 
 
@@ -576,8 +561,8 @@ rho_file.write(rho)
 rhograd_file = File(folder+"density_anomaly_grad.pvd")
 rhograd_file.write(gradrho)
 
-kappav_file = File(folder+"kappav.pvd")
-kappav_file.write(kappa_v)
+#kappav_file = File(folder+"kappav.pvd")
+#kappav_file.write(kappa_v)
 ##########
 
 # Output files for melt functions
@@ -718,8 +703,8 @@ while t < T - 0.5*dt:
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
 
-    limiter.apply(sal)
-    limiter.apply(temp)
+    #limiter.apply(sal)
+    #limiter.apply(temp)
 #    v_comp.interpolate(v[0])
 #    limiter.apply(v_comp)
 #    w_comp.interpolate(v[1])
@@ -728,7 +713,7 @@ while t < T - 0.5*dt:
 
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
     gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
-    kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
+#    kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
 
     step += 1
     t += dt
@@ -770,7 +755,7 @@ while t < T - 0.5*dt:
                rho_file.write(rho)
                
                rhograd_file.write(gradrho)
-               kappav_file.write(kappa_v)
+ #              kappav_file.write(kappa_v)
                # Write melt rate functions
                m_file.write(melt)
                Q_mixed_file.write(Q_mixed)
