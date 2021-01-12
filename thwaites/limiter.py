@@ -266,9 +266,6 @@ class VertexBasedP1DGLimiter(VertexBasedLimiter):
 
             marker = self.squeezed_filter.marker
 
-            from firedrake import File
-            f = File('tmp_umin.pvd')
-            f.write(self.min_field)
             # NOTE: for multiple squeezed triangle on top (e.g. ice front!) this currently only
             # works at the top, under the assumption that cells are iterated
             # over in each column bottom to top:
@@ -276,7 +273,6 @@ class VertexBasedP1DGLimiter(VertexBasedLimiter):
                          self.max_field.dat(op2.MAX, self.max_field.function_space().cell_node_map()),
                          self.min_field.dat(op2.MIN, self.min_field.function_space().cell_node_map()),
                          marker.dat(op2.READ, marker.function_space().cell_node_map()))
-            f.write(self.min_field)
 
     def apply(self, field):
         """

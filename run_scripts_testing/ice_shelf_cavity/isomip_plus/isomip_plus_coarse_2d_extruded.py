@@ -120,6 +120,8 @@ M = MixedFunctionSpace([V, W])
 ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 U = FunctionSpace(mesh, ele)
 VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
+vdg_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
+VDG1 = VectorFunctionSpace(mesh, vdg_ele) # velocity for output
 
 Q = FunctionSpace(mesh, ele)
 K = FunctionSpace(mesh, ele)
@@ -135,6 +137,7 @@ v, p = split(m)  # expression: velocity, pressure
 v_._name = "velocity"
 p_._name = "perturbation pressure"
 vdg = Function(VDG, name="velocity")
+vdg1 = Function(VDG1, name="velocity")
 
 rho = Function(K, name="density")
 temp = Function(K, name="temperature")
@@ -162,6 +165,8 @@ if DUMP:
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
 
+     #   vdg1.project(v_) # DQ1 velocity for 
+        
         # ISOMIP+ warm conditions .
         T_surface = -1.9
         T_bottom = 1.0
@@ -179,7 +184,7 @@ else:
     v_init = zero(mesh.geometric_dimension())
     v_.assign(v_init)
 
-
+    #vdg1.project(v_) # DQ1 velocity for 
     # ISOMIP+ warm conditions .
     T_surface = -1.9
     T_bottom = 1.0
@@ -284,15 +289,15 @@ mu = as_tensor([[kappa_h, 0], [0, kappa_v]])
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
 vp_fields = {'viscosity': mu, 'source': mom_source}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
+temp_fields = {'diffusivity': kappa_temp, 'velocity': vdg1, 'source': source_temp,
                'absorption coefficient': absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
+sal_fields = {'diffusivity': kappa_sal, 'velocity': vdg1, 'source': source_sal,
               'absorption coefficient': absorp_sal}
 
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), HJ99Gamma=True)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg1, vdg1), 0.5), HJ99Gamma=True)
 
 ##########
 
@@ -530,9 +535,9 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
+folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MuKv"+str(Kv)\
-         +"_dx4kmdz40_closed_iterlump_NoLim/"
+         +"_dx4kmdz40_closed_iterlump_SqueezeTriLim_tracers_p1dgvelLimInMeltplusAdvect_equi/"
 #folder = 'tmp/'
 
 
@@ -543,8 +548,15 @@ v_file = File(folder+"velocity.pvd")
 v_file.write(v_)
 
 # Output files for velocity, pressure, temperature and salinity
+
+
+vdg.project(v_)  # DQ2 velocity for plotting
 vdg_file = File(folder+"dg_velocity.pvd")
 vdg_file.write(vdg)
+
+vdg1.project(v_) # DQ1 velocity for 
+vdg1_file = File(folder+"P1dg_velocity_lim.pvd")
+vdg1_file.write(vdg1)
 
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
@@ -685,7 +697,7 @@ if MATPLOTLIB_OUT:
 ####################
 
 # Add limiter for DG functions
-limiter = VertexBasedP1DGLimiter(U, time_dependent_mesh=False)
+limiter = VertexBasedP1DGLimiter(U, squeezed_triangles=True)
 v_comp = Function(U)
 w_comp = Function(U)
 ########
@@ -697,19 +709,20 @@ step = 0
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
-        vdg.project(v_)
+        vdg.project(v_)  # DQ2 velocity for plotting
+        vdg1.project(v_) # DQ1 velocity for 
+        v_comp.interpolate(vdg1[0])
+        limiter.apply(v_comp)
+        w_comp.interpolate(vdg1[1])
+        limiter.apply(w_comp)
+        vdg1.interpolate(as_vector((v_comp, w_comp)))
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
 
-    #limiter.apply(sal)
-    #limiter.apply(temp)
-#    v_comp.interpolate(v[0])
-#    limiter.apply(v_comp)
-#    w_comp.interpolate(v[1])
-#    limiter.apply(w_comp)
-#    v_.interpolate(as_vector((v_comp, w_comp)))
+    limiter.apply(sal)
+    limiter.apply(temp)
 
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
     gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
@@ -749,6 +762,7 @@ while t < T - 0.5*dt:
                # Write out files
                v_file.write(v_)
                vdg_file.write(vdg)
+               vdg1_file.write(vdg1)
                p_file.write(p_)
                t_file.write(temp)
                s_file.write(sal)
