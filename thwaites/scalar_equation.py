@@ -30,10 +30,7 @@ class ScalarAdvectionTerm(BaseTerm):
         n = self.n
         q = trial
 
-        F = -q*div(phi*u)*self.dx
-
-        # integration by parts leads to boundary term
-        F += q*dot(n, u)*phi*self.ds
+        F = dot(grad(q), phi*u)*self.dx
 
         # which is replaced at incoming Dirichlet 'q' boundaries:
         for id, bc in bcs.items():

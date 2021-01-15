@@ -202,14 +202,15 @@ class PressureGradientTerm(BaseTerm):
 
         F = dot(phi, grad(p))*self.dx
 
-        # do nothing should be zero (normal) stress:
-        F += -dot(phi, n)*p*self.ds
+        # CHANGED: do nothing is now only valid where u.n is specified (in the divergence term)
 
         # for those boundaries where the normal component of u is specified
         # we take it out again
         for id, bc in bcs.items():
-            if 'u' in bc or 'un' in bc:
-                F += dot(phi, n)*p*self.ds(id)
+            # where u.n is not specified, we want to impose normal stress for which we
+            # need a bc
+            if not ('u' in bc or 'un' in bc):
+                F += -dot(phi, n)*p*self.ds(id)
 
         return -F
 
@@ -224,17 +225,19 @@ class DivergenceTerm(BaseTerm):
         # assert is_continuous(psi)
         F = -dot(grad(psi), u)*self.dx
 
-        # do nothing should be zero (normal) stress, which means no (Dirichlet condition)
-        # should be imposed on the normal component
-        F += psi*dot(n, u)*self.ds
+        # CHANGED: do nothing should be specified normal flow
 
         # for those boundaries where the normal component of u is specified
-        # we take it out again and replace with the specified un
+        # we already have the correct boundary term (implicitly through IBP)
+        # we just need to supply the value
+        # at other boundaries, we need to take out the implicit boundary term
         for id, bc in bcs.items():
             if 'u' in bc:
-                F += psi*dot(n, bc['u']-u)*self.ds(id)
+                F += psi*dot(n, bc['u'])*self.ds(id)
             elif 'un' in bc:
-                F += psi*(bc['un'] - dot(n, u))*self.ds(id)
+                F += psi*bc['un']*self.ds(id)
+            else:
+                F += psi*dot(n, u)*self.ds(id)
 
         return -F
 
