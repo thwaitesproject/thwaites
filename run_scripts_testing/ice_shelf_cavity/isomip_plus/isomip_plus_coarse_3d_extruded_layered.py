@@ -158,7 +158,7 @@ scalar_vert_ele = FiniteElement("DG", interval, 1, variant="equispaced")
 scalar_ele = TensorProductElement(scalar_hor_ele, scalar_vert_ele)
 #scalar_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 U = FunctionSpace(mesh, scalar_ele)
-VDG = VectorFunctionSpace(mesh, "DG", 2) # velocity for output
+VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
 
 Q = FunctionSpace(mesh, scalar_ele)
 K = FunctionSpace(mesh, scalar_ele)
@@ -329,10 +329,10 @@ ip_dz = Constant(20.0)
 ip_alpha = 3*dy/ip_dz*2*ip_factor
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
+vp_fields = {'viscosity': mu, 'source': mom_source}
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
                'absorption coefficient': absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
               'absorption coefficient': absorp_sal}
 
 ##########
@@ -443,7 +443,7 @@ pressure_projection_solver_parameters = {
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
             'assembled_ksp_type': 'cg',
-            'assembled_ksp_converged_reason': None # just for initial debugging, remove when things are working
+            'assembled_ksp_converged_reason': None, # just for initial debugging, remove when things are working
             'assembled_pc_type': 'bjacobi',
             'assembled_sub_pc_type': 'sor',
             },
@@ -579,9 +579,9 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up folder
 folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_HJ99_gammafric_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef"+\
          "_Tres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_ooMuv"+str(open_ocean_kappa_v.values()[0])+"_ooKv"+str(open_ocean_kappa_v.values()[0])\
-         +"_dx10km_lay5_closed_iter_lump/"
+         +"_dx4km_lay15_closed_iter_lump_hypre/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
