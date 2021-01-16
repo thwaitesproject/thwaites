@@ -16,10 +16,10 @@ PETSc.Sys.popErrorHandler()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("date", help="date format: dd.mm.yy")
-#parser.add_argument("dy", help="horizontal mesh resolution in m",
-                  #  type=float)
-#parser.add_argument("nz", help="no. of layers in vertical",
-#                    type=int)
+parser.add_argument("dy", help="horizontal mesh resolution in m",
+                    type=float)
+parser.add_argument("dz", help="vertical mesh resolution in m",
+                    type=float)
 #parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
 #                    type=float)
 parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
@@ -50,11 +50,11 @@ shelf_length = 320E3
 H1 = 80.
 H2 = 600.
 H3 = 720.
-dy = 4000.0
+dy = args.dy # 4000.0
 ny = round(L/dy)
 nz_cavity = 15
 nz_ocean = 18
-dz = 40.0
+dz = args.dz # 40.0
 
 # create mesh
 mesh1d = IntervalMesh(ny, L)
@@ -297,7 +297,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': vdg1, 'source': source_sal,
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg1, vdg1), 0.5), HJ99Gamma=True)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), HJ99Gamma=True)
 
 ##########
 
@@ -537,7 +537,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 # Set up folder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MuKv"+str(Kv)\
-         +"_dx4kmdz40_closed_iterlump_SqueezeTriLim_tracers_p1dgvelLimInMeltplusAdvect_equi/"
+         +"_dx"+str(round(1e-3*dy))+"kmdz"+str(round(dz))+"m_closed_iterlump_P1dglimSquTritracersVelAdvectonly/"
 #folder = 'tmp/'
 
 

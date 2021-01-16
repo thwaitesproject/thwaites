@@ -16,10 +16,10 @@ PETSc.Sys.popErrorHandler()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("date", help="date format: dd.mm.yy")
-#parser.add_argument("dy", help="horizontal mesh resolution in m",
-                  #  type=float)
-#parser.add_argument("nz", help="no. of layers in vertical",
-#                    type=int)
+parser.add_argument("dy", help="horizontal mesh resolution in m",
+                    type=float)
+parser.add_argument("nz", help="no. of layers in vertical",
+                    type=int)
 #parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
 #                    type=float)
 parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
@@ -36,10 +36,8 @@ parser.add_argument("T", help="final simulation time in seconds",
                     type=float)
 args = parser.parse_args()
 
-#nz = args.nz #10
 
 ip_factor = Constant(50.)
-#dt = 1.0
 restoring_time = 86400.
 Kv = args.Kv
 ##########
@@ -50,11 +48,9 @@ shelf_length = 320E3
 H1 = 80.
 H2 = 600.
 H3 = 720.
-dy = 4000.0
+dy = args.dy 
 ny = round(L/dy)
-nz_cavity = 15.
-nz_ocean = 18.
-dz = 40.0
+dz = H2/args.nz #40.0
 
 # create mesh
 mesh1d = IntervalMesh(ny, L)
@@ -82,17 +78,17 @@ f = Function(Vc).interpolate(as_vector([x, conditional(x < shelf_length, ((x/she
 mesh.coordinates.assign(f)
 
 # move top nodes to correct position:
-cfs = mesh.coordinates.function_space()
-x, y = SpatialCoordinate(mesh)
-bc = DirichletBC(cfs, as_vector((x, conditional(x>shelf_length, H3, H1+x/shelf_length * (H2-H1)))), "top")
-bc.apply(mesh.coordinates)
+#cfs = mesh.coordinates.function_space()
+#x, y = SpatialCoordinate(mesh)
+#bc = DirichletBC(cfs, as_vector((x, conditional(x<shelf_length, H1+x/shelf_length * (H2-H1),H3))), "top")
+#bc.apply(mesh.coordinates)
 
 ds = CombinedSurfaceMeasure(mesh, 5)
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 # Set ocean surface
-water_depth = 720.0
+water_depth = H3
 mesh.coordinates.dat.data[:, 1] -= water_depth
 
 print("You have Comm WORLD size = ", mesh.comm.size)
@@ -109,6 +105,10 @@ PETSc.Sys.Print("Length of bottom: should be 480e3m: ", assemble(Constant(1.0)*d
 PETSc.Sys.Print("length of ocean surface should be 160e3m", assemble(conditional(x > shelf_length, Constant(1.0), 0.0)*ds("top", domain=mesh)))
 
 PETSc.Sys.Print("Length of iceslope: should be 320000.4225m: ", assemble(conditional(x < shelf_length, Constant(1.0), 0.0)*ds("top", domain=mesh)))
+
+n = FacetNormal(mesh)
+print("ds_v",assemble(avg(dot(n,n))*dS_v(domain=mesh)))
+
 ##########
 print(mesh.ufl_cell())
 # Set up function spaces
@@ -325,7 +325,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': vdg1, 'source': source_sal,
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg1, vdg1), 0.5), HJ99Gamma=True)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), HJ99Gamma=True)
 
 ##########
 
@@ -566,7 +566,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef"+\
          "_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MKuvfix"+str(Kv)\
-         +"_dx4km_lay15_glwall80m_closed_iterlump_P1dglimSquTri_TraceVelMeltAdvect/"
+         +"_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dgSquTriTracers/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
