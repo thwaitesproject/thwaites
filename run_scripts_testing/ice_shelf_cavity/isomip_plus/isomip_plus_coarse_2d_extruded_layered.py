@@ -78,10 +78,10 @@ f = Function(Vc).interpolate(as_vector([x, conditional(x < shelf_length, ((x/she
 mesh.coordinates.assign(f)
 
 # move top nodes to correct position:
-#cfs = mesh.coordinates.function_space()
-#x, y = SpatialCoordinate(mesh)
-#bc = DirichletBC(cfs, as_vector((x, conditional(x<shelf_length, H1+x/shelf_length * (H2-H1),H3))), "top")
-#bc.apply(mesh.coordinates)
+cfs = mesh.coordinates.function_space()
+x, y = SpatialCoordinate(mesh)
+bc = DirichletBC(cfs, as_vector((x, conditional(x>shelf_length, H3, H1+x/shelf_length * (H2-H1)))), "top")
+bc.apply(mesh.coordinates)
 
 ds = CombinedSurfaceMeasure(mesh, 5)
 
