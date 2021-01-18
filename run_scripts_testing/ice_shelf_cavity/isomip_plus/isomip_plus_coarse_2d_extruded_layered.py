@@ -82,10 +82,10 @@ f = Function(Vc).interpolate(as_vector([x, conditional(x < shelf_length, ((x/she
 mesh.coordinates.assign(f)
 
 # move top nodes to correct position:
-cfs = mesh.coordinates.function_space()
-x, y = SpatialCoordinate(mesh)
-bc = DirichletBC(cfs, as_vector((x, conditional(x>shelf_length, H3, H1+x/shelf_length * (H2-H1)))), "top")
-bc.apply(mesh.coordinates)
+#cfs = mesh.coordinates.function_space()
+#x, y = SpatialCoordinate(mesh)
+#bc = DirichletBC(cfs, as_vector((x, conditional(x>shelf_length, H3, H1+x/shelf_length * (H2-H1)))), "top")
+#bc.apply(mesh.coordinates)
 
 ds = CombinedSurfaceMeasure(mesh, 5)
 
@@ -317,15 +317,15 @@ mu = as_tensor([[kappa_h, 0], [0, kappa_v]])
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
 vp_fields = {'viscosity': mu, 'source': mom_source}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': vdg1, 'source': source_temp,
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
                'absorption coefficient': absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': vdg1, 'source': source_sal,
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
               'absorption coefficient': absorp_sal}
 
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg1, vdg1), 0.5), HJ99Gamma=True)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), HJ99Gamma=True)
 
 ##########
 
@@ -385,11 +385,10 @@ ice_drag = 0.0097
 #sop.interpolate(-g*(Temperature_term + Salinity_term))
 #sop_file = File(folder+"boundary_stress.pvd")
 #sop_file.write(sop)
+vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, ice_drag, 0.0)},
+        1: {'un': no_normal_flow}, 2: {'un': no_normal_flow},
+        "bottom": {'un': no_normal_flow, 'drag': 0.0025}}
 
-
-vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, ice_drag, 0.0)}, 
-        1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
-        "bottom": {'un': no_normal_flow, 'drag': 0.0025}} 
 
 temp_bcs = {"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
 
@@ -566,7 +565,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef"+\
          "_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MKuvfix"+str(Kv)\
-         +"_dx4km_lay15_glwall80m_closed_iterlump_P1dglimSquTri_TraceVelMeltAdvect/"
+         +"_dx4km_lay15_glwall80m_closed_iterlump_vert_icefront_P1dglimTracers/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -725,7 +724,7 @@ if MATPLOTLIB_OUT:
 ####################
 
 # Add limiter for DG functions
-limiter = VertexBasedP1DGLimiter(U, squeezed_triangles=True)
+limiter = VertexBasedP1DGLimiter(U)
 v_comp = Function(U)
 w_comp = Function(U)
 ########
@@ -738,12 +737,12 @@ while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
         vdg.project(v_)  # DQ2 velocity for plotting
-        vdg1.project(v_) # DQ1 velocity for 
-        v_comp.interpolate(vdg1[0])
-        limiter.apply(v_comp)
-        w_comp.interpolate(vdg1[1])
-        limiter.apply(w_comp)
-        vdg1.interpolate(as_vector((v_comp, w_comp)))
+#        vdg1.project(v_) # DQ1 velocity for 
+#        v_comp.interpolate(vdg1[0])
+#        limiter.apply(v_comp)
+#        w_comp.interpolate(vdg1[1])
+#        limiter.apply(w_comp)
+#        vdg1.interpolate(as_vector((v_comp, w_comp)))
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
@@ -789,7 +788,7 @@ while t < T - 0.5*dt:
                # Write out files
                v_file.write(v_)
                vdg_file.write(vdg)
-               vdg1_file.write(vdg1)
+#               vdg1_file.write(vdg1)
                p_file.write(p_)
                t_file.write(temp)
                s_file.write(sal)
