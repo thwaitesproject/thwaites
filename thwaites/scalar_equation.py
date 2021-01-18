@@ -45,7 +45,7 @@ class ScalarAdvectionTerm(BaseTerm):
             # s=1: u.n(-)>0  =>  flow goes from '-' to '+' => '-' is upwind
             s = 0.5*(sign(dot(avg(u),n('-'))) + 1.0)
             phiu_down = phi('+')*u('+')*s + phi('-')*u('-')*(1-s)
-            F += -jump(q, n) * phiu_down * self.dS
+            F += -dot(jump(q, n), phiu_down) * self.dS
 
         return -F
 
