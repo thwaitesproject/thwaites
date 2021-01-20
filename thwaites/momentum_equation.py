@@ -1,6 +1,6 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor, sign
-from firedrake import CellDiameter, avg, Identity, zero
+from firedrake import CellDiameter, avg, Identity, zero, min_value, jump
 from .utility import is_continuous, normal_is_continuous, tensor_jump, cell_edge_integral_ratio
 from firedrake import FacetArea, CellVolume
 from ufl import tensors, algebra
@@ -31,7 +31,7 @@ class MomentumAdvectionTerm(BaseTerm):
         n = self.n
         u = trial
 
-        F = -dot(u, div(outer(phi, u_adv)))*self.dx
+        F = dot(phi, dot(u_adv, grad(u))) * self.dx
 
         for id, bc in bcs.items():
             if 'u' in bc:
@@ -40,16 +40,16 @@ class MomentumAdvectionTerm(BaseTerm):
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
                 u_in = zero(self.dim)
-            F += conditional(dot(u_adv, n) < 0,
-                             dot(phi, u_in)*dot(u_adv, n),
-                             dot(phi, u)*dot(u_adv, n)) * self.ds(id)
+            F += dot(phi, u_in-u) * min_value(dot(u_adv, n), 0) * self.ds(id)
+
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u_adv)):
             # s=0: u.n(-)<0  =>  flow goes from '+' to '-' => '+' is upwind
             # s=1: u.n(-)>0  =>  flow goes from '-' to '+' => '-' is upwind
             s = 0.5*(sign(dot(avg(u),n('-'))) + 1.0)
-            u_up = u('-')*s + u('+')*(1-s)
-            F += dot(u_up, (dot(u_adv('+'), n('+'))*phi('+') + dot(u_adv('-'), n('-'))*phi('-'))) * self.dS
+            u_adv_down = u_adv('+')*s + u_adv('-')*(1-s)
+            phi_down = phi('+')*s + phi('-')*(1-s)
+            F += - dot(u_adv_down, dot(phi_down, u('+')) * n('+') + dot(phi_down, u('-')) * n('-')) * self.dS
 
         return -F
 
