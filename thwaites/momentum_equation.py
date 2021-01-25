@@ -40,7 +40,8 @@ class MomentumAdvectionTerm(BaseTerm):
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
                 u_in = zero(self.dim)
-            F += dot(phi, u_in-u) * min_value(dot(u_adv, n), 0) * self.ds(id)
+            if 'closed' not in bc:
+                F += dot(phi, u_in-u) * min_value(dot(u_adv, n), 0) * self.ds(id)
 
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u_adv)):

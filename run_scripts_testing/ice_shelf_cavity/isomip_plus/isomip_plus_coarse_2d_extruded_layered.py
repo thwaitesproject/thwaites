@@ -16,10 +16,10 @@ PETSc.Sys.popErrorHandler()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("date", help="date format: dd.mm.yy")
-#parser.add_argument("dy", help="horizontal mesh resolution in m",
-                  #  type=float)
-#parser.add_argument("nz", help="no. of layers in vertical",
-#                    type=int)
+parser.add_argument("dy", help="horizontal mesh resolution in m",
+                    type=float)
+parser.add_argument("nz", help="no. of layers in vertical",
+                    type=int)
 #parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
 #                    type=float)
 parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
@@ -36,10 +36,8 @@ parser.add_argument("T", help="final simulation time in seconds",
                     type=float)
 args = parser.parse_args()
 
-#nz = args.nz #10
 
 ip_factor = Constant(50.)
-#dt = 1.0
 restoring_time = 86400.
 Kv = args.Kv
 ##########
@@ -50,11 +48,11 @@ shelf_length = 320E3
 H1 = 80.
 H2 = 600.
 H3 = 720.
-dy = 4000.0
+dy = args.dy
 ny = round(L/dy)
 nz_cavity = 15.
 nz_ocean = 18.
-dz = 40.0
+dz = H2/args.nz
 
 # create mesh
 mesh1d = IntervalMesh(ny, L)
@@ -92,7 +90,7 @@ ds = CombinedSurfaceMeasure(mesh, 5)
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 # Set ocean surface
-water_depth = 720.0
+water_depth = H3
 mesh.coordinates.dat.data[:, 1] -= water_depth
 
 print("You have Comm WORLD size = ", mesh.comm.size)
@@ -385,9 +383,9 @@ ice_drag = 0.0097
 #sop.interpolate(-g*(Temperature_term + Salinity_term))
 #sop_file = File(folder+"boundary_stress.pvd")
 #sop_file.write(sop)
-vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, ice_drag, 0.0)},
-        1: {'un': no_normal_flow}, 2: {'un': no_normal_flow},
-        "bottom": {'un': no_normal_flow, 'drag': 0.0025}}
+vp_bcs = {"top": {'un': no_normal_flow, 'closed': {}, 'drag': conditional(x < shelf_length, ice_drag, 0.0)},
+        1: {'un': no_normal_flow,'closed': {}}, 2: {'un': no_normal_flow,'closed': {}},
+        "bottom": {'un': no_normal_flow,'closed': {}, 'drag': 0.0025}}
 
 
 temp_bcs = {"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
@@ -565,7 +563,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef"+\
          "_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MKuvfix"+str(Kv)\
-         +"_dx4km_lay15_glwall80m_closed_iterlump_vert_icefront_P1dglimTracers/"
+         +"_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dglimTrac_vertice_momadv_no_diric/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -788,14 +786,14 @@ while t < T - 0.5*dt:
                # Write out files
                v_file.write(v_)
                vdg_file.write(vdg)
-#               vdg1_file.write(vdg1)
+        #       vdg1_file.write(vdg1)
                p_file.write(p_)
                t_file.write(temp)
                s_file.write(sal)
                rho_file.write(rho)
                
                rhograd_file.write(gradrho)
-               #kappav_file.write(kappa_v)
+#               kappav_file.write(kappa_v)
                # Write melt rate functions
                m_file.write(melt)
                Q_mixed_file.write(Q_mixed)
