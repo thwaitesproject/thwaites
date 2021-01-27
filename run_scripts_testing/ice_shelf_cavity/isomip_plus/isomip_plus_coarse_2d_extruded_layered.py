@@ -328,7 +328,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), HJ99Gamma=True)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), ice_heat_flux=False)
 
 ##########
 
@@ -380,7 +380,6 @@ Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
 Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
-ice_drag = 0.0097
 
 
 # test stress open_boundary
@@ -390,9 +389,9 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, ice_drag, 0.0)}, 
+vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.5E-3, 0.0)}, 
         1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
-        "bottom": {'un': no_normal_flow, 'drag': 0.0025}} 
+        "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
 temp_bcs = {"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
 
@@ -566,7 +565,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up Vectorfolder
-folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_gammafric_dt"+str(dt)+\
+folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
          "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dgTracers/"

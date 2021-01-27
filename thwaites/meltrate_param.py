@@ -5,17 +5,18 @@ from firedrake import ln
 class MeltRateParam:
     """methods for calculating melt rate parameterisation used in ice-ocean boundary"""
     a = -5.73E-2  # salinity coefficient of freezing equation
-    b = 0.0832  # constant coefficient of freezing equation
+    b = 8.32E-2  # constant coefficient of freezing equation
     c = -7.53E-8  # pressure coefficient of freezing equation
 
     c_p_m = 3974.  # specific heat capacity of mixed layer, J / kg /K
     c_p_i = 2000.  # Specific heat capacity of ice, J/kg/K
+    
     gammaT = 1.0E-4  # thermal exchange velocity, m/s
     gammaS = 5.05E-7 # salt exchange velocity, m/s
 
     GammaT = 1.1E-2  # dimensionless GammaT (capital). gammaT = GammaT.u* from jenkins et al 2010
     GammaS = GammaT / 35.0  # dimensionless GammaS (capital). gammaS = GammaS.u* from jenkins et al 2010
-    C_d = 0.0097  # Drag coefficient for ice, dimensionless
+    C_d = 2.5E-3  # Drag coefficient for ice, dimensionless
 
     Lf = 3.34E5  # Latent heat of fusion of ice, J/kg
 
@@ -25,7 +26,7 @@ class MeltRateParam:
     T_ice = -20.0  # Temperature of far field ice, degC
     
     g = 9.81  # gravitational acceleration, m/s^2
-    rho0 = 1030.  # Reference density of sea water, kg/m^3
+    rho0 = 1028.  # Reference density of sea water, kg/m^3
 
     Pr = 13.8  # Prandtl number, dimnesionless
     Sc = 2432  # Schmidt number, dimensionless
