@@ -218,15 +218,15 @@ sal_eq = ScalarAdvectionDiffusionEquation(S, S, quad_degree=qdeg)
 
 # Terms for equation fields
 
-# momentum source: the buoyancy term Boussinesq approx. From mitgcm default
-T_ref = Constant(0.0)
-S_ref = Constant(35)
-beta_temp = Constant(2.0E-4)
-beta_sal = Constant(7.4E-4)
+# momentum source: the buoyancy term Boussinesq approx. 
+T_ref = Constant(-1.0)
+S_ref = Constant(34.2)
+beta_temp = Constant(3.733E-5)
+beta_sal = Constant(7.843E-4)
 g = Constant(9.81)
 mom_source = as_vector((0.,-g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) 
 
-rho0 = 1030.
+rho0 = 1027.51
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
 rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
 
@@ -399,8 +399,7 @@ sal_bcs = {"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
 
 
 # STRONGLY Enforced BCs
-# open ocean (RHS): no tangential flow because viscosity of outside ocean resists vertical flow.
-strong_bcs = []#DirichletBC(M.sub(0).sub(1), 0, 2)]
+strong_bcs = []
 
 ##########
 
@@ -568,7 +567,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dgTracers/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dgTracers_eos/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
