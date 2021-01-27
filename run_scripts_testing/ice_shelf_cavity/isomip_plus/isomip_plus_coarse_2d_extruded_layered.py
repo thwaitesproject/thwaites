@@ -26,8 +26,6 @@ parser.add_argument("nz", help="no. of layers in vertical",
 #                    type=float)
 #parser.add_argument("restoring_time", help="restoring time in s",
                    # type=float)
-#parser.add_argument("ip_factor", help="dimensionless constant multiplying interior penalty alpha factor",
-                  #  type=float)
 parser.add_argument("dt", help="time step in seconds",
                     type=float)
 parser.add_argument("output_dt", help="output time step in seconds",
@@ -37,8 +35,7 @@ parser.add_argument("T", help="final simulation time in seconds",
 args = parser.parse_args()
 
 
-ip_factor = Constant(50.)
-restoring_time = 86400.
+restoring_time = Constant(0.1*86400.)
 ##########
 
 #  Generate mesh
@@ -565,7 +562,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up Vectorfolder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+\
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
          "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dgTracers_eos/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.

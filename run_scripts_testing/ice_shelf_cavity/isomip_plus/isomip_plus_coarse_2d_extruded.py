@@ -24,10 +24,6 @@ parser.add_argument("dz", help="vertical mesh resolution in m",
 #                    type=float)
 #parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
  #                   type=float)
-#parser.add_argument("restoring_time", help="restoring time in s",
-                   # type=float)
-#parser.add_argument("ip_factor", help="dimensionless constant multiplying interior penalty alpha factor",
-                  #  type=float)
 parser.add_argument("dt", help="time step in seconds",
                     type=float)
 parser.add_argument("output_dt", help="output time step in seconds",
@@ -36,8 +32,7 @@ parser.add_argument("T", help="final simulation time in seconds",
                     type=float)
 args = parser.parse_args()
 
-ip_factor = Constant(50.)
-restoring_time = 86400.
+restoring_time = Constant(0.1*86400.)
 ##########
 
 #  Generate mesh
@@ -532,7 +527,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up folder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)\
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])\
          +"_Muh"+str(mu_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
          +"_dx"+str(round(1e-3*dy))+"kmdz"+str(round(dz))+"m_closed_iterlump_P1dglimSquTritracers_eos/"
 #folder = 'tmp/'
