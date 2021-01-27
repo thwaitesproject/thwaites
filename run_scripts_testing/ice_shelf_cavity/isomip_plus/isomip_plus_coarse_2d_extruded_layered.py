@@ -314,7 +314,6 @@ kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 kappa_temp = kappa
 kappa_sal = kappa
-mu = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 ##########
 
