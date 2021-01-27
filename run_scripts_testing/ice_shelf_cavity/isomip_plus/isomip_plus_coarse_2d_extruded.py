@@ -22,8 +22,8 @@ parser.add_argument("dz", help="vertical mesh resolution in m",
                     type=float)
 #parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
 #                    type=float)
-parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
-                    type=float)
+#parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
+ #                   type=float)
 #parser.add_argument("restoring_time", help="restoring time in s",
                    # type=float)
 #parser.add_argument("ip_factor", help="dimensionless constant multiplying interior penalty alpha factor",
@@ -36,12 +36,8 @@ parser.add_argument("T", help="final simulation time in seconds",
                     type=float)
 args = parser.parse_args()
 
-#nz = args.nz #10
-
 ip_factor = Constant(50.)
-#dt = 1.0
 restoring_time = 86400.
-Kv = args.Kv
 ##########
 
 #  Generate mesh
@@ -50,11 +46,11 @@ shelf_length = 320E3
 H1 = 80.
 H2 = 600.
 H3 = 720.
-dy = args.dy # 4000.0
+dy = args.dy 
 ny = round(L/dy)
 nz_cavity = 15
 nz_ocean = 18
-dz = args.dz # 40.0
+dz = args.dz 
 
 # create mesh
 mesh1d = IntervalMesh(ny, L)
@@ -263,21 +259,23 @@ absorp_sal = conditional(x > (1.0-sponge_fraction) * L,
                          absorption_factor * ((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                          0.0)
 
+# set Viscosity/diffusivity (m^2/s)
+mu_h = Constant(6.0)
+mu_v = Constant(1e-3)
+kappa_h = Constant(1.0)
+kappa_v = Constant(5e-5)
 
-# linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
-kappa_h = Constant(6.0)
-#mu_v = Constant(1*Kv)
+# Code below for Kv switch
 #kappa_v = Function(P1) 
 DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinity over restoring region
 gradrho_scale = DeltaS * beta_sal / water_depth  # rough oredr of magnitude estimate for vertical gradient of density anomaly. units m^-1
 #kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-3, 1e-3, 1e-1))
-kappa_v = Constant(Kv)
 
+mu = as_tensor([[mu_h, 0], [0, mu_v]])
 kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 kappa_temp = kappa
 kappa_sal = kappa
-mu = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 
 # Interior penalty term
@@ -289,9 +287,9 @@ mu = as_tensor([[kappa_h, 0], [0, kappa_v]])
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
 vp_fields = {'viscosity': mu, 'source': mom_source}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': vdg1, 'source': source_temp,
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
                'absorption coefficient': absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': vdg1, 'source': source_sal,
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
               'absorption coefficient': absorp_sal}
 
 ##########
@@ -536,8 +534,9 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up folder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_HJ99_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)+"_KMuh"+str(kappa_h.values()[0])+"_MuKv"+str(Kv)\
-         +"_dx"+str(round(1e-3*dy))+"kmdz"+str(round(dz))+"m_closed_iterlump_P1dglimSquTritracersVelAdvectonly/"
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time)\
+         +"_Muh"+str(mu_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
+         +"_dx"+str(round(1e-3*dy))+"kmdz"+str(round(dz))+"m_closed_iterlump_P1dglimSquTritracers/"
 #folder = 'tmp/'
 
 
@@ -710,12 +709,12 @@ while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
         vdg.project(v_)  # DQ2 velocity for plotting
-        vdg1.project(v_) # DQ1 velocity for 
-        v_comp.interpolate(vdg1[0])
-        limiter.apply(v_comp)
-        w_comp.interpolate(vdg1[1])
-        limiter.apply(w_comp)
-        vdg1.interpolate(as_vector((v_comp, w_comp)))
+#        vdg1.project(v_) # DQ1 velocity for 
+#        v_comp.interpolate(vdg1[0])
+#        limiter.apply(v_comp)
+#        w_comp.interpolate(vdg1[1])
+#        limiter.apply(w_comp)
+#        vdg1.interpolate(as_vector((v_comp, w_comp)))
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
@@ -726,7 +725,7 @@ while t < T - 0.5*dt:
 
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
     gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
-#    kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
+    #kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
 
     step += 1
     t += dt
@@ -762,14 +761,14 @@ while t < T - 0.5*dt:
                # Write out files
                v_file.write(v_)
                vdg_file.write(vdg)
-               vdg1_file.write(vdg1)
+#               vdg1_file.write(vdg1)
                p_file.write(p_)
                t_file.write(temp)
                s_file.write(sal)
                rho_file.write(rho)
                
                rhograd_file.write(gradrho)
- #              kappav_file.write(kappa_v)
+#               kappav_file.write(kappa_v)
                # Write melt rate functions
                m_file.write(melt)
                Q_mixed_file.write(Q_mixed)
