@@ -7,7 +7,7 @@ S = 33.5
 T = -2.5
 p = 0
 z = -1000.
-u = 0.0001
+u = 0.1
 
 ######################################################################
 
@@ -198,28 +198,28 @@ wb = velocity of ocean normal to boundary''')
 mp = ThreeEqMeltRateParam(S, T, p, z, u)
 m = mp.wb*(mp.rho0/mp.rho_ice)
 m3eq = m
-print("Three eq mp: m = ", m*3600*24*265,
+print("Three eq mp: m = ", m*3600*24*365,
       "m/yr", "|m - m_3eq| / |m_3eq|  = ", str.format('{0:.2f}', 100*abs(m-m3eq)/abs(m3eq)), "%")
 
 mp = ThreeEqMeltRateParam(S, T, p, z, u, False)
 m = mp.wb*(mp.rho0/mp.rho_ice)
-print("Three eq mp wout Qice: m = ", m*3600*24*265,
+print("Three eq mp wout Qice: m = ", m*3600*24*365,
       "m/yr", "|m - m_3eq| / |m_3eq|  = ", str.format('{0:.2f}', 100*abs(m-m3eq)/abs(m3eq)), "%")
 
 mp = ThreeEqMeltRateParam(S, T, p, z)
 m = mp.wb*(mp.rho0/mp.rho_ice)
-print("Three eq mp wout u*: m = ", m*3600*24*265,
+print("Three eq mp wout u*: m = ", m*3600*24*365,
       "m/yr", "|m - m_3eq| / |m_3eq|  = ", str.format('{0:.2f}', 100*abs(m-m3eq)/abs(m3eq)), "%")
 
 
 mp = ThreeEqMeltRateParam(S, T, p, z, None, False)
 m = mp.wb*(mp.rho0/mp.rho_ice)
-print("Three eq mp wout u* & Qice: m = ", m*3600*24*265,
+print("Three eq mp wout u* & Qice: m = ", m*3600*24*365,
       "m/yr", "|m - m_3eq| / |m_3eq|  = ", str.format('{0:.2f}', 100*abs(m-m3eq)/abs(m3eq)), "%")
 
 mp = TwoEqMeltRateParam(S, T, p, z)
 m = mp.wb*(mp.rho0/mp.rho_ice)
-print("Two eq mp: m = ", m*3600*24*265,
+print("Two eq mp: m = ", m*3600*24*365,
       "m/yr", "|m - m_3eq| / |m_3eq|  = ", str.format('{0:.2f}', 100*abs(m-m3eq)/abs(m3eq)), "%")
 
 #######################################################################################
