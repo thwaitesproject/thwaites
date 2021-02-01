@@ -49,23 +49,57 @@ ny = round(L/dy)
 dz = H2/args.nz #40.0
 
 # create mesh
-mesh1d = IntervalMesh(ny, L)
+base_mesh = IntervalMesh(ny, L)
 layers = []
 cell = 0
 yr = 0
 min_dz = 0.5*dz # if top cell is thinner than this, merge with cell below
 tiny_dz = 0.01*dz # workaround zero measure facet issue (fd issue #1858)
 
-for i in range(ny):
-    yr += dy  # y of right-node (assumed to be the higher one)
-    if yr <= shelf_length:
-        height = H2
-    else:
-        height = H3
-    ncells = ceil((height-min_dz)/dz)
-    layers.append([0, ncells])
+x_base = SpatialCoordinate(base_mesh)
 
-mesh = ExtrudedMesh(mesh1d, layers, layer_height=dz)
+P1 = FunctionSpace(base_mesh, "CG", 1)
+P1_ocean_thickness = Function(P1)
+P1_ocean_thickness.interpolate(conditional(x_base[0] - 0.5*dy < shelf_length, H2, H3))
+
+def extruded_cavity_mesh(base_mesh, ocean_thickness):
+    P0dg = FunctionSpace(base_mesh, "DG", 0)
+    P0dg_cells = Function(P0dg)
+    tmp = ocean_thickness.copy()
+    P0dg_cells.assign(np.finfo(0.).min)
+    par_loop("""for (int i=0; i<bathy.dofs; i++) {
+            bathy_max[0] = fmax(bathy[i], bathy_max[0]);
+            }""",
+            dx, {'bathy_max': (P0dg_cells, RW), 'bathy': (tmp, READ)})
+
+    P0dg_cells /= dz
+
+    P0dg_cells_array = P0dg_cells.dat.data_ro_with_halos[:]
+
+    PETSc.Sys.Print("P0dg cells ", P0dg_cells_array)
+
+
+    for i in P0dg_cells_array:
+        print(i)
+        layers.append([0, i])
+
+    mesh = ExtrudedMesh(base_mesh, layers, layer_height=dz)
+    return mesh 
+
+mesh = extruded_cavity_mesh(base_mesh, P1_ocean_thickness)
+x, z = SpatialCoordinate(mesh)
+
+# Define ocean cavity thickness on extruded mesh
+P1_extruded = FunctionSpace(mesh, 'CG', 1)
+P1_ocean_thickness_ext = Function(P1_extruded)
+P1_ocean_thickness_ext.interpolate(conditional(x - 0.5*dy < shelf_length, H2, H3))
+
+# move top nodes to correct position:
+cfs = mesh.coordinates.function_space()
+bc = DirichletBC(cfs, as_vector((x, P1_ocean_thickness_ext)), "top")
+
+bc.apply(mesh.coordinates)
+
 
 # Scale the mesh to make ice shelf slope
 Vc = mesh.coordinates.function_space()
@@ -73,11 +107,6 @@ x, z = SpatialCoordinate(mesh)
 f = Function(Vc).interpolate(as_vector([x, conditional(x < shelf_length, ((x/shelf_length)*(H2-H1) + H1)*z/H2, z)]))
 mesh.coordinates.assign(f)
 
-# move top nodes to correct position:
-cfs = mesh.coordinates.function_space()
-x, y = SpatialCoordinate(mesh)
-bc = DirichletBC(cfs, as_vector((x, conditional(x>shelf_length, H3, H1+x/shelf_length * (H2-H1)))), "top")
-bc.apply(mesh.coordinates)
 
 ds = CombinedSurfaceMeasure(mesh, 5)
 
@@ -564,7 +593,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dgTracers_eos/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dgTracers_eos_p1thickness/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
