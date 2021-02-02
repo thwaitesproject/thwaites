@@ -143,16 +143,21 @@ print(assemble(avg(dot(n,n))*dS_h(domain=mesh)))
 PETSc.Sys.Print("mesh cell type", mesh.ufl_cell())
 
 # Set up function spaces
-U0 = FiniteElement("CG", triangle, 2)
-U1 = VectorElement("DG", triangle, 1) 
+# Nedelec wedge element. Discontinuous in normal component
+# continuous in tangential component.
+N2_1 = FiniteElement("N2curl", triangle, 1)
+CG_2 = FiniteElement("CG", interval, 2)
+N2CG = TensorProductElement(N2_1, CG_2)
+Ned_horiz = HCurlElement(N2CG)
+P2tr = FiniteElement("CG", triangle, 2)
+P1dg = FiniteElement("DG", interval, 1)
+P2P1 = TensorProductElement(P2tr, P1dg)
+Ned_vert = HCurlElement(P2P1)
+Ned_wedge = Ned_horiz + Ned_vert
+V = FunctionSpace(mesh, Ned_wedge)
 
-V0 = FiniteElement("CG", interval, 2)
-V1 = VectorElement("DG", interval,1)
+W0 = TensorProductElement(P2tr, CG_2) 
 
-W0 = TensorProductElement(U0, V0)  # pressure
-W1 = TensorProductElement(U1, V0) + TensorProductElement(U0, V1)  # grad W0, i.e grad P so velocity!
-
-V = FunctionSpace(mesh, W1) # Velocity space
 W = FunctionSpace(mesh, W0)  # pressure space
 M = MixedFunctionSpace([V, W])
 
