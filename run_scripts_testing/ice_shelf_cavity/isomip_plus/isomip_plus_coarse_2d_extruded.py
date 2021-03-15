@@ -517,7 +517,7 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
 if not DUMP:
     # should not be done when picking up
     with timed_stage('initial_pressure'):
-        vp_timestepper.initialize_pressure(solver_parameters=gmres_solver_parameters)
+        vp_timestepper.initialize_pressure()
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)

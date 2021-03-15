@@ -144,7 +144,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         self.predictor_problem = firedrake.NonlinearVariationalProblem(self.Fstar, self.u_star)
         self.predictor_solver = firedrake.NonlinearVariationalSolver(self.predictor_problem,
                                                                      solver_parameters=self.predictor_solver_parameters,
-                                                                     options_prefix='predictor_' + self.name)
+                                                                     options_prefix='predictor_momentum')
 
         # the correction solve, solving the coupled system:
         #   u1 = u* - dt*G ( p_theta - p_lag_theta)
@@ -176,7 +176,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         self._initialized = True
 
-    def initialize_pressure(self, solver_parameters):
+    def initialize_pressure(self):
         """Perform pseudo timestep to establish good initial pressure."""
         if not self._initialized:
             self.initialize(self.solution)
@@ -187,7 +187,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         Fstar -= self.dt_const*self.equations[0].residual(self.u_star_test, u_old, u_old, self.fields_star, bcs=self.bcs)
         # as an explicit solve this is now a trivial mass matrix solve, but let's just borrow the solver parameters of the normal predictor solve
         firedrake.solve(Fstar==0, self.u_star, solver_parameters=self.predictor_solver_parameters,
-                options_prefix='predictor_' + self.name)
+                options_prefix='predictor_momentum_initialise_pressure')
         # now do the usual pressure projection step
         # note that the combination of these two is equivalent with solving the fully coupled
         # system but with all momentum terms handled explicitly on the rhs

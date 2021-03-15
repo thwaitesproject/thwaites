@@ -40,7 +40,7 @@ restoring_time = Constant(0.1*86400.)
 
 #  Generate mesh
 L = 480E3
-Ly = 80E3
+Ly = 4E3
 shelf_length = 320E3
 H1 = 80.
 H2 = 600.
@@ -79,7 +79,6 @@ def extruded_cavity_mesh(base_mesh, ocean_thickness):
 
     P0dg_cells_array = P0dg_cells.dat.data_ro_with_halos[:]
 
-    PETSc.Sys.Print("P0dg cells ", P0dg_cells_array)
 
 
     for i in P0dg_cells_array:
@@ -145,7 +144,7 @@ PETSc.Sys.Print("mesh cell type", mesh.ufl_cell())
 # Set up function spaces
 # Nedelec wedge element. Discontinuous in normal component
 # continuous in tangential component.
-N2_1 = FiniteElement("N2curl", triangle, 1)
+N2_1 = FiniteElement("N2curl", triangle, 1, variant="integral")
 CG_2 = FiniteElement("CG", interval, 2)
 N2CG = TensorProductElement(N2_1, CG_2)
 Ned_horiz = HCurlElement(N2CG)
@@ -202,7 +201,7 @@ rho_anomaly = Function(P1_extruded, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/data/3d_isomip_plus/first_tests/02.10.20_3d_HJ99_gammafric_dt1800.0_dtOutput86400.0_T8640000.0_ip50.0_constantTres86400.0_KMuh6.0_Muv0.01_Kv0.01_dxy4km_18layers_gl_wall_60m_closed_iterative_initial_solve_coriolis_hypre_pc_press_corr/dump.h5" 
+dump_file = "/data/3d_isomip_plus/extruded_meshes/05.03.21_3d_isomip+_dt900.0_dtOut900.0_T9000.0_ipdef_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80mLy4km_closed_iterlump_nolim_nomelt_preddir/dump.h5" 
 
 DUMP = False
 if DUMP:
@@ -419,9 +418,9 @@ vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.
         3: {'un': no_normal_flow}, 4: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
-temp_bcs = {"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
+temp_bcs = {}#"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
 
-sal_bcs = {"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
+sal_bcs = {}#"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
 
 
 # STRONGLY Enforced BCs
@@ -444,19 +443,21 @@ mumps_solver_parameters = {
 }
 
 pressure_projection_solver_parameters = {
+        'snes_monitor': None,
         'snes_type': 'ksponly',
         'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
+        'ksp_monitor_true_residual': None,
         'mat_type': 'matfree',
         'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'schur',
         'pc_fieldsplit_schur_fact_type': 'full',
         # velocity mass block:
         'fieldsplit_0': {
-            'ksp_type': 'preonly',
+            'ksp_converged_reason': None,
+            'ksp_monitor_true_residual': None,
+            'ksp_type': 'cg',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
-            'assembled_ksp_type': 'cg',
-            'assembled_ksp_converged_reason': None, # just for initial debugging, remove when things are working
             'assembled_pc_type': 'bjacobi',
             'assembled_sub_pc_type': 'sor',
             },
@@ -467,11 +468,11 @@ pressure_projection_solver_parameters = {
             'ksp_type': 'preonly',
             'pc_type': 'python',
             'pc_python_type': 'thwaites.LaplacePC',
-            #'schur_ksp_converged_reason': None,
             'laplace_pc_type': 'ksp',
             'laplace_ksp_ksp_type': 'cg',
             'laplace_ksp_ksp_rtol': 1e-7,
             'laplace_ksp_ksp_atol': 1e-9,
+            'laplace_ksp_ksp_converged_reason': None,
             'laplace_ksp_ksp_monitor_true_residual': None,
             'laplace_ksp_pc_type': 'python',
             'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
@@ -485,18 +486,30 @@ if False:
     fs1['ksp_monitor_true_residual'] = None
     fs1['laplace_ksp_ksp_type'] = 'preonly'
 
+
+predictor_solver_parameters = {
+        'snes_monitor': None,
+        'snes_type': 'ksponly',
+        'ksp_type': 'gmres',
+        'pc_type': 'hypre',
+        'ksp_converged_reason': None,
+        'ksp_monitor_true_residual': None,
+        'ksp_rtol': 1e-7,
+        'ksp_max_it': 300,
+        }
+
 gmres_solver_parameters = {
         'snes_monitor': None,
         'snes_type': 'ksponly',
         'ksp_type': 'gmres',
         'pc_type': 'sor',
         'ksp_converged_reason': None,
+        'ksp_monitor_true_residual': None,
         'ksp_rtol': 1e-5,
         'ksp_max_it': 300,
         }
 
 vp_solver_parameters = pressure_projection_solver_parameters
-u_solver_parameters = gmres_solver_parameters
 temp_solver_parameters = gmres_solver_parameters
 sal_solver_parameters = gmres_solver_parameters
 
@@ -516,10 +529,9 @@ output_step = output_dt/dt
 
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
-                                                          predictor_solver_parameters=u_solver_parameters,
+                                                          predictor_solver_parameters=predictor_solver_parameters,
                                                           picard_iterations=1,
                                                           pressure_nullspace=VectorSpaceBasis(constant=True))
-
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
 # are meant to decouple from pressure projection, but won't if pressure is not initialised
@@ -527,19 +539,19 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
 if not DUMP:
     # should not be done when picking up
     with timed_stage('initial_pressure'):
-        vp_timestepper.initialize_pressure(solver_parameters=gmres_solver_parameters)
+        for i in range(1):
+            vp_timestepper.initialize_pressure()
 
-#u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
 sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
 
 ##########
 
 # Set up Vectorfolder
-folder = "/data/3d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
+folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_iterlump_P1dgTracers_eos_p1thickness/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy4km_closed_iterlump_nolim_nomelt_pred_iter_integral_theta/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -631,8 +643,8 @@ while t < T - 0.5*dt:
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
 
-    limiter.apply(sal)
-    limiter.apply(temp)
+    #limiter.apply(sal)
+    #limiter.apply(temp)
 
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
     gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
