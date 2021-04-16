@@ -1,7 +1,7 @@
 from .time_stepper import TimeIntegratorBase
 from .momentum_equation import PressureGradientTerm, DivergenceTerm
 import firedrake
-
+from pyop2.profiling import timed_stage
 
 class CoupledTimeIntegrator(TimeIntegratorBase):
     def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}):
@@ -206,9 +206,11 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
     def picard_step(self):
         self.solution_lag.assign(self.solution)
         # solve for self.u_star
-        self.predictor_solver.solve()
+        with timed_stage("momentum_solve"):
+            self.predictor_solver.solve()
         # pressure correction solve, solves for final solution (corrected velocity and pressure)
-        self.solver.solve()
+        with timed_stage("correction_solve"):
+            self.solver.solve()
 
 class CoupledEquationsTimeIntegrator(CoupledTimeIntegrator):
     def __init__(self, equations, solution, fields, dt, bcs=None, mass_terms=None, solver_parameters={}, strong_bcs=None):
