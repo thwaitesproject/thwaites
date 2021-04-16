@@ -194,6 +194,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         self.solver.solve()
         # reset velocity to its initial value:
         u.assign(u_old)
+        self.u_star.assign(u_old)
 
     def advance(self, t, update_forcings=None):
         if not self._initialized:
