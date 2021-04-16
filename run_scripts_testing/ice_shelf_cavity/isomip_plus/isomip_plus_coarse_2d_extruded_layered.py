@@ -85,6 +85,10 @@ def extruded_cavity_mesh(base_mesh, ocean_thickness):
 mesh = extruded_cavity_mesh(base_mesh, P1_ocean_thickness)
 x, z = SpatialCoordinate(mesh)
 
+P0_extruded = FunctionSpace(mesh, 'DG', 0)
+p0mesh_cells = Function(P0_extruded)
+PETSc.Sys.Print("number of cells:", len(p0mesh_cells.dat.data[:]))
+
 # Define ocean cavity thickness on extruded mesh
 P1_extruded = FunctionSpace(mesh, 'CG', 1)
 P1_ocean_thickness_ext = Function(P1_extruded)
@@ -417,9 +421,9 @@ vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.
         1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
-temp_bcs = {}#"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
+temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)}}
 
-sal_bcs = {}#"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
+sal_bcs = {"top": {'flux':  conditional(x + 5*dy < shelf_length, -mp.S_flux_bc, 0.0)}}
 
 
 # STRONGLY Enforced BCs
@@ -489,7 +493,7 @@ predictor_solver_parameters = {
         'ksp_type': 'gmres',
         'pc_type': 'hypre',
         'ksp_converged_reason': None,
-        'ksp_rtol': 1e-7,
+        'ksp_rtol': 1e-5,
         'ksp_max_it': 300,
         }
 
@@ -604,7 +608,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_nolim_nomel/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_nolim_offsetmelt_lim/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -788,8 +792,8 @@ while t < T - 0.5*dt:
         sal_timestepper.advance(t)
 
 
-    #limiter.apply(sal)
-    #limiter.apply(temp)
+    limiter.apply(sal)
+    limiter.apply(temp)
 
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
     gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
