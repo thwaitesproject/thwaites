@@ -11,7 +11,6 @@ import numpy as np
 from math import ceil
 from pyop2.profiling import timed_stage
 ##########
-
 PETSc.Sys.popErrorHandler()
 
 parser = argparse.ArgumentParser()
@@ -69,7 +68,7 @@ def extruded_cavity_mesh(base_mesh, ocean_thickness):
     P0dg = FunctionSpace(base_mesh, "DG", 0)
     P0dg_cells = Function(P0dg)
     tmp = ocean_thickness.copy()
-    P0dg_cells.assign(np.finfo(0.).min)
+    P0dg_cells.assign(-1.0)#np.finfo(0.).min)
     par_loop("""for (int i=0; i<bathy.dofs; i++) {
             bathy_max[0] = fmax(bathy[i], bathy_max[0]);
             }""",
@@ -89,6 +88,11 @@ def extruded_cavity_mesh(base_mesh, ocean_thickness):
 
 mesh = extruded_cavity_mesh(base_mesh, ocean_thickness)
 x, y, z = SpatialCoordinate(mesh)
+
+
+P0_extruded = FunctionSpace(mesh, 'DG', 0)
+p0mesh_cells = Function(P0_extruded)
+PETSc.Sys.Print("number of cells:", len(p0mesh_cells.dat.data[:]))
 
 P1_extruded = FunctionSpace(mesh, 'CG', 1)
 
@@ -183,6 +187,7 @@ v_._name = "velocity"
 p_._name = "perturbation pressure"
 vdg = Function(VDG, name="velocity")
 vdg1 = Function(VDG1, name="velocity")
+u_pred_dg = Function(VDG, name="pred_velocity")
 
 rho = Function(K, name="density")
 temp = Function(K, name="temperature")
@@ -248,7 +253,9 @@ else:
 
 
 ##########
-
+degree = V.ufl_element().degree()
+PETSc.Sys.Print("velocity: degree", degree )
+PETSc.Sys.Print("velocity: hor/vert degree", max(degree[0], degree[1]))
 # Set up equations
 qdeg = 10
 
@@ -362,7 +369,7 @@ kappa_sal = kappa
 
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': Constant(3.0)}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
                'absorption coefficient': absorp_temp}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
@@ -418,9 +425,9 @@ vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.
         3: {'un': no_normal_flow}, 4: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
-temp_bcs = {}#"top": {'flux': conditional(x < shelf_length, -mp.T_flux_bc, 0.0)}}
+temp_bcs = {"top": {'flux': conditional(x + 5.0 * dy < shelf_length, -mp.T_flux_bc, 0.0)}}
 
-sal_bcs = {}#"top": {'flux':  conditional(x < shelf_length, -mp.S_flux_bc, 0.0)}}
+sal_bcs = {"top": {'flux':  conditional(x + 5.0 * dy < shelf_length, -mp.S_flux_bc, 0.0)}}
 
 
 # STRONGLY Enforced BCs
@@ -446,7 +453,7 @@ pressure_projection_solver_parameters = {
         'snes_monitor': None,
         'snes_type': 'ksponly',
         'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
-        'ksp_monitor_true_residual': None,
+#        'ksp_monitor_true_residual': None,
         'mat_type': 'matfree',
         'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'schur',
@@ -454,7 +461,7 @@ pressure_projection_solver_parameters = {
         # velocity mass block:
         'fieldsplit_0': {
             'ksp_converged_reason': None,
-            'ksp_monitor_true_residual': None,
+#            'ksp_monitor_true_residual': None,
             'ksp_type': 'cg',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
@@ -473,7 +480,7 @@ pressure_projection_solver_parameters = {
             'laplace_ksp_ksp_rtol': 1e-7,
             'laplace_ksp_ksp_atol': 1e-9,
             'laplace_ksp_ksp_converged_reason': None,
-            'laplace_ksp_ksp_monitor_true_residual': None,
+#            'laplace_ksp_ksp_monitor_true_residual': None,
             'laplace_ksp_pc_type': 'python',
             'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
@@ -492,9 +499,10 @@ predictor_solver_parameters = {
         'snes_type': 'ksponly',
         'ksp_type': 'gmres',
         'pc_type': 'hypre',
+        #'pc_hypre_boomeramg_strong_threshold': 0.5,
         'ksp_converged_reason': None,
-        'ksp_monitor_true_residual': None,
-        'ksp_rtol': 1e-7,
+#        'ksp_monitor_true_residual': None,
+        'ksp_rtol': 1e-5,
         'ksp_max_it': 300,
         }
 
@@ -504,7 +512,7 @@ gmres_solver_parameters = {
         'ksp_type': 'gmres',
         'pc_type': 'sor',
         'ksp_converged_reason': None,
-        'ksp_monitor_true_residual': None,
+#        'ksp_monitor_true_residual': None,
         'ksp_rtol': 1e-5,
         'ksp_max_it': 300,
         }
@@ -551,7 +559,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy4km_closed_iterlump_nolim_nomelt_pred_iter_integral_theta/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy4km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -606,6 +614,11 @@ m_file.write(melt)
 full_pressure_file = File(folder+"full_pressure.pvd")
 full_pressure_file.write(full_pressure)
 
+u_pred_star_file = File(folder+"u_star.pvd")
+u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
+u_pred_star_file.write(u_pred_dg)
+
+
 ##########
 
 with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
@@ -643,8 +656,8 @@ while t < T - 0.5*dt:
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
 
-    #limiter.apply(sal)
-    #limiter.apply(temp)
+#    limiter.apply(sal)
+#    limiter.apply(temp)
 
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
     gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
@@ -677,6 +690,8 @@ while t < T - 0.5*dt:
 
            
             # Write out files
+           u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
+           u_pred_star_file.write(u_pred_dg)
            v_file.write(v_)
            vdg_file.write(vdg)
    #        vdg1_file.write(vdg1)

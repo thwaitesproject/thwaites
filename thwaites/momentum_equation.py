@@ -129,7 +129,7 @@ class ViscosityTerm(BaseTerm):
             sigma = 1.0
         else:
             nf = self.mesh.ufl_cell().num_facets()
-            sigma = alpha * cell_edge_integral_ratio(self.mesh, degree-1) * nf
+            sigma = alpha * cell_edge_integral_ratio(self.mesh, degree) * nf
         # we use (3.23) + (3.20) from https://www.researchgate.net/publication/260085826
         # instead of maximum over two adjacent cells + and -, we just sum (which is 2*avg())
         # and the for internal facets we have an extra 0.5:
