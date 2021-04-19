@@ -499,7 +499,7 @@ predictor_solver_parameters = {
         'snes_type': 'ksponly',
         'ksp_type': 'gmres',
         'pc_type': 'hypre',
-        #'pc_hypre_boomeramg_strong_threshold': 0.5,
+        'pc_hypre_boomeramg_strong_threshold': 0.6,
         'ksp_converged_reason': None,
 #        'ksp_monitor_true_residual': None,
         'ksp_rtol': 1e-5,
