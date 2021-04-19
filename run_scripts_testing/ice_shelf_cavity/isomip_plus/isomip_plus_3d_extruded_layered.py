@@ -206,9 +206,9 @@ rho_anomaly = Function(P1_extruded, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/data/3d_isomip_plus/extruded_meshes/05.03.21_3d_isomip+_dt900.0_dtOut900.0_T9000.0_ipdef_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80mLy4km_closed_iterlump_nolim_nomelt_preddir/dump.h5" 
+dump_file = "/data/3d_isomip_plus/extruded_meshes/23.03.21_3d_isomip+_dt900.0_dtOut3600.0_T8640000.0_ipdef_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80mLy4km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt/dump.h5" 
 
-DUMP = False
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -644,7 +644,6 @@ step = 0
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
-        vdg.project(v_)  # DQ2 velocity for plotting
 #        vdg1.project(v_) # DQ1 velocity for 
 #        v_comp.interpolate(vdg1[0])
 #        limiter.apply(v_comp)
@@ -693,6 +692,7 @@ while t < T - 0.5*dt:
            u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
            u_pred_star_file.write(u_pred_dg)
            v_file.write(v_)
+           vdg.project(v_)  # DQ2 velocity for plotting
            vdg_file.write(vdg)
    #        vdg1_file.write(vdg1)
            p_file.write(p_)
