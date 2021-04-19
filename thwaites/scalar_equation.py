@@ -121,21 +121,22 @@ class ScalarDiffusionTerm(BaseTerm):
         else:
             nf = self.mesh.ufl_cell().num_facets()
             sigma = alpha * cell_edge_integral_ratio(self.mesh, degree-1) * nf
-        # we use (3.23) + (3.20) from https://www.researchgate.net/publication/260085826
-        # instead of maximum over two adjacent cells + and -, we just sum (which is 2*avg())
-        # and the for internal facets we have an extra 0.5:
-        sigma *= avg(FacetArea(self.mesh)/CellVolume(self.mesh))
 
         if not is_continuous(self.trial_space):
-            F += sigma*inner(jump(phi, n), dot(avg(diff_tensor), jump(q, n)))*self.dS
+            # we use (3.23) + (3.20) from https://www.researchgate.net/publication/260085826
+            # instead of maximum over two adjacent cells + and -, we just sum (which is 2*avg())
+            # and the for internal facets we have an extra 0.5:
+            sigma_int = sigma * avg(FacetArea(self.mesh)/CellVolume(self.mesh))
+            F += sigma_int*inner(jump(phi, n), dot(avg(diff_tensor), jump(q, n)))*self.dS
             F += -inner(avg(dot(diff_tensor, grad(phi))), jump(q, n))*self.dS
             F += -inner(jump(phi, n), avg(dot(diff_tensor, grad(q))))*self.dS
 
         for id, bc in bcs.items():
             if 'q' in bc:
                 jump_q = q-bc['q']
+                sigma_ext = sigma * FacetArea(self.mesh)/CellVolume(self.mesh)
                 # this corresponds to the same 3 terms as the dS integrals for DG above:
-                F += 2*sigma*phi*inner(n, dot(diff_tensor, n))*jump_q*self.ds(id)
+                F += 2*sigma_ext*phi*inner(n, dot(diff_tensor, n))*jump_q*self.ds(id)
                 F += -inner(dot(diff_tensor, grad(phi)), n)*jump_q*self.ds(id)
                 F += -inner(phi*n, dot(diff_tensor, grad(q))) * self.ds(id)
                 if 'flux' in bc:
