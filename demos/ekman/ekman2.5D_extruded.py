@@ -55,6 +55,17 @@ ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 U = FunctionSpace(mesh, ele)
 VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
 
+P0_extruded = FunctionSpace(mesh, 'DG', 0)
+p0mesh_cells = Function(P0_extruded)
+PETSc.Sys.Print("number of cells:", len(p0mesh_cells.dat.data[:]))
+
+P1_extruded = FunctionSpace(mesh, 'CG', 1)
+print("velocity dofs:", V.dim())
+print("pressure dofs:", W.dim())
+print("combined dofs:", M.dim())
+print("u_vel dofs:", U.dim())
+print("no of nodes:", P1_extruded.dim())
+print("no of cells:", P0_extruded.dim())
 ##########
 
 # Set up functions
@@ -105,7 +116,7 @@ u_eq = ScalarVelocity2halfDEquation(U, U)
 g = Constant(9.81)
 # since the density is constant we don't need a bouyancy term. (also means we don't need a stress bc on the side walls
 # n.b our formulation is rho'* g where rho' is rho - rho0.
-mom_source = as_vector((0.,0.0))  
+mom_source = as_vector((0.,0.))  
 
 # coriolis frequency f plane assumption
 f = Constant(1.032E-4)
@@ -119,15 +130,17 @@ mu = as_tensor([[mu_h, 0], [0, mu_v]])
 
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source,
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': Constant(2.0), 
              'coriolis_frequency': f, 'u_velocity': u}
 u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f}
 ##########
 
 # Boundary conditions
 # from fluidity
-wind_stress = as_vector((1.775E-4, 0))
-vp_bcs = {"top": {'stress': wind_stress}, "bottom": {'u': as_vector((0.0, 0.0))}}
+tau_y = Constant(1.775e-4)
+
+wind_stress = as_vector((tau_y, 0))
+vp_bcs = {"top": {'un': 0.0, 'stress': wind_stress}, "bottom": {'un':0.0 }}# as_vector((0.0, 0.0))}}
 u_bcs = {"bottom": {'q': 0.0}}
 
 # STRONGLY Enforced BCs
@@ -160,6 +173,7 @@ pressure_projection_solver_parameters = {
         # velocity mass block:
         'fieldsplit_0': {
             'ksp_converged_reason': None,
+#            'ksp_monitor_true_residual': None,
             'ksp_type': 'cg',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
@@ -179,6 +193,7 @@ pressure_projection_solver_parameters = {
             'laplace_ksp_ksp_rtol': 1e-7,
             'laplace_ksp_ksp_atol': 1e-9,
             'laplace_ksp_ksp_converged_reason': None,
+#            'laplace_ksp_ksp_monitor_true_residual': None,
             'laplace_ksp_pc_type': 'python',
             'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
@@ -189,6 +204,7 @@ if False:
     fs1['ksp_rtol'] = 1e-7
     fs1['ksp_atol'] = 1e-9
     fs1['ksp_monitor_true_residual'] = None
+    fs1['ksp_converged_reason'] = None
     fs1['laplace_ksp_ksp_type'] = 'preonly'
 
 predictor_solver_parameters = {
@@ -197,6 +213,7 @@ predictor_solver_parameters = {
         'ksp_type': 'gmres',
         'pc_type': 'hypre',
         'ksp_converged_reason': None,
+        'ksp_monitor_true_residual': None,
         'ksp_rtol': 1e-5,
         'ksp_max_it': 300,
         }
@@ -223,7 +240,7 @@ u_solver_parameters = gmres_solver_parameters
 # define time steps
 dt = 60.
 T = 3600*24*10    
-output_dt = 60.
+output_dt = 3600.
 output_step = output_dt/dt
 
 ##########
@@ -233,7 +250,8 @@ output_step = output_dt/dt
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
                                                           predictor_solver_parameters=predictor_solver_parameters,
-                                                          picard_iterations=1)
+                                                          picard_iterations=1,
+                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
 
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
@@ -250,7 +268,7 @@ u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_
 
 # Set up Vectorfolder
 folder = "/data/ekman2.5D/extruded_meshes/"+str(args.date)+"_2.5d_ekman+_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_Muh"+str(mu_h.values()[0])+"_Muv"+str(mu_v.values()[0])
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip2_Muh"+str(mu_h.values()[0])+"_Muv"+str(mu_v.values()[0])+"_all_iterclosetop_bottomun/"
 
 
 ###########
@@ -327,7 +345,7 @@ while t < T - 0.5*dt:
     
            u_file.write(u)
            time_str = str(step)
-           depth_profile_to_csv(depth_profile, velocity_depth_profile_mp, step_str)
+           depth_profile_to_csv(depth_profile, velocity_depth_profile_mp, time_str)
     
            PETSc.Sys.Print("t=", t)
     
