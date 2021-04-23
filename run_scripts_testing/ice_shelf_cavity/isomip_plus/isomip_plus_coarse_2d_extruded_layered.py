@@ -379,28 +379,6 @@ full_pressure.interpolate(mp.P_full)
 
 ##########
 
-# Plotting top boundary.
-shelf_boundary_points =  get_top_surface(cavity_xlength=5000.,cavity_ylength=L, cavity_height=H2, water_depth=water_depth, dx=500.0,dy=500.) 
-top_boundary_mp = pd.DataFrame()
-
-
-def top_boundary_to_csv(boundary_points, df, t_str):
-    df['Qice_t_' + t_str] = Q_ice.at(boundary_points)
-    df['Qmixed_t_' + t_str] = Q_mixed.at(boundary_points)
-    df['Qlat_t_' + t_str] = Q_latent.at(boundary_points)
-    df['Qsalt_t_' + t_str] = Q_s.at(boundary_points)
-    df['Melt_t' + t_str] = melt.at(boundary_points)
-    df['Tb_t_' + t_str] = Tb.at(boundary_points)
-    df['P_t_' + t_str] = full_pressure.at(boundary_points)
-    df['Sal_t_' + t_str] = sal.at(boundary_points)
-    df['Temp_t_' + t_str] = temp.at(boundary_points)
-    df["integrated_melt_t_ " + t_str] = assemble(melt * ds(106))
-
-    if mesh.comm.rank == 0:
-        top_boundary_mp.to_csv(folder+"top_boundary_data.csv")
-
-
-##########
 
 # Boundary conditions
 # top boundary: no normal flow, drag flowing over ice
@@ -522,63 +500,6 @@ sal_solver_parameters = gmres_solver_parameters
 
 ##########
 
-# Plotting depth profiles.
-z500m = cavity_thickness(5E2, 0., H1, L, H2)
-z1km = cavity_thickness(1E3, 0., H1, L, H2)
-z2km = cavity_thickness(2E3, 0., H1, L, H2)
-z4km = cavity_thickness(4E3, 0., H1, L, H2)
-z6km = cavity_thickness(6E3, 0., H1, L, H2)
-
-
-z_profile500m = np.linspace(z500m-water_depth-1., 1.-water_depth, 50)
-z_profile1km = np.linspace(z1km-water_depth-1., 1.-water_depth, 50)
-z_profile2km = np.linspace(z2km-water_depth-1., 1.-water_depth, 50)
-z_profile4km = np.linspace(z4km-water_depth-1., 1.-water_depth, 50)
-z_profile6km = np.linspace(z6km-water_depth-1., 1.-water_depth, 50)
-
-
-depth_profile500m = []
-depth_profile1km = []
-depth_profile2km = []
-depth_profile4km = []
-depth_profile6km = []
-
-for d5e2, d1km, d2km, d4km, d6km in zip(z_profile500m, z_profile1km, z_profile2km, z_profile4km, z_profile6km):
-    depth_profile500m.append([2500, 5E2, d5e2])
-    depth_profile1km.append([2500, 1E3, d1km])
-    depth_profile2km.append([2500, 2E3, d2km])
-    depth_profile4km.append([2500, 4E3, d4km])
-    depth_profile6km.append([2500, 6E3, d6km])
-
-velocity_depth_profile500m = pd.DataFrame()
-velocity_depth_profile1km = pd.DataFrame()
-velocity_depth_profile2km = pd.DataFrame()
-velocity_depth_profile4km = pd.DataFrame()
-velocity_depth_profile6km = pd.DataFrame()
-
-velocity_depth_profile500m['Z_profile'] = z_profile500m
-velocity_depth_profile1km['Z_profile'] = z_profile1km
-velocity_depth_profile2km['Z_profile'] = z_profile2km
-velocity_depth_profile4km['Z_profile'] = z_profile4km
-velocity_depth_profile6km['Z_profile'] = z_profile6km
-
-
-def depth_profile_to_csv(profile, df, depth, t_str):
-    uvw = np.array(v_.at(profile))
-    uu = uvw[:, 0]
-    vv = uvw[:, 1]
-    ww = uvw[:, 2]
-    df['U_t_' + t_str] = uu
-    df['V_t_' + t_str] = vv
-    df['W_t_' + t_str] = ww
-    if mesh.comm.rank == 0:
-        df.to_csv(folder+depth+"_profile.csv")
-
-
-
-
-##########
-
 # define time steps
 dt = args.dt
 T = args.T
@@ -680,96 +601,6 @@ with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
 
 
 
-########
-
-# Extra outputs for plotting
-# Melt rate functions along ice-ocean boundary
-#top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
-
-# Depth profiles
-#depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-#depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-#depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-#depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-#depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
-
-########
-
-# Extra outputs for matplotlib plotting
-
-def matplotlib_out(t):
-
-    u_array = v_.dat.data[:, 0]
-    v_array = v_.dat.data[:, 1]
-    w_array = v_.dat.data[:, 2]
-    temp_array = temp.dat.data
-    sal_array = sal.dat.data
-    rho_array = rho.dat.data
-        
-    # Gather all pieces to one array. 
-    u_array = mesh.comm.gather(u_array, root=0)
-    v_array = mesh.comm.gather(v_array, root=0)
-    w_array = mesh.comm.gather(w_array, root=0)
-    temp_array = mesh.comm.gather(temp_array, root=0)
-    sal_array = mesh.comm.gather(sal_array, root=0)
-    rho_array = mesh.comm.gather(rho_array, root=0)
-
-    if mesh.comm.rank == 0:
-        # concatenate arrays
-        u_array_f = np.concatenate(u_array)
-        v_array_f = np.concatenate(v_array)
-        w_array_f = np.concatenate(w_array)
-        vel_mag_array_f = np.sqrt(u_array_f**2+v_array_f**2 + w_array_f**2)
-        temp_array_f = np.concatenate(temp_array)
-        sal_array_f = np.concatenate(sal_array)
-        rho_array_f = np.concatenate(rho_array)
-            
-        # Add concatenated arrays to data frame
-        matplotlib_df['u_array_{:.0f}hours'.format(t/3600)] = u_array_f
-        matplotlib_df['v_array_{:.0f}hours'.format(t/3600)] = v_array_f
-        matplotlib_df['w_array_{:.0f}hours'.format(t/3600)] = w_array_f
-        matplotlib_df['vel_mag_array_{:.0f}hours'.format(t/3600)] = vel_mag_array_f
-        matplotlib_df['temp_array_{:.0f}hours'.format(t/3600)] = temp_array_f
-        matplotlib_df['sal_array_{:.0f}hours'.format(t/3600)] = sal_array_f
-        matplotlib_df['rho_array_{:.0f}hours'.format(t/3600)] = rho_array_f
-        
-        # write dataframe to output file
-        matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
-
-MATPLOTLIB_OUT = False
-
-if MATPLOTLIB_OUT:
-    
-    # Interpolate coordinates to arrays
-    x_array = interpolate(x, Function(U)).dat.data
-    y_array = interpolate(y, Function(U)).dat.data
-    z_array = interpolate(z, Function(U)).dat.data
-
-    # Gather pieces of array to process zero
-    x_array = mesh.comm.gather(x_array, root=0)
-    y_array = mesh.comm.gather(y_array, root=0)
-    z_array = mesh.comm.gather(z_array, root=0) 
-
-    if mesh.comm.rank == 0:
-        # Concatanate arrays to have one complete array
-        x_array_f = np.concatenate(x_array)
-        y_array_f = np.concatenate(y_array)
-        z_array_f = np.concatenate(z_array)
-
-        # Create a data frame to store arrays for matplotlib plotting later
-        matplotlib_df = pd.DataFrame()
-
-        # Add concatenated arrays to data frame
-        matplotlib_df['x_array'] = x_array_f
-        matplotlib_df['y_array'] = y_array_f
-        matplotlib_df['z_array'] = z_array_f
-
-        # Write data frame to file
-        matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
-    
-    # Add initial conditions for v, w, temp, sal, and rho to data frame
-    matplotlib_out(0)
-
 ####################
 
 # Add limiter for DG functions
@@ -830,37 +661,26 @@ while t < T - 0.5*dt:
            full_pressure.interpolate(mp.P_full)
     
 
-           if MATPLOTLIB_OUT:
-               # Write u, v, w, |u| temp, sal, rho to file for plotting later with matplotlib
-               matplotlib_out(t)
            
-           else:
-               # Write out files
-               v_file.write(v_)
-               vdg_file.write(vdg)
-   #            vdg1_file.write(vdg1)
-               p_file.write(p_)
-               t_file.write(temp)
-               s_file.write(sal)
-               rho_file.write(rho)
+           # Write out files
+           v_file.write(v_)
+           vdg_file.write(vdg)
+   #        vdg1_file.write(vdg1)
+           p_file.write(p_)
+           t_file.write(temp)
+           s_file.write(sal)
+           rho_file.write(rho)
                
-               rhograd_file.write(gradrho)
-#               kappav_file.write(kappa_v)
-               # Write melt rate functions
-               m_file.write(melt)
-               Q_mixed_file.write(Q_mixed)
-               full_pressure_file.write(full_pressure)
-               Qs_file.write(Q_s)
-               Q_ice_file.write(Q_ice)
+           rhograd_file.write(gradrho)
+#           kappav_file.write(kappa_v)
+           # Write melt rate functions
+           m_file.write(melt)
+           Q_mixed_file.write(Q_mixed)
+           full_pressure_file.write(full_pressure)
+           Qs_file.write(Q_s)
+           Q_ice_file.write(Q_ice)
     
            time_str = str(step)
-           #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
-    
-           #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
-           #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
-           #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
-           #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
-           #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
     
            PETSc.Sys.Print("t=", t)
     
