@@ -9,9 +9,9 @@ import pandas as pd
 import numpy as np
 ##########
 
-folder = "/data/ekman2.5D/2.12.19.ekman2.5D.dt60.tau1.775E-4.layers50.ip50.with_coriolis.bottom_un=ut=0.Tfrom_spinup788400.dtoutput60/"  # output folder.
+folder = "/data/ekman2.5D/20.04.21.ekman2.5D.dt60.T10day.dtout1hour.tau1.775E-4.layers50.ip50.with_coriolis.bottom_unut0._no_g_defaultip_qdeg10_extramumps_no_mumpssnesatol_snestypedefault/"  # output folder.
 
-dump_file = "/data/ekman2.5D/2.12.19.ekman2.5D.dt60.tau1.775E-4.layers50.ip50.with_coriolis.bottom_un=ut=0.T10days.dtoutput3600/dump.h5"
+dump_file = "/data/ekman2.5D/19.04.21.ekman2.5D.dt60.tau1.775E-4.layers50.ip50.with_coriolis.bottom_un_ut_0.dtoutput60/dump.h5"
 
 
 ##########
@@ -65,8 +65,10 @@ else:
 ##########
 
 # Set up equations
-mom_eq = MomentumEquation(M.sub(0), M.sub(0))
-cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
+qdeg = 10
+
+mom_eq = MomentumEquation(M.sub(0), M.sub(0), quad_degree=qdeg)
+cty_eq = ContinuityEquation(M.sub(1), M.sub(1), quad_degree=qdeg)
 u_eq = ScalarVelocity2halfDEquation(U, U)
 ##########
 
@@ -78,20 +80,16 @@ mu = as_tensor([[mu_h, 0.0], [0.0, mu_v]])
 
 # momentum source: gravity (divide by pho0
 g = 9.81
-mom_source = as_vector((0, -g))
+mom_source = as_vector((0, 0))
 
 # coriolis frequency f-plane assumption
 f = 1.032E-4
 
-# Interior penalty term
-# 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
-# dx/dz = 25/2 = 6.25 so 3*25/2*2 = 75
-ip_alpha = 50.0#0.48
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha,
+vp_fields = {'viscosity': mu, 'source': mom_source,
              'coriolis_frequency': f, 'u_velocity': u}
-u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
+u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f}
 ##########
 
 # Output files for velocity, pressure, temperature and salinity
@@ -121,13 +119,15 @@ u_bcs = {1: {'q': 0.0}}
 # Solver parameters
 mumps_solver_parameters = {
     'snes_monitor': None,
+    'snes_type': 'ksponly',
     'ksp_type': 'preonly',
     'pc_type': 'lu',
     'pc_factor_mat_solver_type': 'mumps',
+    "mat_mumps_icntl_14": 200,
     'mat_type': 'aij',
     'snes_max_it': 100,
-    'snes_rtol': 1e-8,
-}
+    'snes_rtol': 1e-8}
+    'snes_atol': 1e-6}
 
 vp_solver_parameters = mumps_solver_parameters
 u_solver_parameters = mumps_solver_parameters
