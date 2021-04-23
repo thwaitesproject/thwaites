@@ -156,6 +156,12 @@ S = FunctionSpace(mesh, ele)
 
 P1 = FunctionSpace(mesh, "CG", 1)
 ##########
+print("vel dofs:", V.dim())
+print("pressure dofs:", W.dim())
+print("combined dofs:", M.dim())
+print("scalar dofs:", U.dim())
+print("P1 dofs (no. of nodes):", P1.dim())
+##########
 
 # Set up functions
 m = Function(M)
