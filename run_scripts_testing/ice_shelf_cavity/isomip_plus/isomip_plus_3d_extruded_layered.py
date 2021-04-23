@@ -177,6 +177,11 @@ Q = FunctionSpace(mesh, scalar_ele)
 K = FunctionSpace(mesh, scalar_ele)
 S = FunctionSpace(mesh, scalar_ele)
 
+print("vel dofs:", V.dim())
+print("pressure dofs:", W.dim())
+print("combined dofs:", M.dim())
+print("scalar dofs:", U.dim())
+print("P1 dofs (no of nodes):", P1_extruded.dim())
 ##########
 
 # Set up functions
@@ -208,7 +213,7 @@ rho_anomaly = Function(P1_extruded, name="density anomaly")
 
 dump_file = "/data/3d_isomip_plus/extruded_meshes/23.03.21_3d_isomip+_dt900.0_dtOut3600.0_T8640000.0_ipdef_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80mLy4km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt/dump.h5" 
 
-DUMP = True
+DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -722,7 +727,7 @@ while t < T - 0.5*dt:
     
            PETSc.Sys.Print("integrated melt =", assemble(conditional(x < shelf_length, melt, 0.0) * ds("top")))
 
-    if step % (output_step * 24) == 0:
+    if t % (3600 * 24) == 0:
         with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
             # Checkpoint file open for reading and writing at regular interval
             chk.store(v_, name="velocity")
