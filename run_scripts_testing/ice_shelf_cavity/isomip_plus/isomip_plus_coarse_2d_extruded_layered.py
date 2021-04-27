@@ -190,9 +190,9 @@ rho_anomaly = Function(P1, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/data/3d_isomip_plus/first_tests/02.10.20_3d_HJ99_gammafric_dt1800.0_dtOutput86400.0_T8640000.0_ip50.0_constantTres86400.0_KMuh6.0_Muv0.01_Kv0.01_dxy4km_18layers_gl_wall_60m_closed_iterative_initial_solve_coriolis_hypre_pc_press_corr/dump.h5" 
+dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/23.04.21_2d_isomip+_dt900.0_dtOut43200.0_T1728000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80m_closed_nolim_offsetmelt_nolim_strongthreshold0.6_veldq2update12hours/dump_step_1440.h5" 
 
-DUMP = False
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -353,7 +353,7 @@ kappa_sal = kappa
 
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': Constant(3.0)}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
                'absorption coefficient': absorp_temp}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
@@ -440,6 +440,7 @@ pressure_projection_solver_parameters = {
         # velocity mass block:
         'fieldsplit_0': {
             'ksp_converged_reason': None,
+#            'ksp_monitor_true_residual': None,
             'ksp_type': 'cg',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
@@ -459,6 +460,7 @@ pressure_projection_solver_parameters = {
             'laplace_ksp_ksp_rtol': 1e-7,
             'laplace_ksp_ksp_atol': 1e-9,
             'laplace_ksp_ksp_converged_reason': None,
+#            'laplace_ksp_ksp_monitor_true_residual': None,
             'laplace_ksp_pc_type': 'python',
             'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
@@ -476,7 +478,9 @@ predictor_solver_parameters = {
         'snes_type': 'ksponly',
         'ksp_type': 'gmres',
         'pc_type': 'hypre',
+        'pc_hypre_boomeramg_strong_threshold': 0.6,  # really this was added for 3d...
         'ksp_converged_reason': None,
+#        'ksp_monitor_true_residual': None,
         'ksp_rtol': 1e-5,
         'ksp_max_it': 300,
         }
@@ -533,9 +537,9 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up Vectorfolder
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_nolim_offsetmelt_lim/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_nolim_offsetmelt_nolim_strongthreshold0.6_from15day/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -616,7 +620,7 @@ step = 0
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
-        vdg.project(v_)  # DQ2 velocity for plotting
+        vdg.project(v_)  # DQ2 velocity for melt and plotting 
 #        vdg1.project(v_) # DQ1 velocity for 
 #        v_comp.interpolate(vdg1[0])
 #        limiter.apply(v_comp)
@@ -629,8 +633,8 @@ while t < T - 0.5*dt:
         sal_timestepper.advance(t)
 
 
-    limiter.apply(sal)
-    limiter.apply(temp)
+#    limiter.apply(sal)
+#    limiter.apply(temp)
 
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
     gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
@@ -686,7 +690,7 @@ while t < T - 0.5*dt:
     
            PETSc.Sys.Print("integrated melt =", assemble(conditional(x < shelf_length, melt, 0.0) * ds("top")))
 
-    if step % (output_step * 24) == 0:
+    if t % (3600 * 24) == 0:
         with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
             # Checkpoint file open for reading and writing at regular interval
             chk.store(v_, name="velocity")
