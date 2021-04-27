@@ -39,7 +39,7 @@ restoring_time = Constant(0.1*86400.)
 
 #  Generate mesh
 L = 480E3
-Ly = 4E3
+Ly = 20E3
 shelf_length = 320E3
 H1 = 80.
 H2 = 600.
@@ -169,19 +169,15 @@ scalar_hor_ele = FiniteElement("DG", triangle, 1, variant="equispaced")
 scalar_vert_ele = FiniteElement("DG", interval, 1, variant="equispaced")
 scalar_ele = TensorProductElement(scalar_hor_ele, scalar_vert_ele)
 #scalar_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
-U = FunctionSpace(mesh, scalar_ele)
-VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
-VDG1 = VectorFunctionSpace(mesh, "DQ", 1) # velocity for output
-
-Q = FunctionSpace(mesh, scalar_ele)
-K = FunctionSpace(mesh, scalar_ele)
 S = FunctionSpace(mesh, scalar_ele)
+VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
+#VDG1 = VectorFunctionSpace(mesh, "DQ", 1) # velocity for output
 
-print("vel dofs:", V.dim())
-print("pressure dofs:", W.dim())
-print("combined dofs:", M.dim())
-print("scalar dofs:", U.dim())
-print("P1 dofs (no of nodes):", P1_extruded.dim())
+PETSc.Sys.Print("vel dofs:", V.dim())
+PETSc.Sys.Print("pressure dofs:", W.dim())
+PETSc.Sys.Print("combined dofs:", M.dim())
+PETSc.Sys.Print("scalar dofs:", S.dim())
+PETSc.Sys.Print("P1 dofs (no of nodes):", P1_extruded.dim())
 ##########
 
 # Set up functions
@@ -191,27 +187,27 @@ v, p = split(m)  # expression: velocity, pressure
 v_._name = "velocity"
 p_._name = "perturbation pressure"
 vdg = Function(VDG, name="velocity")
-vdg1 = Function(VDG1, name="velocity")
-u_pred_dg = Function(VDG, name="pred_velocity")
+#vdg1 = Function(VDG1, name="velocity")
+#u_pred_dg = Function(VDG, name="pred_velocity")
 
-rho = Function(K, name="density")
-temp = Function(K, name="temperature")
+rho = Function(S, name="density")
+temp = Function(S, name="temperature")
 sal = Function(S, name="salinity")
-melt = Function(Q, name="melt rate")
-Q_mixed = Function(Q, name="ocean heat flux")
-Q_ice = Function(Q, name="ice heat flux")
-Q_latent = Function(Q, name="latent heat")
-Q_s = Function(Q, name="ocean salt flux")
-Tb = Function(Q, name="boundary freezing temperature")
-Sb = Function(Q, name="boundary salinity")
-full_pressure = Function(M.sub(1), name="full pressure")
+melt = Function(S, name="melt rate")
+#Q_mixed = Function(Q, name="ocean heat flux")
+#Q_ice = Function(Q, name="ice heat flux")
+#Q_latent = Function(Q, name="latent heat")
+#Q_s = Function(Q, name="ocean salt flux")
+#Tb = Function(Q, name="boundary freezing temperature")
+#Sb = Function(Q, name="boundary salinity")
+#full_pressure = Function(M.sub(1), name="full pressure")
 
 rho_anomaly = Function(P1_extruded, name="density anomaly")
 ##########
 
 # Define a dump file
 
-dump_file = "/data/3d_isomip_plus/extruded_meshes/23.03.21_3d_isomip+_dt900.0_dtOut3600.0_T8640000.0_ipdef_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80mLy4km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt/dump.h5" 
+dump_file = "/data/3d_isomip_plus/extruded_meshes/21.04.21_3d_isomip+_dt900.0_dtOut43200.0_T1728000.0_ipdef_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80mLy4km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt/dump_step_1440.h5" 
 
 DUMP = False
 if DUMP:
@@ -266,8 +262,7 @@ qdeg = 10
 
 mom_eq = MomentumEquation(M.sub(0), M.sub(0), quad_degree=qdeg)
 cty_eq = ContinuityEquation(M.sub(1), M.sub(1), quad_degree=qdeg)
-#u_eq = ScalarVelocity2halfDEquation(U, U)
-temp_eq = ScalarAdvectionDiffusionEquation(K, K, quad_degree=qdeg)
+temp_eq = ScalarAdvectionDiffusionEquation(S, S, quad_degree=qdeg)
 sal_eq = ScalarAdvectionDiffusionEquation(S, S, quad_degree=qdeg)
 
 ##########
@@ -284,10 +279,10 @@ mom_source = as_vector((0.,0.,-g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal 
 
 rho0 = 1027.51
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
-rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
+rho_anomaly_projector = Projector(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref), rho_anomaly)
 
 gradrho = Function(P1_extruded)  # vertical component of gradient of density anomaly units m^-1
-gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
+gradrho_projector = Projector(Dx(rho_anomaly, mesh.geometric_dimension() - 1), gradrho)
 
 
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
@@ -317,10 +312,10 @@ class VerticalDensityGradientSolver:
     def solve(self):
         self.weak_grad_solver.solve()
 
-gradrho = Function(P1_extruded)
-grad_rho_solver = VerticalDensityGradientSolver(rho, gradrho)        
+#gradrho = Function(P1_extruded)
+#grad_rho_solver = VerticalDensityGradientSolver(rho, gradrho)        
 
-grad_rho_solver.solve()
+#grad_rho_solver.solve()
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
@@ -389,14 +384,14 @@ mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), ice
 
 # assign values of these expressions to functions.
 # so these alter the expression and give new value for functions.
-Q_ice.interpolate(mp.Q_ice)
-Q_mixed.interpolate(mp.Q_mixed)
-Q_latent.interpolate(mp.Q_latent)
-Q_s.interpolate(mp.S_flux_bc)
+#Q_ice.interpolate(mp.Q_ice)
+#Q_mixed.interpolate(mp.Q_mixed)
+#Q_latent.interpolate(mp.Q_latent)
+#Q_s.interpolate(mp.S_flux_bc)
 melt.interpolate(mp.wb)
-Tb.interpolate(mp.Tb)
-Sb.interpolate(mp.Sb)
-full_pressure.interpolate(mp.P_full)
+#Tb.interpolate(mp.Tb)
+#Sb.interpolate(mp.Sb)
+#full_pressure.interpolate(mp.P_full)
 
 ##########
 
@@ -564,7 +559,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy4km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy20km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt_removefunc_projector/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -576,13 +571,15 @@ v_file = File(folder+"velocity.pvd")
 v_file.write(v_)
 
 # Output files for velocity, pressure, temperature and salinity
-vdg.project(v_) # DQ2 velocity for output
+#vdg.project(v_) # DQ2 velocity for output
+vdg_projector = Projector(v_, vdg)
+vdg_projector.project()
 vdg_file = File(folder+"dg_velocity.pvd")
 vdg_file.write(vdg)
 
-vdg1.project(v_) # DQ1 velocity 
-vdg1_file = File(folder+"P1dg_velocity_lim.pvd")
-vdg1_file.write(vdg1)
+#vdg1.project(v_) # DQ1 velocity 
+#vdg1_file = File(folder+"P1dg_velocity_lim.pvd")
+#vdg1_file.write(vdg1)
 
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
@@ -604,24 +601,24 @@ rhograd_file.write(gradrho)
 ##########
 
 # Output files for melt functions
-Q_ice_file = File(folder+"Q_ice.pvd")
-Q_ice_file.write(Q_ice)
+#Q_ice_file = File(folder+"Q_ice.pvd")
+#Q_ice_file.write(Q_ice)
 
-Q_mixed_file = File(folder+"Q_mixed.pvd")
-Q_mixed_file.write(Q_mixed)
+#Q_mixed_file = File(folder+"Q_mixed.pvd")
+#Q_mixed_file.write(Q_mixed)
 
-Qs_file = File(folder+"Q_s.pvd")
-Qs_file.write(Q_s)
+#Qs_file = File(folder+"Q_s.pvd")
+#Qs_file.write(Q_s)
 
 m_file = File(folder+"melt.pvd")
 m_file.write(melt)
 
-full_pressure_file = File(folder+"full_pressure.pvd")
-full_pressure_file.write(full_pressure)
+#full_pressure_file = File(folder+"full_pressure.pvd")
+#full_pressure_file.write(full_pressure)
 
-u_pred_star_file = File(folder+"u_star.pvd")
-u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
-u_pred_star_file.write(u_pred_dg)
+#u_pred_star_file = File(folder+"u_star.pvd")
+#u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
+#u_pred_star_file.write(u_pred_dg)
 
 
 ##########
@@ -637,9 +634,9 @@ with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
 ####################
 
 # Add limiter for DG functions
-limiter = VertexBasedP1DGLimiter(U)
-v_comp = Function(U)
-w_comp = Function(U)
+limiter = VertexBasedP1DGLimiter(S)
+v_comp = Function(S)
+w_comp = Function(S)
 ########
 
 # Begin time stepping
@@ -649,6 +646,8 @@ step = 0
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
+        #vdg.project(v_)  # DQ2 velocity for melt and plotting
+        vdg_projector.project()
 #        vdg1.project(v_) # DQ1 velocity for 
 #        v_comp.interpolate(vdg1[0])
 #        limiter.apply(v_comp)
@@ -663,9 +662,9 @@ while t < T - 0.5*dt:
 #    limiter.apply(sal)
 #    limiter.apply(temp)
 
-    rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
-    gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
-    #kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
+    rho_anomaly_projector.project()
+    gradrho_projector.project()
+    #kappa_v_projector.project()
     
     step += 1
     t += dt
@@ -682,22 +681,21 @@ while t < T - 0.5*dt:
 
            # Update melt rate functions
            rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
-           Q_ice.interpolate(mp.Q_ice)
-           Q_mixed.interpolate(mp.Q_mixed)
-           Q_latent.interpolate(mp.Q_latent)
-           Q_s.interpolate(mp.S_flux_bc)
+  #         Q_ice.interpolate(mp.Q_ice)
+  #         Q_mixed.interpolate(mp.Q_mixed)
+  #         Q_latent.interpolate(mp.Q_latent)
+  #         Q_s.interpolate(mp.S_flux_bc)
            melt.interpolate(mp.wb)
-           Tb.interpolate(mp.Tb)
-           Sb.interpolate(mp.Sb)
-           full_pressure.interpolate(mp.P_full)
+  #         Tb.interpolate(mp.Tb)
+  #         Sb.interpolate(mp.Sb)
+  #         full_pressure.interpolate(mp.P_full)
     
 
            
             # Write out files
-           u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
-           u_pred_star_file.write(u_pred_dg)
+ #          u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
+ #          u_pred_star_file.write(u_pred_dg)
            v_file.write(v_)
-           vdg.project(v_)  # DQ2 velocity for plotting
            vdg_file.write(vdg)
    #        vdg1_file.write(vdg1)
            p_file.write(p_)
@@ -709,10 +707,10 @@ while t < T - 0.5*dt:
 #          kappav_file.write(kappa_v)
           # Write melt rate functions
            m_file.write(melt)
-           Q_mixed_file.write(Q_mixed)
-           full_pressure_file.write(full_pressure)
-           Qs_file.write(Q_s)
-           Q_ice_file.write(Q_ice)
+ #          Q_mixed_file.write(Q_mixed)
+ #          full_pressure_file.write(full_pressure)
+ #          Qs_file.write(Q_s)
+ #          Q_ice_file.write(Q_ice)
     
            time_str = str(step)
            #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
