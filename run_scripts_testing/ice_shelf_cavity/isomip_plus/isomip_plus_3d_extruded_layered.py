@@ -39,9 +39,9 @@ restoring_time = Constant(0.1*86400.)
 
 #  Generate mesh
 L = 480E3
-Ly = 20E3
+Ly = 80E3
 shelf_length = 320E3
-H1 = 80.
+H1 = 130.
 H2 = 600.
 H3 = 720.
 water_depth = H3
@@ -105,23 +105,56 @@ cfs = mesh.coordinates.function_space()
 bc = DirichletBC(cfs, as_vector((x, y, ocean_thickness_extruded)), "top")
 bc.apply(mesh.coordinates)
 
-# Add slope to ocean thickness!
-ocean_thickness_extruded_sloped = Function(P1_extruded)
-ocean_thickness_extruded_sloped.interpolate(conditional(x -0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3))
+# Bathymetry 
+x_bar = Constant(300E3) # Characteristic along flow length scale of the bedrock
+x_tilda = (x + Constant(320E3) ) / x_bar  # isomip+ x coordinate used for defining along flow bathymetry/bedrock topography (N.b offset by 320km because of ice domain)
+B0 = Constant(-150.0) # Bedrock topography at x = 0 (in the ice domain!)
+B2 = Constant(-728.8) # Second bedrock topography coefficient 
+B4 = Constant(343.91) # Third bedrock topography coefficient
+B6 = Constant(-50.57) # Forth bedrock topography coefficient
+
+bathy_x = B0 + B2 * pow(x_tilda, 2) + B4 * pow(x_tilda, 4) + B6 * pow(x_tilda, 6)
+
+d_c = (x / L ) * Constant(500.0) # Depth of the trough compared with the side walls
+w_c = Constant(24E3) # Half width of the trough 
+f_c = Constant(4E3) # Characteristic width of the sied of the channel
+
+bathy_y = d_c / (1 + exp(-2 * (y - 0.5 * Ly - w_c) / f_c))  + d_c / (1 + exp(2 * (y - 0.5 * Ly + w_c) / f_c))
+
+bathymetry = Function(P1_extruded)
+bathymetry.interpolate(conditional(bathy_x + bathy_y < -water_depth,
+                        -water_depth,
+                        bathy_x + bathy_y))
+
+print("max bathy : ", bathymetry.dat.data[:].max())
+
+
+ice_draft = Function(P1_extruded)
+ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
+
+#base_mesh.coordinates.dat.data[:, 0] += 320E3
+#ice_draft = interpolate_data(ice_draft_file, P1)
+#print("max icedraft : ",ice_draft.dat.data[:].max())
+#print("min icedraft : ",ice_draft.dat.data[:].min())
+
+ocean_thickness = Function(P1_extruded)
+
+
+ocean_thickness.interpolate(ice_draft - bathymetry)
+#ocean_thickness.interpolate(conditional(ice_draft - bathymetry < Constant(15),
+#                                        Constant(15),
+#                                        ice_draft - bathymetry)) 
 
 # Scale the mesh to make ice shelf slope
 Vc = mesh.coordinates.function_space()
 x, y, z = SpatialCoordinate(mesh)
-f = Function(Vc).interpolate(as_vector([x, y, conditional(x < shelf_length, ocean_thickness_extruded_sloped*z/H2, z)]))
+f = Function(Vc).interpolate(as_vector([x, y, conditional(x - 0.5*dy < shelf_length, ocean_thickness*z/H2, z) - -bathymetry]))
 mesh.coordinates.assign(f)
-
 
 ds = CombinedSurfaceMeasure(mesh, 5)
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
-# Set ocean surface
-mesh.coordinates.dat.data[:, mesh.geometric_dimension()-1] -= water_depth
 
 print("You have Comm WORLD size = ", mesh.comm.size)
 print("You have Comm WORLD rank = ", mesh.comm.rank)
@@ -141,6 +174,8 @@ PETSc.Sys.Print("Area of iceslope: should be {:.0f}m^2: ".format(sqrt(shelf_leng
 n = FacetNormal(mesh)
 print(assemble(avg(dot(n,n))*dS_v(domain=mesh)))
 print(assemble(avg(dot(n,n))*dS_h(domain=mesh)))
+
+
 
 ##########
 PETSc.Sys.Print("mesh cell type", mesh.ufl_cell())
@@ -179,7 +214,6 @@ PETSc.Sys.Print("combined dofs:", M.dim())
 PETSc.Sys.Print("scalar dofs:", S.dim())
 PETSc.Sys.Print("P1 dofs (no of nodes):", P1_extruded.dim())
 ##########
-
 # Set up functions
 m = Function(M)
 v_, p_ = m.split()  # function: velocity, pressure
@@ -369,7 +403,8 @@ kappa_sal = kappa
 
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': Constant(3.0)}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': Constant(3.0),
+            'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': source_temp,
                'absorption coefficient': absorp_temp}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
@@ -559,7 +594,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy20km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt_removefunc_projector/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy20km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt_removefunc_projector_coriolis_analyticbathy/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -567,8 +602,8 @@ folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"
 ###########
 
 # Output files for velocity, pressure, temperature and salinity
-v_file = File(folder+"velocity.pvd")
-v_file.write(v_)
+#v_file = File(folder+"velocity.pvd")  # for some reason velocity doesn't work in paraview - to do with squeezed triangles/wedges?
+#v_file.write(v_)
 
 # Output files for velocity, pressure, temperature and salinity
 #vdg.project(v_) # DQ2 velocity for output
@@ -695,7 +730,7 @@ while t < T - 0.5*dt:
             # Write out files
  #          u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
  #          u_pred_star_file.write(u_pred_dg)
-           v_file.write(v_)
+    #       v_file.write(v_)
            vdg_file.write(vdg)
    #        vdg1_file.write(vdg1)
            p_file.write(p_)
