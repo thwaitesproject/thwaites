@@ -594,7 +594,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy20km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt_removefunc_projector_coriolis_analyticbathy/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy80km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt_removefunc_projector_coriolis_analyticbathy/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -694,8 +694,8 @@ while t < T - 0.5*dt:
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
 
-#    limiter.apply(sal)
-#    limiter.apply(temp)
+    limiter.apply(sal)
+    limiter.apply(temp)
 
     rho_anomaly_projector.project()
     gradrho_projector.project()
