@@ -5,7 +5,8 @@ from thwaites import *
 from math import pi
 
 d=1
-mesh = Mesh("/data/thwaites/meshes/mesh/RT_rect_mesh.msh") #RectangleMesh(50, 400,0.5,4) #Mesh("ice_shelf_mesh3.msh")#
+#mesh = Mesh("/data/thwaites/meshes/mesh/RT_rect_mesh.msh") #RectangleMesh(50, 400,0.5,4) #Mesh("ice_shelf_mesh3.msh")#
+mesh = RectangleMesh(50, 400,0.5,4) #Mesh("ice_shelf_mesh3.msh")#
 
 import mpi4py
 from mpi4py import MPI
@@ -93,7 +94,7 @@ rho.interpolate(rho_init)
 
 
 
-folder = "/data/thwaites/29.11.18.rayleigh_taylor_inst_closed_iterative_unstruct1/"
+folder = "output/"
 # We declare the output filenames, and write out the initial conditions. ::
 u_file = File(folder+"velocity.pvd")
 u_file.write(u_)
@@ -170,7 +171,7 @@ rho_fields = {'diffusivity': kappa, 'velocity': u}
 #sal_fields = {'diffusivity': kappa_sal, 'velocity': u, 'source': interp_source_sal, 'absorption coefficent': interp_absorp_sal}
 
 mumps_solver_parameters = {
-    'snes_monitor': True,
+    'snes_monitor': None,
     'ksp_type': 'preonly',
     'pc_type': 'lu',
     'pc_factor_mat_solver_type': 'mumps',
@@ -203,7 +204,7 @@ up_solver_parameters = {
         'ksp_type': 'gmres',
         'pc_type': 'python',
         'pc_python_type': 'firedrake.AssembledPC',
-        'ksp_converged_reason': True,
+        'ksp_converged_reason': None,
         'assembled_ksp_type': 'preonly',
         'assembled_pc_type': 'bjacobi',
         'assembled_sub_pc_type': 'ilu',
@@ -217,7 +218,7 @@ up_solver_parameters = {
         'pc_python_type': 'thwaites.AssembledSchurPC',
         'schur_ksp_type': 'cg',
         'schur_ksp_max_it': 100,
-        'schur_ksp_converged_reason': True,
+        'schur_ksp_converged_reason': None,
         'schur_pc_type': 'gamg',
     },
 }
