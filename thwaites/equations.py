@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import firedrake
+from .utility import CombinedSurfaceMeasure
 
 
 class BaseEquation(ABC):
@@ -20,12 +21,22 @@ class BaseEquation(ABC):
         self.trial_space = trial_space
         self.mesh = trial_space.mesh()
 
-        if quad_degree is None:
-            p = trial_space.ufl_element().degree()
-            quad_degree = 2*p + 1
+        p = trial_space.ufl_element().degree()
+        if isinstance(p, int):
+            # isotropic mesh
+            if quad_degree is None:
+                quad_degree = 2*p + 1
+            self.ds = firedrake.ds(domain=self.mesh, degree=quad_degree)
+            self.dS = firedrake.dS(domain=self.mesh, degree=quad_degree)
+        else:
+            # extruded mesh
+            p_h, p_v = p
+            if quad_degree is None:
+                quad_degree = 2*max(p_h, p_v) + 1
+
+            self.ds = CombinedSurfaceMeasure(self.mesh, quad_degree)
+            self.dS = firedrake.dS_v(domain=self.mesh, degree=quad_degree) + firedrake.dS_h(domain=self.mesh, degree=quad_degree)
         self.dx = firedrake.dx(domain=self.mesh, degree=quad_degree)
-        self.ds = firedrake.ds(domain=self.mesh, degree=quad_degree)
-        self.dS = firedrake.dS(domain=self.mesh, degree=quad_degree)
 
         # self._terms stores the actual instances of the BaseTerm-classes in self.terms
         self._terms = []

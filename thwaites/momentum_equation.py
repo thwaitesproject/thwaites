@@ -1,7 +1,8 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor, sign
 from firedrake import CellDiameter, avg, Identity, zero
-from .utility import is_continuous, normal_is_continuous, tensor_jump
+from .utility import is_continuous, normal_is_continuous, tensor_jump, cell_edge_integral_ratio
+from firedrake import FacetArea, CellVolume
 from ufl import tensors, algebra
 #import numpy as np
 """
@@ -101,7 +102,6 @@ class ViscosityTerm(BaseTerm):
                 diff_tensor = mu * Identity(self.dim)
         phi = test
         n = self.n
-        cellsize = CellDiameter(self.mesh)
         u = trial
         u_lagged = trial_lagged
 
@@ -114,26 +114,33 @@ class ViscosityTerm(BaseTerm):
         F = 0
         F += inner(grad_test, stress)*self.dx
 
-        # Interior Penalty method by
-        # Epshteyn (2007) doi:10.1016/j.cam.2006.08.029
-        # sigma = 3*k_max**2/k_min*p*(p+1)*cot(Theta)
-        # k_max/k_min  - max/min diffusivity
-        # p            - polynomial degree
-        # Theta        - min angle of triangles
-        # assuming k_max/k_min=2, Theta=pi/3
-        # sigma = 6.93 = 3.5*p*(p+1)
+        # Interior Penalty method
+        #
+        # see https://www.researchgate.net/publication/260085826 for details
+        # on the choice of sigma
 
         degree = self.trial_space.ufl_element().degree()
-        alpha = fields.get('interior_penalty', 5.0)
-        sigma = alpha*degree*(degree + 1)/cellsize
+        if not isinstance(degree, int):
+            degree = max(degree[0], degree[1])
+        # safety factor: 1.0 is theoretical minimum
+        alpha = fields.get('interior_penalty', 2.0)
         if degree == 0:
-            sigma = 1.5 / cellsize
+            # probably only works for orthog. quads and hexes
+            sigma = 1.0
+        else:
+            nf = self.mesh.ufl_cell().num_facets()
+            sigma = alpha * cell_edge_integral_ratio(self.mesh, degree) * nf
+        # we use (3.23) + (3.20) from https://www.researchgate.net/publication/260085826
+        # instead of maximum over two adjacent cells + and -, we just sum (which is 2*avg())
+        # and the for internal facets we have an extra 0.5:
+        # WEIRDNESS: avg(1/CellVolume(mesh)) crashes TSFC - whereas it works in scalar diffusion! - instead just writing out explicitly
+        sigma *= FacetArea(self.mesh)*(1/CellVolume(self.mesh)('-') + 1/CellVolume(self.mesh)('+'))/2
 
         if not is_continuous(self.trial_space):
             u_tensor_jump = tensor_jump(n, u)
             if self.symmetric_stress:
                 u_tensor_jump += transpose(u_tensor_jump)
-            F += avg(sigma)*inner(tensor_jump(n, phi), dot(avg(diff_tensor), u_tensor_jump))*self.dS
+            F += sigma*inner(tensor_jump(n, phi), dot(avg(diff_tensor), u_tensor_jump))*self.dS
             F += -inner(avg(dot(diff_tensor, nabla_grad(phi))), u_tensor_jump)*self.dS
             F += -inner(tensor_jump(n, phi), avg(stress))*self.dS
 
@@ -146,7 +153,7 @@ class ViscosityTerm(BaseTerm):
                 if self.symmetric_stress:
                     u_tensor_jump += transpose(u_tensor_jump)
                 # this corresponds to the same 3 terms as the dS integrals for DG above:
-                F += sigma*inner(outer(n, phi), dot(diff_tensor, u_tensor_jump))*self.ds(id)
+                F += 2*sigma*inner(outer(n, phi), dot(diff_tensor, u_tensor_jump))*self.ds(id)
                 F += -inner(dot(diff_tensor, nabla_grad(phi)), u_tensor_jump)*self.ds(id)
                 if 'u' in bc:
                     F += -inner(outer(n,phi), stress) * self.ds(id)

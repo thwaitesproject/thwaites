@@ -1,7 +1,8 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, div, grad, CellDiameter, as_tensor, avg, jump, Constant, sign
 from firedrake import min_value, max_value, split, FacetNormal, Identity
-from .utility import is_continuous, normal_is_continuous
+from firedrake import FacetArea, CellVolume
+from .utility import is_continuous, normal_is_continuous, cell_edge_integral_ratio
 from ufl import tensors, algebra
 """
 This module contains the scalar terms and equations (e.g. for temperature and salinity transport)
@@ -96,7 +97,6 @@ class ScalarDiffusionTerm(BaseTerm):
 
         phi = test
         n = self.n
-        cellsize = CellDiameter(self.mesh)
         q = trial
 
         grad_test = grad(phi)
@@ -105,31 +105,38 @@ class ScalarDiffusionTerm(BaseTerm):
         F = 0
         F += inner(grad_test, diff_flux)*self.dx
 
-        # Interior Penalty method by
-        # Epshteyn (2007) doi:10.1016/j.cam.2006.08.029
-        # sigma = 3*k_max**2/k_min*p*(p+1)*cot(Theta)
-        # k_max/k_min  - max/min diffusivity
-        # p            - polynomial degree
-        # Theta        - min angle of triangles
-        # assuming k_max/k_min=2, Theta=pi/3
-        # sigma = 6.93 = 3.5*p*(p+1)
+        # Interior Penalty method
+        #
+        # see https://www.researchgate.net/publication/260085826 for details
+        # on the choice of sigma
 
         degree = self.trial_space.ufl_element().degree()
-        alpha = fields.get('interior_penalty', 5.0)
-        sigma = alpha*degree*(degree + 1)/cellsize
+        if not isinstance(degree, int):
+            degree = max(degree[0], degree[1])
+        # safety factor: 1.0 is theoretical minimum
+        alpha = fields.get('interior_penalty', 2.0)
         if degree == 0:
-            sigma = 1.5 / cellsize
+            # probably only works for orthog. quads and hexes
+            sigma = 1.0
+        else:
+            nf = self.mesh.ufl_cell().num_facets()
+            sigma = alpha * cell_edge_integral_ratio(self.mesh, degree-1) * nf
 
         if not is_continuous(self.trial_space):
-            F += avg(sigma)*inner(jump(phi, n), dot(avg(diff_tensor), jump(q, n)))*self.dS
+            # we use (3.23) + (3.20) from https://www.researchgate.net/publication/260085826
+            # instead of maximum over two adjacent cells + and -, we just sum (which is 2*avg())
+            # and the for internal facets we have an extra 0.5:
+            sigma_int = sigma * avg(FacetArea(self.mesh)/CellVolume(self.mesh))
+            F += sigma_int*inner(jump(phi, n), dot(avg(diff_tensor), jump(q, n)))*self.dS
             F += -inner(avg(dot(diff_tensor, grad(phi))), jump(q, n))*self.dS
             F += -inner(jump(phi, n), avg(dot(diff_tensor, grad(q))))*self.dS
 
         for id, bc in bcs.items():
             if 'q' in bc:
                 jump_q = q-bc['q']
+                sigma_ext = sigma * FacetArea(self.mesh)/CellVolume(self.mesh)
                 # this corresponds to the same 3 terms as the dS integrals for DG above:
-                F += sigma*phi*inner(n, dot(diff_tensor, n))*jump_q*self.ds(id)
+                F += 2*sigma_ext*phi*inner(n, dot(diff_tensor, n))*jump_q*self.ds(id)
                 F += -inner(dot(diff_tensor, grad(phi)), n)*jump_q*self.ds(id)
                 F += -inner(phi*n, dot(diff_tensor, grad(q))) * self.ds(id)
                 if 'flux' in bc:
