@@ -2,7 +2,7 @@
 #Buoyancy driven overturning circulation
 # beneath ice shelf.
 from thwaites import *
-from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure
+from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, ExtrudedFunction
 from firedrake.petsc import PETSc
 from firedrake import FacetNormal
 import pandas as pd
@@ -10,6 +10,8 @@ import argparse
 import numpy as np
 from math import ceil
 from pyop2.profiling import timed_stage
+import rasterio
+from thwaites.interpolate import interpolate as interpolate_data
 ##########
 PETSc.Sys.popErrorHandler()
 
@@ -115,9 +117,9 @@ B6 = Constant(-50.57) # Forth bedrock topography coefficient
 
 bathy_x = B0 + B2 * pow(x_tilda, 2) + B4 * pow(x_tilda, 4) + B6 * pow(x_tilda, 6)
 
-d_c = (x / L ) * Constant(500.0) # Depth of the trough compared with the side walls
+d_c =  Constant(500.0) # Depth of the trough compared with the side walls
 w_c = Constant(24E3) # Half width of the trough 
-f_c = Constant(4E3) # Characteristic width of the sied of the channel
+f_c = Constant(4E3) # Characteristic width of the side of the channel
 
 bathy_y = d_c / (1 + exp(-2 * (y - 0.5 * Ly - w_c) / f_c))  + d_c / (1 + exp(2 * (y - 0.5 * Ly + w_c) / f_c))
 
@@ -128,27 +130,37 @@ bathymetry.interpolate(conditional(bathy_x + bathy_y < -water_depth,
 
 print("max bathy : ", bathymetry.dat.data[:].max())
 
+ice_draft_file = rasterio.open(f'netcdf:Ocean1_input_geom_v1.01.nc:lowerSurface', 'r')
+#ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
 
-ice_draft = Function(P1_extruded)
-ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
+base_mesh.coordinates.dat.data[:, 0] += 320E3
+mesh.coordinates.dat.data[:, 0] += 320E3
 
-#base_mesh.coordinates.dat.data[:, 0] += 320E3
-#ice_draft = interpolate_data(ice_draft_file, P1)
-#print("max icedraft : ",ice_draft.dat.data[:].max())
-#print("min icedraft : ",ice_draft.dat.data[:].min())
+#P1 = FunctionSpace(base_mesh, "CG", 1)
+ice_draft_base = interpolate_data(ice_draft_file, P1)
+print("max icedraft : ",ice_draft_base.dat.data[:].max())
+print("min icedraft : ",ice_draft_base.dat.data[:].min())
 
 ocean_thickness = Function(P1_extruded)
 
+ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
+print("max icedraft extruded : ",ice_draft.view_3d.dat.data[:].max())
+print("min icedraft extruded : ",ice_draft.view_3d.dat.data[:].min())
+ocean_thickness.interpolate(ice_draft.view_3d - bathymetry)
 
-ocean_thickness.interpolate(ice_draft - bathymetry)
-#ocean_thickness.interpolate(conditional(ice_draft - bathymetry < Constant(15),
-#                                        Constant(15),
-#                                        ice_draft - bathymetry)) 
+print("max thickness : ", ocean_thickness.dat.data[:].max())
+print("min thickness : ", ocean_thickness.dat.data[:].min())
+ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(1),
+                                        Constant(1),
+                                        ice_draft.view_3d - bathymetry)) 
+print("max thickness : ", ocean_thickness.dat.data[:].max())
+print("min thickness : ", ocean_thickness.dat.data[:].min())
 
 # Scale the mesh to make ice shelf slope
 Vc = mesh.coordinates.function_space()
 x, y, z = SpatialCoordinate(mesh)
-f = Function(Vc).interpolate(as_vector([x, y, conditional(x - 0.5*dy < shelf_length, ocean_thickness*z/H2, z) - -bathymetry]))
+f = Function(Vc).interpolate(as_vector([x, y, conditional(x - 0.5*dy < shelf_length + 320E3, ocean_thickness*z/H2, ocean_thickness*z/H3) - -bathymetry]))
+#f = Function(Vc).interpolate(as_vector([x, y, ocean_thickness*z/H2 - -bathymetry]))
 mesh.coordinates.assign(f)
 
 ds = CombinedSurfaceMeasure(mesh, 5)
@@ -174,8 +186,13 @@ PETSc.Sys.Print("Area of iceslope: should be {:.0f}m^2: ".format(sqrt(shelf_leng
 n = FacetNormal(mesh)
 print(assemble(avg(dot(n,n))*dS_v(domain=mesh)))
 print(assemble(avg(dot(n,n))*dS_h(domain=mesh)))
-
-
+mesh_file = File("ocean_thickness_icedraftfile.pvd")
+mesh_file.write(ocean_thickness)
+mesh_file = File("bathy_icedraftfile.pvd")
+mesh_file.write(bathymetry)
+mesh_file = File("icedraft_icedraftfile.pvd")
+mesh_file.write(ice_draft)
+exit()
 
 ##########
 PETSc.Sys.Print("mesh cell type", mesh.ufl_cell())
@@ -594,7 +611,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy80km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt_removefunc_projector_coriolis_analyticbathy/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy80km_closed_coriolis_analyticbathy_tracerlims/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
