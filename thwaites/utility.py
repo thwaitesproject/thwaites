@@ -1,7 +1,8 @@
 """
 A module with utitity functions for Thwaites
 """
-from firedrake import outer, ds_v, ds_t, ds_b, CellDiameter, CellVolume, sqrt, exp
+from firedrake import outer, ds_v, ds_t, ds_b, CellDiameter, CellVolume 
+from firedrake import sqrt, exp, Function, FiniteElement, TensorProductElement, FunctionSpace
 import ufl
 
 
@@ -161,3 +162,81 @@ def get_top_surface(cavity_xlength=5000., cavity_ylength=5000., cavity_height=10
 
 def offset_backward_step_approx(x, k=1.0, x0=0.0):
     return 1.0 / (1.0 + exp(2.0*k*(x-x0)))
+
+
+def extend_function_to_3d(func, mesh_extruded):#
+    """
+    Returns a 3D view of a 2D :class:`Function` on the extruded domain.
+    The 3D function resides in V x R function space, where V is the function
+    space of the source function. The 3D function shares the data of the 2D
+    function.
+    """
+    fs = func.function_space()
+    assert fs.mesh().geometric_dimension() == 2, 'Function must be in 2D space'
+    ufl_elem = fs.ufl_element()
+    family = ufl_elem.family()
+    degree = ufl_elem.degree()
+    name = func.name()
+    if isinstance(ufl_elem, ufl.VectorElement):
+        # vector function space
+        fs_extended = get_functionspace(mesh_extruded, family, degree, 'R', 0, dim=2, vector=True)
+    else:
+        fs_extended = get_functionspace(mesh_extruded, family, degree, 'R', 0)
+    func_extended = Function(fs_extended, name=name, val=func.dat._data)
+    func_extended.source = func
+    return func_extended
+
+
+class ExtrudedFunction(Function):
+    """
+    A 2D :class:`Function` that provides a 3D view on the extruded domain.
+    The 3D function can be accessed as `ExtrudedFunction.view_3d`.
+    The 3D function resides in V x R function space, where V is the function
+    space of the source function. The 3D function shares the data of the 2D
+    function."""
+    def __init__(self, *args, mesh_3d=None, **kwargs):
+        """
+        Create a 2D :class:`Function` with a 3D view on extruded mesh.
+        :arg mesh_3d: Extruded 3D mesh where the function will be extended to.
+        """
+        # create the 2d function
+        super().__init__(*args, **kwargs)
+        if mesh_3d is not None:
+            self.view_3d = extend_function_to_3d(self, mesh_3d)
+
+
+def get_functionspace(mesh, h_family, h_degree, v_family=None, v_degree=None,
+                      vector=False, hdiv=False, variant=None, v_variant=None,
+                      **kwargs):
+    cell_dim = mesh.cell_dimension()
+    assert cell_dim in [2, (2, 1)], 'Unsupported cell dimension'
+    hdiv_families = [
+        'RT', 'RTF', 'RTCF', 'RAVIART-THOMAS',
+        'BDM', 'BDMF', 'BDMCF', 'BREZZI-DOUGLAS-MARINI',
+    ]
+    if variant is None:
+        if h_family.upper() in hdiv_families:
+            if h_family in ['RTCF', 'BDMCF']:
+                variant = 'equispaced'
+            else:
+                variant = 'integral'
+        else:
+            variant = 'equispaced'
+    if v_variant is None:
+        v_variant = 'equispaced'
+    if cell_dim == (2, 1):
+        if v_family is None:
+            v_family = h_family
+        if v_degree is None:
+            v_degree = h_degree
+        h_cell, v_cell = mesh.ufl_cell().sub_cells()
+        h_elt = FiniteElement(h_family, h_cell, h_degree, variant=variant)
+        v_elt = FiniteElement(v_family, v_cell, v_degree, variant=v_variant)
+        elt = TensorProductElement(h_elt, v_elt)
+        if hdiv:
+            elt = HDiv(elt)
+    else:
+        elt = FiniteElement(h_family, mesh.ufl_cell(), h_degree, variant=variant)
+
+    constructor = VectorFunctionSpace if vector else FunctionSpace
+    return constructor(mesh, elt, **kwargs)
