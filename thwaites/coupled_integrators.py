@@ -154,7 +154,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         pg_term = [term for term in self.equations[0]._terms if isinstance(term, PressureGradientTerm)][0]
         pg_fields = self.fields.copy()
         # note that p_theta-p_lag_theta = theta_p*(p1-p_lag)
-        pg_fields['pressure'] = self.theta * (p - p_lag)
+        pg_fields['pressure'] = self.theta_p * (p - p_lag)
         self.F -= self.dt_const*pg_term.residual(self.u_test, u_theta, u_lag_theta, pg_fields, bcs=self.bcs)
 
         div_term = [term for term in self.equations[1]._terms if isinstance(term, DivergenceTerm)][0]
