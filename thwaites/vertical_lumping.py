@@ -91,4 +91,20 @@ class LaplacePC(AuxiliaryOperatorPC):
         ctx = P.getPythonContext()
         dt = ctx.appctx['dt']
         dx = ctx.appctx['dx']
-        return dt * dt * dot(grad(test), grad(trial))*dx, None
+        ds = ctx.appctx['ds']
+        bcs = ctx.appctx['bcs']
+        n = ctx.appctx['n']
+
+        F =  dt * dt * dot(grad(test), grad(trial)) * dx
+        F -= dt * dt * test * dot(grad(trial), n) * ds   # default is open boundary conditon (i.e don't set neumann pressure)
+
+        # For boundaries where u is specified we need to take the neumann pressure boundary back out. 
+        for id, bc in bcs.items():
+            print(id)
+            if 'un' in bc:
+                print(id, "has u")
+                F += dt * dt * test * dot(grad(trial), n) * ds(id)
+            elif 'u' in bc:
+                F += dt * dt * test * dot(grad(trial), n) * ds(id)
+
+        return F, None

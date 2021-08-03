@@ -454,8 +454,8 @@ melt.interpolate(mp.wb)
 
 # WEAKLY Enforced BCs
 n = FacetNormal(mesh)
-Temperature_term = -beta_temp * z * (T_surface + 0.5 * (T_bottom - T_surface) * (z / -water_depth))
-Salinity_term = beta_sal * z * (S_surface + 0.5 * (S_bottom - S_surface) * (z / -water_depth))
+Temperature_term = -beta_temp * (T_surface * z + 0.5 * (T_bottom - T_surface) * (pow(z,2) / -water_depth))
+Salinity_term = beta_sal *  (S_surface * z + 0.5 * (S_bottom - S_surface) * (pow(z,2) / -water_depth))
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
 
@@ -586,8 +586,8 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
                                                           solver_parameters=vp_solver_parameters,
                                                           theta=0.5,
                                                           predictor_solver_parameters=predictor_solver_parameters,
-                                                          picard_iterations=1,
-                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+                                                          picard_iterations=1)
+#                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
 # are meant to decouple from pressure projection, but won't if pressure is not initialised

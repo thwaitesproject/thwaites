@@ -173,7 +173,8 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
                                                            solver_parameters=self.solver_parameters,
                                                            appctx = {'a': firedrake.derivative(self.F, self.solution),
                                                                      'schur_nullspace': self.pressure_nullspace,
-                                                                     'dt': self.dt_const, 'dx': self.equations[1].dx},
+                                                                     'dt': self.dt_const, 'dx': self.equations[1].dx,
+                                                                     'ds': self.equations[1].ds, 'bcs': self.bcs, 'n': div_term.n},
                                                            nullspace = mixed_nullspace, transpose_nullspace = mixed_nullspace,
                                                            options_prefix=self.name)
 
