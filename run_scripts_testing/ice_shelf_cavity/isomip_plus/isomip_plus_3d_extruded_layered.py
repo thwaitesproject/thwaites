@@ -40,9 +40,9 @@ restoring_time = Constant(0.1*86400.)
 ##########
 
 #  Generate mesh
-L = 480E3
+L = 800E3
 Ly = 80E3
-shelf_length = 320E3
+shelf_length = 640E3
 H1 = 130.
 H2 = 600.
 H3 = 720.
@@ -53,7 +53,7 @@ ny = round(Ly/dy)
 dz = H2/args.nz #40.0
 
 # create mesh
-base_mesh = RectangleMesh(nx,ny,L,Ly)
+base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront.msh") 
 layers = []
 cell = 0
 yr = 0
@@ -64,7 +64,7 @@ x_base = SpatialCoordinate(base_mesh)
 
 P1 = FunctionSpace(base_mesh, "CG", 1)
 ocean_thickness = Function(P1)
-ocean_thickness.interpolate(conditional(x_base[0] - 0.5*dy < shelf_length, H2, H3))
+ocean_thickness.interpolate(conditional(x_base[0] + 0.5*dy < shelf_length, H2, H3))
 
 def extruded_cavity_mesh(base_mesh, ocean_thickness):
     P0dg = FunctionSpace(base_mesh, "DG", 0)
@@ -96,20 +96,20 @@ P0_extruded = FunctionSpace(mesh, 'DG', 0)
 p0mesh_cells = Function(P0_extruded)
 PETSc.Sys.Print("number of cells:", len(p0mesh_cells.dat.data[:]))
 
+
 P1_extruded = FunctionSpace(mesh, 'CG', 1)
 
 # Redefine thickness (without ice slope!) on extruded mesh
-ocean_thickness_extruded = Function(P1_extruded)
-ocean_thickness_extruded.interpolate(conditional(x - 0.5*dy < shelf_length, H2, H3))
+ocean_thickness_extruded = ExtrudedFunction(ocean_thickness, mesh_3d=mesh)
 
 # move top nodes to correct position:
 cfs = mesh.coordinates.function_space()
-bc = DirichletBC(cfs, as_vector((x, y, ocean_thickness_extruded)), "top")
+bc = DirichletBC(cfs, as_vector((x, y, ocean_thickness_extruded.view_3d)), "top")
 bc.apply(mesh.coordinates)
 
 # Bathymetry 
 x_bar = Constant(300E3) # Characteristic along flow length scale of the bedrock
-x_tilda = (x + Constant(320E3) ) / x_bar  # isomip+ x coordinate used for defining along flow bathymetry/bedrock topography (N.b offset by 320km because of ice domain)
+x_tilda = x / x_bar  # isomip+ x coordinate used for defining along flow bathymetry/bedrock topography 
 B0 = Constant(-150.0) # Bedrock topography at x = 0 (in the ice domain!)
 B2 = Constant(-728.8) # Second bedrock topography coefficient 
 B4 = Constant(343.91) # Third bedrock topography coefficient
@@ -133,8 +133,6 @@ print("max bathy : ", bathymetry.dat.data[:].max())
 ice_draft_file = rasterio.open(f'netcdf:Ocean1_input_geom_v1.01.nc:lowerSurface', 'r')
 #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
 
-base_mesh.coordinates.dat.data[:, 0] += 320E3
-mesh.coordinates.dat.data[:, 0] += 320E3
 
 #P1 = FunctionSpace(base_mesh, "CG", 1)
 ice_draft_base = interpolate_data(ice_draft_file, P1)
@@ -150,8 +148,8 @@ ocean_thickness.interpolate(ice_draft.view_3d - bathymetry)
 
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
-ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(1),
-                                        Constant(1),
+ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(10),
+                                        Constant(10),
                                         ice_draft.view_3d - bathymetry)) 
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
@@ -159,7 +157,7 @@ print("min thickness : ", ocean_thickness.dat.data[:].min())
 # Scale the mesh to make ice shelf slope
 Vc = mesh.coordinates.function_space()
 x, y, z = SpatialCoordinate(mesh)
-f = Function(Vc).interpolate(as_vector([x, y, conditional(x - 0.5*dy < shelf_length + 320E3, ocean_thickness*z/H2, ocean_thickness*z/H3) - -bathymetry]))
+f = Function(Vc).interpolate(as_vector([x, y, conditional(x + 0.5*dy < shelf_length, ocean_thickness*z/H2, ocean_thickness*z/H3) - -bathymetry]))
 #f = Function(Vc).interpolate(as_vector([x, y, ocean_thickness*z/H2 - -bathymetry]))
 mesh.coordinates.assign(f)
 
@@ -192,11 +190,14 @@ mesh_file = File("bathy_icedraftfile.pvd")
 mesh_file.write(bathymetry)
 mesh_file = File("icedraft_icedraftfile.pvd")
 mesh_file.write(ice_draft)
-exit()
 
+p0mesh_cells.interpolate(CellVolume(mesh))
+PETSc.Sys.Print("max cell volume:", p0mesh_cells.dat.data[:].max())
+PETSc.Sys.Print("min cell volume:", p0mesh_cells.dat.data[:].min())
+mesh_cellvol_file = File("mesh_cell_vol.pvd")
+mesh_cellvol_file.write(p0mesh_cells)
 ##########
 PETSc.Sys.Print("mesh cell type", mesh.ufl_cell())
-
 # Set up function spaces
 # Nedelec wedge element. Discontinuous in normal component
 # continuous in tangential component.
@@ -370,7 +371,7 @@ class VerticalDensityGradientSolver:
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
-sponge_fraction = 0.02  # fraction of domain where sponge
+sponge_fraction = 0.0125  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(x > (1.0-sponge_fraction) * L,
                            absorption_factor * T_restore *((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
@@ -397,12 +398,6 @@ mu_h = Constant(6.0)
 mu_v = Constant(1e-3)
 kappa_h = Constant(1.0)
 kappa_v = Constant(5e-5)
-
-# linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
-open_ocean_kappa_v = kappa_v
-grounding_line_kappa_v = Constant(open_ocean_kappa_v * H1/H2)
-kappa_v_grad = (open_ocean_kappa_v - grounding_line_kappa_v) / shelf_length
-kappa_v_cond = conditional(x < shelf_length, grounding_line_kappa_v + x * kappa_v_grad, open_ocean_kappa_v)
 
 
 #kappa_v = Function(P1_extruded) 
@@ -609,9 +604,9 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 
 # Set up Vectorfolder
 folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ipdef_StratLinTres"+str(restoring_time.values()[0])+\
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80mLy80km_closed_coriolis_analyticbathy_tracerlims/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
