@@ -192,7 +192,6 @@ print("combined dofs:", M.dim())
 print("scalar dofs:", U.dim())
 print("P1 dofs (no. of nodes):", P1.dim())
 ##########
-exit()
 # Set up functions
 m = Function(M)
 v_, p_ = m.split()  # function: velocity, pressure
@@ -222,7 +221,7 @@ rho_anomaly = Function(P1, name="density anomaly")
 
 dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/23.04.21_2d_isomip+_dt900.0_dtOut43200.0_T1728000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80m_closed_nolim_offsetmelt_nolim_strongthreshold0.6_veldq2update12hours/dump_step_1440.h5" 
 
-DUMP = True
+DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -418,8 +417,8 @@ full_pressure.interpolate(mp.P_full)
 
 # WEAKLY Enforced BCs
 n = FacetNormal(mesh)
-Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
-Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
+Temperature_term = -beta_temp * (T_surface * z + 0.5 * (T_bottom - T_surface) * (pow(z,2) / -water_depth) - T_ref * z)
+Salinity_term = beta_sal *  (S_surface * z + 0.5 * (S_bottom - S_surface) * (pow(z,2) / -water_depth) - S_ref * z)
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
 
@@ -432,7 +431,7 @@ no_normal_flow = 0.
 
 
 vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.5E-3, 0.0)}, 
-        1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
+        1: {'un': no_normal_flow}, 2: {'stress': stress_open_boundary}, 
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
 temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)}}
@@ -490,18 +489,18 @@ pressure_projection_solver_parameters = {
             'laplace_ksp_ksp_rtol': 1e-7,
             'laplace_ksp_ksp_atol': 1e-9,
             'laplace_ksp_ksp_converged_reason': None,
-#            'laplace_ksp_ksp_monitor_true_residual': None,
+            'laplace_ksp_ksp_monitor_true_residual': None,
             'laplace_ksp_pc_type': 'python',
             'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
     }
-if False:
+if True:
     fs1 = pressure_projection_solver_parameters['fieldsplit_1']
     fs1['ksp_type'] = 'cg'
     fs1['ksp_rtol'] = 1e-7
     fs1['ksp_atol'] = 1e-9
     fs1['ksp_monitor_true_residual'] = None
-    fs1['laplace_ksp_ksp_type'] = 'preonly'
+#    fs1['laplace_ksp_ksp_type'] = 'preonly'
 
 predictor_solver_parameters = {
         'snes_monitor': None,
@@ -547,8 +546,8 @@ output_step = output_dt/dt
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
                                                           predictor_solver_parameters=predictor_solver_parameters,
-                                                          picard_iterations=1,
-                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+                                                          picard_iterations=1)
+#                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
 
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
@@ -569,7 +568,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_nolim_offsetmelt_nolim_strongthreshold0.6_analytic_bathy/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_nolim_offsetmelt_nolim_strongthreshold0.6_analytic_bathyopen/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
