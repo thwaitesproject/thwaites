@@ -361,11 +361,11 @@ Point( 355 ) = {533500.0,70582.6952377,0.0 };
 
 // Add these two points later to define where the ice front is
 // Manually add ice front points into overall outline
-Point(400) = {640000.0, 4000.0, 0.0, 4000.0};
-Point(401) = {640000.0, 76000.0, 0.0, 4000.0};
+Point(400) = {640000.0, 2000.0, 0.0, 2000.0};
+Point(401) = {640000.0, 78000.0, 0.0, 2000.0};
 
-Point(402) = {632000.0, 4000.0, 0.0, 4000.0};
-Point(403) = {632000.0, 76000.0, 0.0, 4000.0};
+Point(402) = {636000.0, 2000.0, 0.0, 2000.0};
+Point(403) = {636000.0, 78000.0, 0.0, 2000.0};
 
 // Definitions of 6 B-splines:
 BSpline( 6 ) = {338, 74, 151};
