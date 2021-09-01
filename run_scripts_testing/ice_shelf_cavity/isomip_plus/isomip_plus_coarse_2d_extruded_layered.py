@@ -462,6 +462,8 @@ pressure_projection_solver_parameters = {
         'snes_type': 'ksponly',
         'snes_monitor': None,
         'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
+        'ksp_converged_reason': None,
+        'ksp_monitor_true_residual': None,
         'mat_type': 'matfree',
         'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'schur',
@@ -469,18 +471,21 @@ pressure_projection_solver_parameters = {
         # velocity mass block:
         'fieldsplit_0': {
             'ksp_converged_reason': None,
-#            'ksp_monitor_true_residual': None,
+            'ksp_monitor_true_residual': None,
             'ksp_type': 'cg',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
             'assembled_pc_type': 'bjacobi',
             'assembled_sub_pc_type': 'sor',
             },
-        # schur system: explicitly assemble the schur system
-        # this only works with pressureprojectionicard if the velocity block is just the mass matrix
-        # and if the velocity is DG so that this mass matrix can be inverted explicitly
+        # schur system: don't explicitly assemble the schur system
+        # use cg for outer krylov solve. Use LaplacePC with vertical lumping to assemble pc.
         'fieldsplit_1': {
-            'ksp_type': 'preonly',
+            'ksp_type': 'cg',
+            'ksp_rtol': 1e-7,
+            'ksp_atol': 1e-9,
+            'ksp_converged_reason': None,
+            'ksp_monitor_true_residual': None,
             'pc_type': 'python',
             'pc_python_type': 'thwaites.LaplacePC',
             #'schur_ksp_converged_reason': None,
@@ -494,13 +499,6 @@ pressure_projection_solver_parameters = {
             'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
     }
-if True:
-    fs1 = pressure_projection_solver_parameters['fieldsplit_1']
-    fs1['ksp_type'] = 'cg'
-    fs1['ksp_rtol'] = 1e-7
-    fs1['ksp_atol'] = 1e-9
-    fs1['ksp_monitor_true_residual'] = None
-#    fs1['laplace_ksp_ksp_type'] = 'preonly'
 
 predictor_solver_parameters = {
         'snes_monitor': None,
@@ -568,7 +566,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_nolim_offsetmelt_nolim_strongthreshold0.6_analytic_bathyopen/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_FS1ksprtol1e-7_Laplaceksprtol1e-7/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
