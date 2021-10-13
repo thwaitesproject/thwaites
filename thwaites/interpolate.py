@@ -14,35 +14,22 @@ from scipy.interpolate import RegularGridInterpolator
 def _sample(dataset, X, method, y_transect):
     xres = dataset.res[0]
     bounds = dataset.bounds
-    print("bounds", bounds)
-    print(type(bounds))
-    print("dataset", dataset)
-    xmin = max(X[:, 0].min() - 2 * xres, bounds.left)
-    print("X[:, 0].min() - 2 * xres",X[:, 0].min() - 2 * xres)
-    print("or")
-    print("bounds.left", bounds.left)
-    xmax = min(X[:, 0].max() + 2 * xres, bounds.right)
+    if y_transect is None:
+        print(y_transect)
+        # 2d interpolation
+        xmin = max(X[:, 0].min() - 2 * xres, bounds.left)
+        xmax = min(X[:, 0].max() + 2 * xres, bounds.right)
 
+        ymin = max(X[:, 1].min() - 2 * xres, bounds.bottom)
+        ymax = min(X[:, 1].max() + 2 * xres, bounds.top) 
+    else:
+        # 1d interpolation
+        xmin = max(X[:].min() - 2 * xres, bounds.left)
+        xmax = min(X[:].max() + 2 * xres, bounds.right)
 
-    print("X[:, 0].max() + 2 * xres", X[:, 0].max() + 2 * xres)
-    print("or")
-    print("bounds.right", bounds.right)
+        ymin = bounds.bottom
+        ymax = bounds.top
 
-    ymin = max(X[:, 1].min() - 2 * xres, bounds.bottom)
-    print("X[:, 1].min() - 2 * xres", X[:, 1].min() - 2 * xres)
-    print("or")
-    print("bounds.bottom", bounds.bottom)
-
-    ymax = min(X[:, 1].max() + 2 * xres, bounds.top)
-    print("X[:, 1].max() + 2 * xres", X[:, 1].max() + 2 * xres)
-    print("or")
-    print("bounds.bottom", bounds.top)
-
-    print("xres", xres)
-    print("xmin", xmin)
-    print("xmax", xmax)
-    print("ymin", ymin)
-    print("ymax", ymax)
 
     window = rasterio.windows.from_bounds(
         left=xmin,
@@ -69,13 +56,13 @@ def _sample(dataset, X, method, y_transect):
     else:
         assert isinstance(y_transect, (int,float))
         # y_transect should be the fixed y value that the transect passes through
-        X2 = []
+        X_1d = []
         for i in X:
-            X2.append([i, y_transect])
-        X2 = np.array(X2)
+            X_1d.append([i, y_transect])
+        X_1d = np.array(X_1d)
 
-        int_out = interpolator(X2, method=method)
-        return interpolator(X2, method=method)
+        int_out = interpolator(X_1d, method=method)
+        return interpolator(X_1d, method=method)
 
 
 def interpolate(f, Q, method='linear', y_transect=None):

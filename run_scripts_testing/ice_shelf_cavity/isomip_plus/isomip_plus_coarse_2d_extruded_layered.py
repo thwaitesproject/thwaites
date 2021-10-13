@@ -128,7 +128,7 @@ ice_draft_filename = "Ocean1_input_geom_v1.01.nc"
 ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
 #ice_draft = Function(P1_extruded)
 #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
-ice_draft_base = interpolate_data(ice_draft_file, P1, 41000)  # Get ice shelf draft along y=41km transect i.e the middle
+ice_draft_base = interpolate_data(ice_draft_file, P1, y_transect=41000)  # Get ice shelf draft along y=41km transect i.e the middle
 
 print("max icedraft : ",ice_draft_base.dat.data[:].max())
 print("min icedraft : ",ice_draft_base.dat.data[:].min())
@@ -240,7 +240,7 @@ rho_anomaly = Function(P1, name="density anomaly")
 # Define a dump file
 
 dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/01.09.21_2d_isomip+_dt900.0_dtOut864000.0_T8640000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay30_icedraft_open/dump_step_9600.h5" 
-DUMP = True
+DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
