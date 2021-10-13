@@ -172,7 +172,7 @@ def extend_function_to_3d(func, mesh_extruded):#
     function.
     """
     fs = func.function_space()
-    assert fs.mesh().geometric_dimension() == 2, 'Function must be in 2D space'
+#    assert fs.mesh().geometric_dimension() == 2, 'Function must be in 2D space'
     ufl_elem = fs.ufl_element()
     family = ufl_elem.family()
     degree = ufl_elem.degree()
@@ -201,6 +201,7 @@ class ExtrudedFunction(Function):
         """
         # create the 2d function
         super().__init__(*args, **kwargs)
+        print(*args)
         if mesh_3d is not None:
             self.view_3d = extend_function_to_3d(self, mesh_3d)
 
@@ -209,7 +210,8 @@ def get_functionspace(mesh, h_family, h_degree, v_family=None, v_degree=None,
                       vector=False, hdiv=False, variant=None, v_variant=None,
                       **kwargs):
     cell_dim = mesh.cell_dimension()
-    assert cell_dim in [2, (2, 1)], 'Unsupported cell dimension'
+    print(cell_dim)
+    assert cell_dim in [2, (2, 1), (1,1)], 'Unsupported cell dimension'
     hdiv_families = [
         'RT', 'RTF', 'RTCF', 'RAVIART-THOMAS',
         'BDM', 'BDMF', 'BDMCF', 'BREZZI-DOUGLAS-MARINI',
@@ -221,10 +223,11 @@ def get_functionspace(mesh, h_family, h_degree, v_family=None, v_degree=None,
             else:
                 variant = 'integral'
         else:
+            print("var = equi")
             variant = 'equispaced'
     if v_variant is None:
         v_variant = 'equispaced'
-    if cell_dim == (2, 1):
+    if cell_dim == (2, 1) or (1,1):
         if v_family is None:
             v_family = h_family
         if v_degree is None:
