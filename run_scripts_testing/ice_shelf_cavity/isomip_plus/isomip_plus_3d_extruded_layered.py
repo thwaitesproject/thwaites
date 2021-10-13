@@ -454,8 +454,8 @@ melt.interpolate(mp.wb)
 
 # WEAKLY Enforced BCs
 n = FacetNormal(mesh)
-Temperature_term = -beta_temp * (T_surface * z + 0.5 * (T_bottom - T_surface) * (pow(z,2) / -water_depth))
-Salinity_term = beta_sal *  (S_surface * z + 0.5 * (S_bottom - S_surface) * (pow(z,2) / -water_depth))
+Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
+Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z) 
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
 
@@ -468,7 +468,7 @@ no_normal_flow = 0.
 
 
 vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.5E-3, 0.0)}, 
-        1: {'un': no_normal_flow}, 2: {'stress': stress_open_boundary}, 
+        1: {'un': no_normal_flow}, 2: {'stress': no_normal_flow}, 
         3: {'un': no_normal_flow}, 4: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
@@ -587,7 +587,7 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
                                                           theta=0.5,
                                                           predictor_solver_parameters=predictor_solver_parameters,
                                                           picard_iterations=1)
-#                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
 # are meant to decouple from pressure projection, but won't if pressure is not initialised
