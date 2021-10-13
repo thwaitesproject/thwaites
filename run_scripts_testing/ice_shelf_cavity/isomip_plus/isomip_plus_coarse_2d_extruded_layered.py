@@ -128,7 +128,7 @@ ice_draft_filename = "Ocean1_input_geom_v1.01.nc"
 ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
 #ice_draft = Function(P1_extruded)
 #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
-ice_draft_base = interpolate_data(ice_draft_file, P1)
+ice_draft_base = interpolate_data(ice_draft_file, P1, 41000)  # Get ice shelf draft along y=41km transect i.e the middle
 
 print("max icedraft : ",ice_draft_base.dat.data[:].max())
 print("min icedraft : ",ice_draft_base.dat.data[:].min())

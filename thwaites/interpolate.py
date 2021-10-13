@@ -11,65 +11,38 @@ import rasterio
 from scipy.interpolate import RegularGridInterpolator
 
 
-def _sample(dataset, X, method):
-
-    if True:
-        
-        xres = dataset.res[0]
-        bounds = dataset.bounds
-        print("bounds", bounds)
-        print(type(bounds))
-        print("dataset", dataset)
-        xmin = max(X[:].min() - 2 * xres, bounds.left)
-        print("X[:].min() - 2 * xres",X[:].min() - 2 * xres)
-        print("or")
-        print("bounds.left", bounds.left)
-        xmax = min(X[:].max() + 2 * xres, bounds.right)
+def _sample(dataset, X, method, y_transect):
+    xres = dataset.res[0]
+    bounds = dataset.bounds
+    print("bounds", bounds)
+    print(type(bounds))
+    print("dataset", dataset)
+    xmin = max(X[:, 0].min() - 2 * xres, bounds.left)
+    print("X[:, 0].min() - 2 * xres",X[:, 0].min() - 2 * xres)
+    print("or")
+    print("bounds.left", bounds.left)
+    xmax = min(X[:, 0].max() + 2 * xres, bounds.right)
 
 
-        print("X[:, 0].max() + 2 * xres", X[:].max() + 2 * xres)
-        print("or")
-        print("bounds.right", bounds.right)
+    print("X[:, 0].max() + 2 * xres", X[:, 0].max() + 2 * xres)
+    print("or")
+    print("bounds.right", bounds.right)
 
-        print(xmin)
-        print(xmax)
-        ymin = 0.
-        ymax = 80000.
+    ymin = max(X[:, 1].min() - 2 * xres, bounds.bottom)
+    print("X[:, 1].min() - 2 * xres", X[:, 1].min() - 2 * xres)
+    print("or")
+    print("bounds.bottom", bounds.bottom)
 
+    ymax = min(X[:, 1].max() + 2 * xres, bounds.top)
+    print("X[:, 1].max() + 2 * xres", X[:, 1].max() + 2 * xres)
+    print("or")
+    print("bounds.bottom", bounds.top)
 
-  #  xres = dataset.res[0]
- ##   bounds = dataset.bounds
-#    print("bounds", bounds)
- #   print(type(bounds))
-#    print("dataset", dataset)
-#    xmin = max(X[:, 0].min() - 2 * xres, bounds.left)
-##    print("X[:, 0].min() - 2 * xres",X[:, 0].min() - 2 * xres)
-#    print("or")
-#    print("bounds.left", bounds.left)
-#    xmax = min(X[:, 0].max() + 2 * xres, bounds.right)
-#
-#
- #   print("X[:, 0].max() + 2 * xres", X[:, 0].max() + 2 * xres)
- #   print("or")
- #   print("bounds.right", bounds.right)
-#
-#    ymin = max(X[:, 1].min() - 2 * xres, bounds.bottom)
-#    print("X[:, 1].min() - 2 * xres", X[:, 1].min() - 2 * xres)
-##    print("or")
-#    print("bounds.bottom", bounds.bottom)
-#
-#    ymax = min(X[:, 1].max() + 2 * xres, bounds.top)
-#    print("X[:, 1].max() + 2 * xres", X[:, 1].max() + 2 * xres)
-#    print("or")
-#    print("bounds.bottom", bounds.top)
-#
- #   print("xres", xres)
-#    print("xmin", xmin)
-#    print("xmax", xmax)
-#    print("ymin", ymin)
-#    print("ymax", ymax)
-#    ymin = 40000.
-#    ymax = 40000.
+    print("xres", xres)
+    print("xmin", xmin)
+    print("xmax", xmax)
+    print("ymin", ymin)
+    print("ymax", ymax)
 
     window = rasterio.windows.from_bounds(
         left=xmin,
@@ -86,26 +59,26 @@ def _sample(dataset, X, method):
     upper_left = transform * (0, 0)
     lower_right = transform * (window.width - 1, window.height - 1)
     xs = np.linspace(upper_left[0], lower_right[0], window.width)
-    print("xs", np.shape(xs))
     ys = np.linspace(lower_right[1], upper_left[1], window.height)
 
-    print("ys", ys)
     data = np.flipud(dataset.read(indexes=1, window=window, masked=True)).T
-
-    print("data",data)
     interpolator = RegularGridInterpolator((xs, ys), data, method=method, bounds_error=False, fill_value=None)
-    X2 = []
-    for i in X:
-        X2.append([i, 41000])
-    X2 = np.array(X2)
-    print(X2)
+    
+    if y_transect is None:
+        return interpolator(X, method=method)
+    else:
+        assert isinstance(y_transect, (int,float))
+        # y_transect should be the fixed y value that the transect passes through
+        X2 = []
+        for i in X:
+            X2.append([i, y_transect])
+        X2 = np.array(X2)
 
-    int_out = interpolator(X2, method=method)
-    print(int_out)
-    return interpolator(X2, method=method)
+        int_out = interpolator(X2, method=method)
+        return interpolator(X2, method=method)
 
 
-def interpolate(f, Q, method='linear'):
+def interpolate(f, Q, method='linear', y_transect=None):
     r"""Interpolate an expression or a gridded data set to a function space
 
     Parameters
@@ -136,11 +109,11 @@ def interpolate(f, Q, method='linear'):
     q = firedrake.Function(Q)
 
     if isinstance(f, rasterio.DatasetReader):
-        q.dat.data[:] = _sample(f, X, method)
+        q.dat.data[:] = _sample(f, X, method, y_transect)
     elif (isinstance(f, tuple) and
           all(isinstance(fi, rasterio.DatasetReader) for fi in f)):
         for i, fi in enumerate(f):
-            q.dat.data[:, i] = _sample(fi, X, method)
+            q.dat.data[:, i] = _sample(fi, X, method, y_transect)
     else:
         raise ValueError('Argument must be a rasterio data set or a tuple of '
                          'data sets!')
