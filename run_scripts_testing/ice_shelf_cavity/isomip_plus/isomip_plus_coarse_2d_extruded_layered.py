@@ -265,7 +265,7 @@ rho_anomaly = Function(P1, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/18.10.21_2d_isomip+_dt900.0_dtOut864000.0_T8640000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay15_icedraft_closed_tracerlims/dump_step_9600.h5" 
+dump_file = "./isomip_2d_dx4km_nz15_closed_dump_step_9600" 
 DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
