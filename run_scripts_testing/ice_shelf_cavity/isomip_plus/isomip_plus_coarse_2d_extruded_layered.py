@@ -454,14 +454,12 @@ Sinflow = Constant(20.0)
 
 
 vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.5E-3, 0.0)}, 
-        1: {'un': Vinflow}, 2: {'stress': stress_open_boundary}, 
+        1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
-temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)},
-        1: {'q': Tinflow}}
+temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)}}
 
-sal_bcs = {"top": {'flux':  conditional(x + 5*dy < shelf_length, -mp.S_flux_bc, 0.0)},
-        1: {'q': Sinflow}}
+sal_bcs = {"top": {'flux':  conditional(x + 5*dy < shelf_length, -mp.S_flux_bc, 0.0)}}
 
 
 # STRONGLY Enforced BCs
@@ -506,7 +504,7 @@ pressure_projection_solver_parameters = {
         # schur system: don't explicitly assemble the schur system
         # use cg for outer krylov solve. Use LaplacePC with vertical lumping to assemble pc.
         'fieldsplit_1': {
-            'ksp_type': 'cg',
+            'ksp_type': 'preonly',
             'ksp_rtol': 1e-7,
             'ksp_atol': 1e-9,
             'ksp_converged_reason': None,
@@ -591,7 +589,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_open_inflow"+str(Vinflow.values()[0])+"_from100days_ramp10steps_Sin20_tracerlims/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -694,8 +692,8 @@ while t < T - 0.5*dt:
     step += 1
     t += dt
 
-    if step <= 10: 
-        Vinflow.assign(0.01 * step * 0.1)
+    #if step <= 10: 
+    #    Vinflow.assign(0.01 * step * 0.1)
     
     with timed_stage('output'):
        if step % output_step == 0:
