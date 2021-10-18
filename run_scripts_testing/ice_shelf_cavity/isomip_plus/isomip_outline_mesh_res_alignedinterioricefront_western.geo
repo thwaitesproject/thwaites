@@ -398,7 +398,7 @@ Physical Line( 4 ) = {4, 5};
 Physical Surface( 1 ) = {0};
 
 Field[1] = MathEval;
-Field[1].F = "4000";
+Field[1].F = "8000";
 // Background Field = 1;
 
 // higher res at grounding line
@@ -410,7 +410,7 @@ Field[3].DistMax = 30e3;
 Field[3].DistMin = 5e3;
 Field[3].IField = 2;
 Field[3].LcMin = 2000;
-Field[3].LcMax = 4000;
+Field[3].LcMax = 8000;
 Field[3].Sigmoid = 1;
 
 
