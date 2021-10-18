@@ -3,6 +3,7 @@
 # beneath ice shelf.
 from thwaites import *
 from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, ExtrudedFunction
+from thwaites.utility import offset_backward_step_approx
 from firedrake.petsc import PETSc
 from firedrake import FacetNormal
 import pandas as pd
@@ -14,7 +15,13 @@ import rasterio
 from thwaites.interpolate import interpolate as interpolate_data
 
 ##########
+ADJOINT = True
 
+if ADJOINT:
+    from firedrake_adjoint import *
+    from thwaites.diagnostic_block import DiagnosticBlock
+
+##########
 PETSc.Sys.popErrorHandler()
 
 parser = argparse.ArgumentParser()
@@ -184,6 +191,25 @@ print("ds_v",assemble(avg(dot(n,n))*dS_v(domain=mesh)))
 
 mesh_file = File("ocean_thickness_icedraftfile.pvd")
 mesh_file.write(ocean_thickness)
+
+
+if ADJOINT:
+    # don't want to integrate over the entire top surface 
+    # and conditional doesnt seem to work in adjoint when used in J...
+    # wavelength of the step = x distance that fucntion goes from zero to 1. 
+    lambda_step = 2 * dy
+    k = 2.0 * np.pi / lambda_step 
+    x0 = shelf_length - 0.5 * lambda_step  # this is the centre of the step.
+
+
+    PETSc.Sys.Print("Alternatively using approx step function, length of iceslope: should be 320000.64m: ", assemble( Constant(1.0)*offset_backward_step_approx(x,k,x0)*ds("top", domain=mesh)))
+
+    PETSc.Sys.Print("Alternatively using approx step function, length of bottom up to ice shelf: should equal x0 = {}m and hopefully be close to shelf length: ".format(x0), assemble( Constant(1.0)*offset_backward_step_approx(x,k,x0)*ds("bottom", domain=mesh)))
+
+
+
+
+
 ##########
 print(mesh.ufl_cell())
 # Set up function spaces
@@ -196,7 +222,7 @@ M = MixedFunctionSpace([V, W])
 # u velocity function space.
 ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 U = FunctionSpace(mesh, ele)
-VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
+VDG = VectorFunctionSpace(mesh, "DQ", 1) # velocity for output
 vdg_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 VDG1 = VectorFunctionSpace(mesh, vdg_ele) # velocity for output
 
@@ -239,10 +265,10 @@ rho_anomaly = Function(P1, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/01.09.21_2d_isomip+_dt900.0_dtOut864000.0_T8640000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay30_icedraft_open/dump_step_9600.h5" 
-DUMP = False
+dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/18.10.21_2d_isomip+_dt900.0_dtOut864000.0_T8640000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay15_icedraft_closed_tracerlims/dump_step_9600.h5" 
+DUMP = True
 if DUMP:
-    with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+    with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
         # Checkpoint file open for reading and writing
         chk.load(v_, name="velocity")
         chk.load(p_, name="perturbation_pressure")
@@ -282,7 +308,22 @@ else:
     sal_init = S_restore
     sal.interpolate(sal_init)
 
+if ADJOINT:
+    c = Control(sal) 
 
+#    v_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
+#    V = VectorFunctionSpace(mesh, v_ele) # Velocity space
+#    M = MixedFunctionSpace([V, W])
+
+
+#    m = Function(M)
+#    v_, p_ = m.split()  # function: velocity, pressure
+#    v, p = split(m)  # expression: velocity, pressure
+#    v_._name = "velocity"
+#    p_._name = "perturbation pressure"
+#
+ #   v_.project(vadj_)
+#    p_.project(padj_)
 ##########
 
 # Set up equations
@@ -391,12 +432,13 @@ DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinit
 gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude estimate for vertical gradient of density anomaly. units m^-1
 #kappa_v.assign(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1))
 
-mu = as_tensor([[mu_h, 0], [0, mu_v]])
-kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
+mu_tensor = Constant([[mu_h, 0], [0, mu_v]])
+kappa_tensor = Constant([[kappa_h, 0], [0, kappa_v]])
 
-kappa_temp = kappa
-kappa_sal = kappa
-
+TP1 = TensorFunctionSpace(mesh, "CG", 1)
+mu = Function(TP1, name='viscosity').assign(mu_tensor)
+kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa_tensor)
+kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa_tensor)
 ##########
 
 # Equation fields
@@ -589,8 +631,8 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims/"
-         #+"_extended_domain_with_coriolis_stratified/"  # output folder.
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adjdq1q2/"
+
 #folder = 'tmp/'
 
 
@@ -646,14 +688,31 @@ full_pressure_file.write(full_pressure)
 
 ##########
 
-with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
-    # Checkpoint file open for reading and writing
-    chk.store(v_, name="velocity")
-    chk.store(p_, name="perturbation_pressure")
-    chk.store(temp, name="temperature")
-    chk.store(sal, name="salinity")
+#with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
+#    # Checkpoint file open for reading and writing
+#    chk.store(v_, name="velocity")
+#    chk.store(p_, name="perturbation_pressure")
+#    chk.store(temp, name="temperature")
+#    chk.store(sal, name="salinity")
 
+############
 
+if ADJOINT:
+    # adjoint output
+    tape = get_working_tape()
+
+    adj_s_file = File(folder+"adj_salinity.pvd")
+    tape.add_block(DiagnosticBlock(adj_s_file, sal))
+
+    adj_t_file = File(folder+"adj_temperature.pvd")
+    tape.add_block(DiagnosticBlock(adj_t_file, temp))
+
+    adj_visc_file = File(folder+"adj_viscosity.pvd")
+    tape.add_block(DiagnosticBlock(adj_visc_file, mu))
+    adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
+    tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
+    adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
+    tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
 ####################
 
@@ -736,11 +795,17 @@ while t < T - 0.5*dt:
            Qs_file.write(Q_s)
            Q_ice_file.write(Q_ice)
     
+           # Output adjoint T / S
+           tape.add_block(DiagnosticBlock(adj_t_file, temp))
+           tape.add_block(DiagnosticBlock(adj_s_file, sal))
+           
            time_str = str(step)
     
            PETSc.Sys.Print("t=", t)
     
            PETSc.Sys.Print("integrated melt =", assemble(conditional(x < shelf_length, melt, 0.0) * ds("top")))
+           if ADJOINT:
+               PETSc.Sys.Print("alternatively integrated melt =", assemble(melt * offset_backward_step_approx(x,k,x0) * ds("top")))
 
     if t % (3600 * 24) == 0:
         with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
@@ -749,3 +814,25 @@ while t < T - 0.5*dt:
             chk.store(p_, name="perturbation_pressure")
             chk.store(temp, name="temperature")
             chk.store(sal, name="salinity")
+
+if ADJOINT:
+    melt.project(mp.wb)
+    #J = assemble(conditional(x < shelf_length, mp.wb, 0.0) * ds("top"))
+    J = assemble(mp.wb * offset_backward_step_approx(x,k,x0) * ds("top"))
+    print(J)
+    rf = ReducedFunctional(J, c)
+
+    #tape.reset_variables()
+    J.adj_value = 1.0
+    #tape.visualise()
+    # evaluate all adjoint blocks to ensure we get complete adjoint solution
+    # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
+    #    meshtype derivative (line 204) is broken, so just return None instead
+    with timed_stage('adjoint'):
+        tape.evaluate_adj()
+    #grad = rf.derivative()
+    #File(folder+'grad.pvd').write(grad)
+    
+    #h = Function(sal)
+    #h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
+    #taylor_test(rf, sal, h)
