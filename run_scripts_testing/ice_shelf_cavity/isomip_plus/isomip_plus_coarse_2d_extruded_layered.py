@@ -81,7 +81,7 @@ PETSc.Sys.Print(len(ocean_thickness.dat.data[:]))
 def extruded_cavity_mesh(base_mesh, ocean_thickness):
     P0dg = FunctionSpace(base_mesh, "DG", 0)
     P0dg_cells = Function(P0dg)
-    tmp = ocean_thickness.copy()
+    tmp = ocean_thickness.copy(deepcopy=True)
     P0dg_cells.assign(np.finfo(0.).min)
     par_loop("""for (int i=0; i<bathy.dofs; i++) {
             bathy_max[0] = fmax(bathy[i], bathy_max[0]);
@@ -125,9 +125,11 @@ B6 = Constant(-50.57) # Forth bedrock topography coefficient
 
 bathy_x = B0 + B2 * pow(x_tilda, 2) + B4 * pow(x_tilda, 4) + B6 * pow(x_tilda, 6)
 bathymetry = Function(P1_extruded)
-bathymetry.interpolate(conditional(bathy_x < -water_depth,
-                        -water_depth,
-                        bathy_x))
+# the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
+with stop_annotating():
+    bathymetry.interpolate(conditional(bathy_x < -water_depth,
+                            -water_depth,
+                            bathy_x))
 
 print("max bathy : ",bathymetry.dat.data[:].max())
 
@@ -145,11 +147,15 @@ ocean_thickness = Function(P1_extruded)
 ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
 print("max icedraft extruded : ",ice_draft.view_3d.dat.data[:].max())
 print("min icedraft extruded : ",ice_draft.view_3d.dat.data[:].min())
-ocean_thickness.interpolate(ice_draft.view_3d - bathymetry)
+# the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
+with stop_annotating():
+    ocean_thickness.interpolate(ice_draft.view_3d - bathymetry)
 
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
-ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(10),
+# the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
+with stop_annotating():
+    ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(10),
                                         Constant(10),
                                         ice_draft.view_3d - bathymetry)) 
 print("max thickness : ", ocean_thickness.dat.data[:].max())
@@ -432,8 +438,8 @@ DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinit
 gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude estimate for vertical gradient of density anomaly. units m^-1
 #kappa_v.assign(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1))
 
-mu_tensor = Constant([[mu_h, 0], [0, mu_v]])
-kappa_tensor = Constant([[kappa_h, 0], [0, kappa_v]])
+mu_tensor = as_tensor([[mu_h, 0], [0, mu_v]])
+kappa_tensor = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 TP1 = TensorFunctionSpace(mesh, "CG", 1)
 mu = Function(TP1, name='viscosity').assign(mu_tensor)
@@ -628,12 +634,12 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up Vectorfolder
-folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
-         "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adjdq1q2/"
+#folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
+#         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
+#         "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
+#         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adjdq1q2/"
 
-#folder = 'tmp/'
+folder = 'tmp/'
 
 
 ###########
@@ -823,7 +829,7 @@ if ADJOINT:
     rf = ReducedFunctional(J, c)
 
     #tape.reset_variables()
-    J.adj_value = 1.0
+    J.block_variable.adj_value = 1.0
     #tape.visualise()
     # evaluate all adjoint blocks to ensure we get complete adjoint solution
     # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
