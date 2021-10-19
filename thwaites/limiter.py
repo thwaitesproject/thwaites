@@ -3,7 +3,8 @@ Slope limiters for discontinuous fields
 """
 from __future__ import absolute_import
 from firedrake import VertexBasedLimiter, FunctionSpace, TrialFunction, LinearSolver, TestFunction, dx, assemble
-from firedrake import solve, Function, dS_v, ds_v, conditional, avg
+from firedrake import Function, dS_v, ds_v, conditional, avg
+from firedrake import TensorProductElement
 import numpy as np
 import ufl
 from pyop2.profiling import timed_region, timed_function, timed_stage  # NOQA
@@ -48,13 +49,28 @@ def assert_function_space(fs, family, degree):
             'degree of function space must be {0:d}'.format(degree)
 
 
-def get_facet_mask(function_space, mode='geometric', facet='bottom'):
+def get_extruded_base_element(ufl_element):
+    """
+    Return UFL TensorProductElement of an extruded UFL element.
+
+    In case of a non-extruded mesh, returns the element itself.
+    """
+    if isinstance(ufl_element, ufl.HDivElement):
+        ufl_element = ufl_element._element
+    if isinstance(ufl_element, ufl.MixedElement):
+        ufl_element = ufl_element.sub_elements()[0]
+    if isinstance(ufl_element, ufl.VectorElement):
+        ufl_element = ufl_element.sub_elements()[0]  # take the first component
+    if isinstance(ufl_element, ufl.EnrichedElement):
+        ufl_element = ufl_element._elements[0]
+    return ufl_element
+
+
+def get_facet_mask(function_space, facet='bottom'):
     """
     Returns the top/bottom nodes of extruded 3D elements.
 
     :arg function_space: Firedrake :class:`FunctionSpace` object
-    :kwarg str mode: 'topological', to retrieve nodes that lie on the facet, or
-        'geometric' for nodes whose basis functions do not vanish on the facet.
     :kwarg str facet: 'top' or 'bottom'
 
     .. note::
@@ -62,11 +78,21 @@ def get_facet_mask(function_space, mode='geometric', facet='bottom'):
         Here we assume that the mesh has been extruded upwards (along positive
         z axis).
     """
-    section, iset, facets = function_space.cell_boundary_masks[mode]
-    ifacet = -2 if facet == 'bottom' else -1
-    off = section.getOffset(facets[ifacet])
-    dof = section.getDof(facets[ifacet])
-    indices = iset[off:off+dof]
+    from tsfc.finatinterface import create_element as create_finat_element
+
+    # get base element
+    elem = get_extruded_base_element(function_space.ufl_element())
+    assert isinstance(elem, TensorProductElement), \
+        f'function space must be defined on an extruded 3D mesh: {elem}'
+    # figure out number of nodes in sub elements
+    h_elt, v_elt = elem.sub_elements()
+    nb_nodes_h = create_finat_element(h_elt).space_dimension()
+    nb_nodes_v = create_finat_element(v_elt).space_dimension()
+    # compute top/bottom facet indices
+    # extruded dimension is the inner loop in index
+    # on interval elements, the end points are the first two dofs
+    offset = 0 if facet == 'bottom' else 1
+    indices = np.arange(nb_nodes_h)*nb_nodes_v + offset
     return indices
 
 
@@ -86,7 +112,7 @@ class SqueezedDQ1Filter:
         # and all other nodes are (for DQ1), so this step gives nonzero for these other nodes
         self.marker = assemble(avg(v)*dS_v + v*ds_v)
         # flip this: 1 for squeezed nodes, and 0 for all others
-        self.marker.assign(conditional(self.marker>1e-12, 0, 1))
+        self.marker.assign(conditional(self.marker > 1e-12, 0, 1))
 
         self.P0 = FunctionSpace(dq1_space.mesh(), "DG", 0)
         self.u0 = Function(self.P0, name='averaged squeezed values')
@@ -206,8 +232,8 @@ class VertexBasedP1DGLimiter(VertexBasedLimiter):
         if self.extruded:
             # Add nodal values from surface/bottom boundaries
             # NOTE calling firedrake par_loop with measure=ds_t raises an error
-            bottom_nodes = get_facet_mask(self.P1CG, 'geometric', 'bottom')
-            top_nodes = get_facet_mask(self.P1CG, 'geometric', 'top')
+            bottom_nodes = get_facet_mask(self.P1CG, 'bottom')
+            top_nodes = get_facet_mask(self.P1CG, 'top')
             bottom_idx = op2.Global(len(bottom_nodes), bottom_nodes, dtype=np.int32, name='node_idx')
             top_idx = op2.Global(len(top_nodes), top_nodes, dtype=np.int32, name='node_idx')
             code = """
