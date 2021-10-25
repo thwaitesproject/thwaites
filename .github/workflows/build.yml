@@ -21,7 +21,7 @@ jobs:
       image: firedrakeproject/firedrake-vanilla:latest
     steps:
       - name: ls
-        run: ls -ld  /__w/*
+        run: sudo ls -ld  /__w/*
       - name: chown
         run: chown -R firedrake:firedrake /__w/*
       - uses: actions/checkout@v2
