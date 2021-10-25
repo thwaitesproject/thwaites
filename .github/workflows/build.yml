@@ -29,7 +29,8 @@ jobs:
       - run: ls -ld  /__w
       - run: ls -ld  /__w/thwaites
       - run: ls -ld  /__w/thwaites/thwaites
-      - uses: actions/checkout@v2
+      - run: chown -R firedrake:firedrake
+      - uses: actions/checkout@v2 /_w/thwaites
       - name: Cleanup
         if: ${{ always() }}
         run: |
