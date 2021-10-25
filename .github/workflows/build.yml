@@ -44,6 +44,10 @@ jobs:
       - name: Install Thwaites
         run: |
           . /home/firedrake/firedrake/bin/activate
+          whoami
+          id -u
+          id -g
+          ls -l
           #python -m pip install -r requirements.txt
           python -m pip install -e .
       - name: Test Thwaites
