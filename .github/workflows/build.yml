@@ -21,7 +21,7 @@ jobs:
       image: firedrakeproject/firedrake-vanilla:latest
     steps:
       - name: chown
-        run: sudo chmod -R a+rwX /__w/* /__w/_temp/*
+        run: sudo chmod -R 777 $GITHUB_WORKSPACE /github /__w/_temp
       - uses: actions/checkout@v2
       - name: Cleanup
         if: ${{ always() }}
