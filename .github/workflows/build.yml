@@ -23,7 +23,7 @@ jobs:
       - name: ls
         run: ls -ld  /__w/*
       - name: chown
-        run: chown -R firedrake:firedrake /_w/*
+        run: chown -R firedrake:firedrake /__w/*
       - uses: actions/checkout@v2
       - name: Cleanup
         if: ${{ always() }}
