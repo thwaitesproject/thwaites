@@ -26,10 +26,8 @@ jobs:
     container:
       image: firedrakeproject/firedrake-vanilla:latest
     steps:
-      - run: ls -ld  /__w
-      - run: ls -ld  /__w/thwaites
-      - run: ls -ld  /__w/thwaites/thwaites
-      - run: chown -R firedrake:firedrake
+      - run: ls -ld  /__w/*
+      - run: chown -R firedrake:firedrake /_w/*
       - uses: actions/checkout@v2 /_w/thwaites
       - name: Cleanup
         if: ${{ always() }}
