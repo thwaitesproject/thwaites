@@ -20,7 +20,7 @@ jobs:
     container:
       image: firedrakeproject/firedrake-vanilla:latest
     steps:
-      - runs: sudo chown -R 1000:1000 /home/github/actions-runner/_work/*
+      - run: sudo chown -R 1000:1000 /home/github/actions-runner/_work/*
       - uses: actions/checkout@v2
       - name: Cleanup
         if: ${{ always() }}
