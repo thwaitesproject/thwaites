@@ -15,7 +15,7 @@ jobs:
   configure:
     runs-on: ubuntu-latest
     outputs:
-      containerUser: ${{ steps.get-user.outputs.containerUser }}
+      uid_gid: ${{ steps.get-user.outputs.containerUser }}
     
     steps:
       - id: get-user
