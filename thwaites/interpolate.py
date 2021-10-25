@@ -1,5 +1,5 @@
-#This code coems from Icepack c thanks to Daniel Shapero
-# It reads in netcdf / geotiff files and overoloads 
+# This code coems from Icepack c thanks to Daniel Shapero
+# It reads in netcdf / geotiff files and overoloads
 # firedrake interpolate so that it can access this data...
 r"""Functions for interpolating gridded remote sensing data sets to finite
 element spaces"""
@@ -21,7 +21,7 @@ def _sample(dataset, X, method, y_transect):
         xmax = min(X[:, 0].max() + 2 * xres, bounds.right)
 
         ymin = max(X[:, 1].min() - 2 * xres, bounds.bottom)
-        ymax = min(X[:, 1].max() + 2 * xres, bounds.top) 
+        ymax = min(X[:, 1].max() + 2 * xres, bounds.top)
     else:
         # 1d interpolation
         xmin = max(X[:].min() - 2 * xres, bounds.left)
@@ -29,7 +29,6 @@ def _sample(dataset, X, method, y_transect):
 
         ymin = bounds.bottom
         ymax = bounds.top
-
 
     window = rasterio.windows.from_bounds(
         left=xmin,
@@ -50,18 +49,17 @@ def _sample(dataset, X, method, y_transect):
 
     data = np.flipud(dataset.read(indexes=1, window=window, masked=True)).T
     interpolator = RegularGridInterpolator((xs, ys), data, method=method, bounds_error=False, fill_value=None)
-    
+
     if y_transect is None:
         return interpolator(X, method=method)
     else:
-        assert isinstance(y_transect, (int,float))
+        assert isinstance(y_transect, (int, float))
         # y_transect should be the fixed y value that the transect passes through
         X_1d = []
         for i in X:
             X_1d.append([i, y_transect])
         X_1d = np.array(X_1d)
 
-        int_out = interpolator(X_1d, method=method)
         return interpolator(X_1d, method=method)
 
 
@@ -97,8 +95,8 @@ def interpolate(f, Q, method='linear', y_transect=None):
 
     if isinstance(f, rasterio.DatasetReader):
         q.dat.data[:] = _sample(f, X, method, y_transect)
-    elif (isinstance(f, tuple) and
-          all(isinstance(fi, rasterio.DatasetReader) for fi in f)):
+    elif (isinstance(f, tuple)
+          and all(isinstance(fi, rasterio.DatasetReader) for fi in f)):
         for i, fi in enumerate(f):
             q.dat.data[:, i] = _sample(fi, X, method, y_transect)
     else:

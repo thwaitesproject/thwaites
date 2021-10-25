@@ -1,10 +1,9 @@
 from .equations import BaseTerm, BaseEquation
-from firedrake import dot, inner, div, grad, CellDiameter, as_tensor, avg, jump, Constant, sign
-from firedrake import min_value, max_value, split, FacetNormal, Identity
+from firedrake import dot, inner, div, grad, as_tensor, avg, jump, sign
+from firedrake import min_value, split, FacetNormal, Identity
 from firedrake import FacetArea, CellVolume
 from .utility import is_continuous, normal_is_continuous, cell_edge_integral_ratio
-from ufl import tensors, algebra
-"""
+r"""
 This module contains the scalar terms and equations (e.g. for temperature and salinity transport)
 
 NOTE: for all terms, the residual() method returns the residual as it would be on the RHS of the equation, i.e.:
@@ -39,14 +38,12 @@ class ScalarAdvectionTerm(BaseTerm):
         for id, bc in bcs.items():
             if 'q' in bc:
                 # on incoming boundaries, dot(u,n)<0, replace q with bc['q']
-                F += phi*min_value(dot(u, n),0)*(bc['q']-q) * self.ds(id)
+                F += phi*min_value(dot(u, n), 0)*(bc['q']-q) * self.ds(id)
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u)):
-            # outgoing velocity dot(u,n)>0 (i.e. the upwind side of the face)
-            un = max_value(dot(u,n), 0)
             # s=0: u.n(-)<0  =>  flow goes from '+' to '-' => '+' is upwind
             # s=1: u.n(-)>0  =>  flow goes from '-' to '+' => '-' is upwind
-            s = 0.5*(sign(dot(avg(u),n('-'))) + 1.0)
+            s = 0.5*(sign(dot(avg(u), n('-'))) + 1.0)
             q_up = q('-')*s + q('+')*(1-s)
             F += jump(phi*u, n) * q_up * self.dS
 
@@ -145,8 +142,8 @@ class ScalarDiffusionTerm(BaseTerm):
                 # here we need only the third term, because we assume jump_q=0 (q_ext=q)
                 # the provided flux = kappa dq/dn = dot(n, dot(diff_tensor, grad(q))
                 F += -phi*bc['flux']*self.ds(id)
-            
-            if 'drag' in bc:  
+
+            if 'drag' in bc:
                 # (bottom) drag of the form tau = -C_D u |u|
                 assert 'coriolis_frequency' in fields  # check 2.5d scalar advection diffusion equation for u.
                 C_D = bc['drag']
@@ -155,6 +152,7 @@ class ScalarDiffusionTerm(BaseTerm):
                 F += dot(-phi, -C_D*unorm*trial) * self.ds(id)
 
         return -F
+
 
 class ScalarSourceTerm(BaseTerm):
     r"""
@@ -242,8 +240,8 @@ class HybridizedScalarEquation(BaseEquation):
             trial_lagged_q = None
 
         F = self.eq_q.residual(test[0], trial[0],
-                             trial_lagged=trial_lagged_q,
-                             fields=fields, bcs=bcs)
+                               trial_lagged=trial_lagged_q,
+                               fields=fields, bcs=bcs)
         if isinstance(trial, list):
             qtri, ptri = trial
         else:
@@ -261,7 +259,6 @@ class HybridizedScalarEquation(BaseEquation):
             if 'q' in bc:
                 F += qtest*dot(n, kappa*ptri)*self.ds(id) - dot(n, ptest)*(trial[0]-bc['q'])/dt*self.ds(id)
             if 'flux' in bc:
-                F+= qtest*bc['flux']*self.ds(id)
+                F += qtest*bc['flux']*self.ds(id)
 
         return F
-
