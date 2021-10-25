@@ -19,6 +19,7 @@ jobs:
     # The docker container to use.
     container:
       image: firedrakeproject/firedrake-vanilla:latest
+      options: --user 1000
     steps:
       - uses: actions/checkout@v2
       - name: Cleanup
