@@ -130,26 +130,26 @@ with stop_annotating():
     bathymetry.interpolate(conditional(bathy_x < -water_depth,
                             -water_depth,
                             bathy_x))
-
+#bathymetry.assign(-720)
 print("max bathy : ",bathymetry.dat.data[:].max())
 
 ice_draft_filename = "Ocean1_input_geom_v1.01.nc"
 ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
-#ice_draft = Function(P1_extruded)
-#ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
+ice_draft = Function(P1_extruded)
+#ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3) - water_depth) 
 ice_draft_base = interpolate_data(ice_draft_file, P1, y_transect=41000)  # Get ice shelf draft along y=41km transect i.e the middle
 
-print("max icedraft : ",ice_draft_base.dat.data[:].max())
-print("min icedraft : ",ice_draft_base.dat.data[:].min())
+#print("max icedraft : ",ice_draft_base.dat.data[:].max())
+#print("min icedraft : ",ice_draft_base.dat.data[:].min())
 
 ocean_thickness = Function(P1_extruded)
 
 ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
-print("max icedraft extruded : ",ice_draft.view_3d.dat.data[:].max())
-print("min icedraft extruded : ",ice_draft.view_3d.dat.data[:].min())
+#print("max icedraft extruded : ",ice_draft.view_3d.dat.data[:].max())
+#print("min icedraft extruded : ",ice_draft.view_3d.dat.data[:].min())
 # the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
-with stop_annotating():
-    ocean_thickness.interpolate(ice_draft.view_3d - bathymetry)
+#with stop_annotating():
+#ocean_thickness.interpolate(ice_draft - bathymetry)
 
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
@@ -165,8 +165,9 @@ print("min thickness : ", ocean_thickness.dat.data[:].min())
 Vc = mesh.coordinates.function_space()
 x, z = SpatialCoordinate(mesh)
 f = Function(Vc).interpolate(as_vector([x, conditional(x + 0.5*dy < shelf_length, ocean_thickness*z/H2, ocean_thickness*z/H3) - -bathymetry]))
-#f = Function(Vc).interpolate(as_vector([x, y, ocean_thickness*z/H2 - -bathymetry]))
-mesh.coordinates.assign(f)
+#f = Function(Vc).interpolate(as_vector([x, ocean_thickness*z/H3 - -bathymetry]))
+with stop_annotating():
+    mesh.coordinates.assign(f)
 
 
 ds = CombinedSurfaceMeasure(mesh, 5)
@@ -272,7 +273,7 @@ rho_anomaly = Function(P1, name="density anomaly")
 # Define a dump file
 
 dump_file = "./isomip_2d_dx4km_nz15_closed_dump_step_9600" 
-DUMP = True
+DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
         # Checkpoint file open for reading and writing
@@ -305,14 +306,22 @@ else:
     S_surface = 33.8
     S_bottom = 34.7
 
-    T_restore = T_surface + (T_bottom - T_surface) * (z / -water_depth)
-    S_restore = S_surface + (S_bottom - S_surface) * (z / -water_depth)
+    T_restore = T_surface #+ (T_bottom - T_surface) * (z / -water_depth)
+    S_restore = S_surface #+ (S_bottom - S_surface) * (z / -water_depth)
 
     temp_init = T_restore
-    temp.interpolate(temp_init)
+    temp.assign(temp_init)
 
     sal_init = S_restore
-    sal.interpolate(sal_init)
+    sal.assign(sal_init)
+
+sal_init_func = Function(sal)
+sal_init_func.assign(sal)
+#h = Function(sal)
+    
+#h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
+#sal.dat.data[:] += 1*h.dat.data[:]
+
 
 if ADJOINT:
     c = Control(sal) 
@@ -441,10 +450,10 @@ gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude esti
 mu_tensor = as_tensor([[mu_h, 0], [0, mu_v]])
 kappa_tensor = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
-TP1 = TensorFunctionSpace(mesh, "CG", 1)
-mu = Function(TP1, name='viscosity').assign(mu_tensor)
-kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa_tensor)
-kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa_tensor)
+#TP1 = TensorFunctionSpace(mesh, "CG", 1)
+mu = mu_tensor #Function(TP1, name='viscosity').assign(mu_tensor)
+kappa_temp = kappa_tensor #Function(TP1, name='temperature diffusion').assign(kappa_tensor)
+kappa_sal = kappa_tensor #Function(TP1, name='salinity diffusion').assign(kappa_tensor)
 ##########
 
 # Equation fields
@@ -505,9 +514,10 @@ vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.
         1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
-temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)}}
-
-sal_bcs = {"top": {'flux':  conditional(x + 5*dy < shelf_length, -mp.S_flux_bc, 0.0)}}
+#temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)}}
+temp_bcs = {"top": {'flux': -mp.T_flux_bc * offset_backward_step_approx(x, k, x0) }}
+#sal_bcs = {"top": {'flux':  conditional(x + 5*dy < shelf_length, -mp.S_flux_bc, 0.0)}}
+sal_bcs = {"top": {'flux': -mp.S_flux_bc * offset_backward_step_approx(x, k, x0) }}
 
 
 # STRONGLY Enforced BCs
@@ -634,12 +644,12 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up Vectorfolder
-#folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
-#         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
-#         "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-#         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adjdq1q2/"
+folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
+         "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
+         "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adjdq1q2/"
 
-folder = 'tmp/'
+#folder = 'tmp/'
 
 
 ###########
@@ -713,12 +723,12 @@ if ADJOINT:
     adj_t_file = File(folder+"adj_temperature.pvd")
     tape.add_block(DiagnosticBlock(adj_t_file, temp))
 
-    adj_visc_file = File(folder+"adj_viscosity.pvd")
-    tape.add_block(DiagnosticBlock(adj_visc_file, mu))
-    adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
-    tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
-    adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
-    tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
+    #adj_visc_file = File(folder+"adj_viscosity.pvd")
+    #tape.add_block(DiagnosticBlock(adj_visc_file, mu))
+    #adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
+    #tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
+    #adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
+    #tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
 ####################
 
@@ -800,10 +810,10 @@ while t < T - 0.5*dt:
            full_pressure_file.write(full_pressure)
            Qs_file.write(Q_s)
            Q_ice_file.write(Q_ice)
-    
-           # Output adjoint T / S
-           tape.add_block(DiagnosticBlock(adj_t_file, temp))
-           tape.add_block(DiagnosticBlock(adj_s_file, sal))
+           if ADJOINT:
+               # Output adjoint T / S
+               tape.add_block(DiagnosticBlock(adj_t_file, temp))
+               tape.add_block(DiagnosticBlock(adj_s_file, sal))
            
            time_str = str(step)
     
@@ -824,7 +834,7 @@ while t < T - 0.5*dt:
 if ADJOINT:
     melt.project(mp.wb)
     #J = assemble(conditional(x < shelf_length, mp.wb, 0.0) * ds("top"))
-    J = assemble(mp.wb * offset_backward_step_approx(x,k,x0) * ds("top"))
+    J = assemble(sal * dx)
     print(J)
     rf = ReducedFunctional(J, c)
 
@@ -834,11 +844,21 @@ if ADJOINT:
     # evaluate all adjoint blocks to ensure we get complete adjoint solution
     # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
     #    meshtype derivative (line 204) is broken, so just return None instead
-    with timed_stage('adjoint'):
-        tape.evaluate_adj()
+    #with timed_stage('adjoint'):
+    #    tape.evaluate_adj()
     #grad = rf.derivative()
     #File(folder+'grad.pvd').write(grad)
     
-    #h = Function(sal)
-    #h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
-    #taylor_test(rf, sal, h)
+    h = Function(sal)
+    
+    h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
+    print("hmax", h.dat.data_ro.max())
+    print("hmin", h.dat.data_ro.min())
+    print("sal max", sal.dat.data_ro.max())
+    print("sal min", sal.dat.data_ro.min())
+    
+    print("J", J)
+#    print("rf(sal)", rf(sal))
+    print("rf(salinit)", rf(sal_init_func))
+#    print("peturb rf", rf(sal+h))
+    taylor_test(rf, sal, h)
