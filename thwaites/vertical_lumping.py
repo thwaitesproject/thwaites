@@ -95,11 +95,11 @@ class LaplacePC(AuxiliaryOperatorPC):
         bcs = ctx.appctx['bcs']
         n = ctx.appctx['n']
 
-        F =  dt * dt * dot(grad(test), grad(trial)) * dx
-        F -= dt * dt * trial * dot(grad(test), n) * ds   # dirichlet pressure - default remove this term because open boundary. 
-        F -= dt * dt * test * dot(grad(trial), n) * ds   # neumann pressure - default keep this term because open boundary. 
+        F = dt * dt * dot(grad(test), grad(trial)) * dx
+        F -= dt * dt * trial * dot(grad(test), n) * ds   # dirichlet pressure - default remove this term because open boundary.
+        F -= dt * dt * test * dot(grad(trial), n) * ds   # neumann pressure - default keep this term because open boundary.
 
-        # For boundaries where u is specified we need to take the neumann pressure boundary back out. 
+        # For boundaries where u is specified we need to take the neumann pressure boundary back out.
         for id, bc in bcs.items():
             print(id)
             if 'un' in bc:

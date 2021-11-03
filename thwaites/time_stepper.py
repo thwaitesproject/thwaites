@@ -118,7 +118,7 @@ class ERKGeneric(RungeKuttaTimeIntegrator):
         super(ERKGeneric, self).__init__(equation, solution, fields, dt, solver_parameters)
         self._initialized = False
         V = solution.function_space()
-        assert V==equation.trial_space
+        assert V == equation.trial_space
         self.solution_old = firedrake.Function(V, name='old solution')
 
         self.tendency = []
@@ -218,7 +218,7 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
         self._initialized = False
 
         fs = solution.function_space()
-        assert fs==equation.trial_space
+        assert fs == equation.trial_space
         self.solution_old = firedrake.Function(fs, name='old solution')
 
         mixed_space = len(fs) > 1
@@ -238,8 +238,8 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
                         u = self.solution_old + self.a[i][j]*self.dt_const*self.k[j]
                     else:
                         u += self.a[i][j]*self.dt_const*self.k[j]
-                self.F.append(self.equation.mass_term(self.test, self.k[i]) -
-                              self.equation.residual(self.test, u, self.solution_old, fields, bnd_conditions))
+                self.F.append(self.equation.mass_term(self.test, self.k[i])
+                              - self.equation.residual(self.test, u, self.solution_old, fields, bnd_conditions))
         else:
             # solution must be split before computing sum
             # pass components to equation in a list
@@ -252,8 +252,8 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
                     else:
                         for l, k in enumerate(firedrake.split(self.k[j])):
                             u[l] += self.a[i][j]*self.dt_const*k
-                self.F.append(self.equation.mass_term(self.test, self.k[i]) -
-                              self.equation.residual(self.test, u, self.solution_old, fields, bnd_conditions))
+                self.F.append(self.equation.mass_term(self.test, self.k[i])
+                              - self.equation.residual(self.test, u, self.solution_old, fields, bnd_conditions))
         self.update_solver()
 
         # construct expressions for stage solutions
@@ -270,9 +270,9 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
             p = firedrake.NonlinearVariationalProblem(self.F[i], self.k[i])
             sname = '{:}_stage{:}_'.format(self.name, i)
             self.solver.append(
-                firedrake.NonlinearVariationalSolver(p,
-                                           solver_parameters=self.solver_parameters,
-                                           options_prefix=sname))
+                firedrake.NonlinearVariationalSolver(
+                    p, solver_parameters=self.solver_parameters,
+                    options_prefix=sname))
 
     def initialize(self, init_cond):
         """Assigns initial conditions to all required fields."""
@@ -295,7 +295,7 @@ class DIRKGeneric(RungeKuttaTimeIntegrator):
             # NOTE solution may have changed in coupled system
             self.solution_old.assign(self.solution)
         if not self._initialized:
-            error('Time integrator {:} is not initialized'.format(self.name))
+            raise ValueError('Time integrator {:} is not initialized'.format(self.name))
         if update_forcings is not None:
             update_forcings(t + self.c[i_stage]*self.dt)
         self.solver[i_stage].solve()

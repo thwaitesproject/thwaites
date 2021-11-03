@@ -1,11 +1,9 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor, sign
-from firedrake import CellDiameter, avg, Identity, zero
+from firedrake import avg, Identity, zero
 from .utility import is_continuous, normal_is_continuous, tensor_jump, cell_edge_integral_ratio
 from firedrake import FacetArea, CellVolume
-from ufl import tensors, algebra
-#import numpy as np
-"""
+r"""
 This module contains the classes for the momentum equation and its terms.
 
 NOTE: for all terms, the residual() method returns the residual as it would be on the RHS of the equation, i.e.:
@@ -47,7 +45,7 @@ class MomentumAdvectionTerm(BaseTerm):
         if not (is_continuous(self.trial_space) and normal_is_continuous(u_adv)):
             # s=0: u.n(-)<0  =>  flow goes from '+' to '-' => '+' is upwind
             # s=1: u.n(-)>0  =>  flow goes from '-' to '+' => '-' is upwind
-            s = 0.5*(sign(dot(avg(u),n('-'))) + 1.0)
+            s = 0.5*(sign(dot(avg(u), n('-'))) + 1.0)
             u_up = u('-')*s + u('+')*(1-s)
             F += dot(u_up, (dot(u_adv('+'), n('+'))*phi('+') + dot(u_adv('-'), n('-'))*phi('-'))) * self.dS
 
@@ -105,7 +103,6 @@ class ViscosityTerm(BaseTerm):
         u = trial
         u_lagged = trial_lagged
 
-
         grad_test = nabla_grad(phi)
         stress = dot(diff_tensor, nabla_grad(u))
         if self.symmetric_stress:
@@ -147,7 +144,7 @@ class ViscosityTerm(BaseTerm):
         for id, bc in bcs.items():
             if 'u' in bc or 'un' in bc:
                 if 'u' in bc:
-                    u_tensor_jump = outer(n,u-bc['u'])
+                    u_tensor_jump = outer(n, u-bc['u'])
                 else:
                     u_tensor_jump = outer(n, n)*(dot(n, u)-bc['un'])
                 if self.symmetric_stress:
@@ -156,7 +153,7 @@ class ViscosityTerm(BaseTerm):
                 F += 2*sigma*inner(outer(n, phi), dot(diff_tensor, u_tensor_jump))*self.ds(id)
                 F += -inner(dot(diff_tensor, nabla_grad(phi)), u_tensor_jump)*self.ds(id)
                 if 'u' in bc:
-                    F += -inner(outer(n,phi), stress) * self.ds(id)
+                    F += -inner(outer(n, phi), stress) * self.ds(id)
                 elif 'un' in bc:
                     # we only keep, the normal part of stress, the tangential
                     # part is assumed to be zero stress (i.e. free slip), or prescribed via 'stress'
@@ -164,7 +161,6 @@ class ViscosityTerm(BaseTerm):
             if 'stress' in bc:  # a momentum flux, a.k.a. "force"
                 # here we need only the third term, because we assume jump_u=0 (u_ext=u)
                 # the provided stress = n.(mu.stress_tensor)
-                #F += -phi*bc['stress']*self.ds(id)
                 F += dot(-phi, bc['stress']) * self.ds(id)
             if 'drag' in bc:  # (bottom) drag of the form tau = -C_D u |u|
                 C_D = bc['drag']
@@ -173,10 +169,9 @@ class ViscosityTerm(BaseTerm):
                     u_vel_component = fields['u_velocity']
                     unorm = pow(dot(u_lagged, u_lagged) + pow(u_vel_component, 2), 0.5)
                 else:
-                    unorm = pow(dot(u_lagged, u_lagged),0.5)
-                
-                F += dot(-phi, -C_D*unorm*u) * self.ds(id)
+                    unorm = pow(dot(u_lagged, u_lagged), 0.5)
 
+                F += dot(-phi, -C_D*unorm*u) * self.ds(id)
 
             # NOTE 1: unspecified boundaries are equivalent to free stress (i.e. free in all directions)
             # NOTE 2: 'un' can be combined with 'stress' provided the stress force is tangential (e.g. no-normal flow with wind)
@@ -187,7 +182,6 @@ class ViscosityTerm(BaseTerm):
                 raise ValueError("Cannot apply both 'u' and 'drag' bc on same boundary")
             if 'u' in bc and 'un' in bc:
                 raise ValueError("Cannot apply both 'u' and 'un' bc on same boundary")
-
 
         return -F
 

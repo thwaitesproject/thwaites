@@ -27,7 +27,6 @@ class AssembledSchurPC(PCBase):
         a = ctx.appctx['a']
         self.schur_nullspace = ctx.appctx.get('schur_nullspace')
         options_prefix = pc.getOptionsPrefix()
-        dm = pc.getDM()
 
         test, trial = a.arguments()
         W = test.function_space()

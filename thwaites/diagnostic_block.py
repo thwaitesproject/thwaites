@@ -1,5 +1,6 @@
 from pyadjoint import Block
 
+
 class DiagnosticBlock(Block):
     def __init__(self, f, function):
         super().__init__()
