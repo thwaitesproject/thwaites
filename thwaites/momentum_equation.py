@@ -167,9 +167,9 @@ class ViscosityTerm(BaseTerm):
                 if 'coriolis_frequency' in fields and self.dim == 2:
                     assert 'u_velocity' in fields
                     u_vel_component = fields['u_velocity']
-                    unorm = pow(dot(u_lagged, u_lagged) + pow(u_vel_component, 2), 0.5)
+                    unorm = pow(dot(u_lagged, u_lagged) + pow(u_vel_component, 2) + 1e-6, 0.5)
                 else:
-                    unorm = pow(dot(u_lagged, u_lagged), 0.5)
+                    unorm = pow(dot(u_lagged, u_lagged) + 1e-6, 0.5)
 
                 F += dot(-phi, -C_D*unorm*u) * self.ds(id)
 

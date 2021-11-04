@@ -467,7 +467,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), ice_heat_flux=False)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg) + 1e-6, 0.5), ice_heat_flux=False)
 
 ##########
 
@@ -623,8 +623,8 @@ output_step = output_dt/dt
 # Set up time stepping routines
 
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                          solver_parameters=vp_solver_parameters,
-                                                          predictor_solver_parameters=predictor_solver_parameters,
+                                                          solver_parameters=mumps_solver_parameters,
+                                                          predictor_solver_parameters=mumps_solver_parameters,
                                                           picard_iterations=1)
 #                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
 
@@ -638,8 +638,8 @@ if not DUMP:
         vp_timestepper.initialize_pressure()
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
-temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
-sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
+temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=mumps_solver_parameters)
+sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=mumps_solver_parameters)
 
 ##########
 
@@ -834,7 +834,7 @@ while t < T - 0.5*dt:
 if ADJOINT:
     melt.project(mp.wb)
     #J = assemble(conditional(x < shelf_length, mp.wb, 0.0) * ds("top"))
-    J = assemble(sal * dx)
+    J = assemble(sal**2 * dx)
     print(J)
     rf = ReducedFunctional(J, c)
 
@@ -846,7 +846,7 @@ if ADJOINT:
     #    meshtype derivative (line 204) is broken, so just return None instead
     #with timed_stage('adjoint'):
     #    tape.evaluate_adj()
-    #grad = rf.derivative()
+#    grad = rf.derivative()
     #File(folder+'grad.pvd').write(grad)
     
     h = Function(sal)
@@ -859,6 +859,6 @@ if ADJOINT:
     
     print("J", J)
 #    print("rf(sal)", rf(sal))
-    print("rf(salinit)", rf(sal_init_func))
+#    print("rf(salinit)", rf(sal_init_func))
 #    print("peturb rf", rf(sal+h))
     taylor_test(rf, sal, h)
