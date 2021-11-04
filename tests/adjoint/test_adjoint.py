@@ -121,7 +121,7 @@ def test_2d_isomip_cavity_salfunctional(T):
     #bathymetry.assign(-720)
     print("max bathy : ",bathymetry.dat.data[:].max())
 
-    ice_draft_filename = "Ocean1_input_geom_v1.01.nc"
+    ice_draft_filename = "./Ocean1_input_geom_v1.01.nc"
     ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
     ice_draft = Function(P1_extruded)
     #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3) - water_depth) 
