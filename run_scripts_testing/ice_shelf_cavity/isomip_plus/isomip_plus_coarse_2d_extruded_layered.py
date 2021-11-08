@@ -306,14 +306,14 @@ else:
     S_surface = 33.8
     S_bottom = 34.7
 
-    T_restore = T_surface #+ (T_bottom - T_surface) * (z / -water_depth)
-    S_restore = S_surface #+ (S_bottom - S_surface) * (z / -water_depth)
+    T_restore = T_surface + (T_bottom - T_surface) * (z / -water_depth)
+    S_restore = S_surface + (S_bottom - S_surface) * (z / -water_depth)
 
     temp_init = T_restore
-    temp.assign(temp_init)
+    temp.interpolate(temp_init)
 
     sal_init = S_restore
-    sal.assign(sal_init)
+    sal.interpolate(sal_init)
 
 sal_init_func = Function(sal)
 sal_init_func.assign(sal)
@@ -323,8 +323,8 @@ sal_init_func.assign(sal)
 #sal.dat.data[:] += 1*h.dat.data[:]
 
 
-if ADJOINT:
-    c = Control(sal) 
+#if ADJOINT:
+#    c = Control(temp) 
 
 #    v_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 #    V = VectorFunctionSpace(mesh, v_ele) # Velocity space
@@ -340,6 +340,7 @@ if ADJOINT:
  #   v_.project(vadj_)
 #    p_.project(padj_)
 ##########
+
 
 # Set up equations
 qdeg = 10
@@ -430,10 +431,16 @@ absorp_sal = conditional(x > (1.0-sponge_fraction) * L,
 
 
 # set Viscosity/diffusivity (m^2/s)
+##########
 mu_h = Constant(6.0)
 mu_v = Constant(1e-3)
 kappa_h = Constant(1.0)
 kappa_v = Constant(5e-5)
+
+#kappa_v = Function(P1fs) 
+DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinity over restoring region
+gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude estimate for vertical gradient of density anomaly. units m^-1
+#kappa_v.assign(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1))
 
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
 open_ocean_kappa_v = kappa_v
@@ -442,19 +449,15 @@ kappa_v_grad = (open_ocean_kappa_v - grounding_line_kappa_v) / shelf_length
 kappa_v_cond = conditional(x < shelf_length, grounding_line_kappa_v + x * kappa_v_grad, open_ocean_kappa_v)
 
 
-#kappa_v = Function(P1fs) 
-DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinity over restoring region
-gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude estimate for vertical gradient of density anomaly. units m^-1
-#kappa_v.assign(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1))
 
 mu_tensor = as_tensor([[mu_h, 0], [0, mu_v]])
 kappa_tensor = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
-#TP1 = TensorFunctionSpace(mesh, "CG", 1)
-mu = mu_tensor #Function(TP1, name='viscosity').assign(mu_tensor)
-kappa_temp = kappa_tensor #Function(TP1, name='temperature diffusion').assign(kappa_tensor)
-kappa_sal = kappa_tensor #Function(TP1, name='salinity diffusion').assign(kappa_tensor)
-##########
+TP1 = TensorFunctionSpace(mesh, "CG", 1)
+mu = Function(TP1, name='viscosity').assign(mu_tensor)
+kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa_tensor)
+kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa_tensor)
+c = Control(kappa_sal)
 
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
@@ -465,7 +468,6 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
               'absorption coefficient': absorp_sal}
 
 ##########
-
 # Get expressions used in melt rate parameterisation
 mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg) + 1e-6, 0.5), ice_heat_flux=False)
 
@@ -632,10 +634,10 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
 # this is to avoid inconsistencies in terms (viscosity and advection) that
 # are meant to decouple from pressure projection, but won't if pressure is not initialised
 # do this here, so we can see the initial pressure in pressure_0.pvtu
-if not DUMP:
+#if not DUMP:
     # should not be done when picking up
-    with timed_stage('initial_pressure'):
-        vp_timestepper.initialize_pressure()
+#    with timed_stage('initial_pressure'):
+#        vp_timestepper.initialize_pressure()
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=mumps_solver_parameters)
@@ -723,12 +725,12 @@ if ADJOINT:
     adj_t_file = File(folder+"adj_temperature.pvd")
     tape.add_block(DiagnosticBlock(adj_t_file, temp))
 
-    #adj_visc_file = File(folder+"adj_viscosity.pvd")
-    #tape.add_block(DiagnosticBlock(adj_visc_file, mu))
-    #adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
-    #tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
-    #adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
-    #tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
+    adj_visc_file = File(folder+"adj_viscosity.pvd")
+    tape.add_block(DiagnosticBlock(adj_visc_file, mu))
+    adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
+    tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
+    adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
+    tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
 ####################
 
@@ -833,8 +835,8 @@ while t < T - 0.5*dt:
 
 if ADJOINT:
     melt.project(mp.wb)
-    #J = assemble(conditional(x < shelf_length, mp.wb, 0.0) * ds("top"))
-    J = assemble(sal**2 * dx)
+    J = assemble(mp.wb * offset_backward_step_approx(x, k, x0) * ds("top"))
+    #J = assemble(sal**2 * dx)
     print(J)
     rf = ReducedFunctional(J, c)
 
@@ -844,14 +846,14 @@ if ADJOINT:
     # evaluate all adjoint blocks to ensure we get complete adjoint solution
     # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
     #    meshtype derivative (line 204) is broken, so just return None instead
-    #with timed_stage('adjoint'):
-    #    tape.evaluate_adj()
+    with timed_stage('adjoint'):
+        tape.evaluate_adj()
 #    grad = rf.derivative()
     #File(folder+'grad.pvd').write(grad)
     
-    h = Function(sal)
+    h = Function(kappa_sal)
     
-    h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
+    h.dat.data[:] = 1e-3*np.random.random(h.dat.data_ro.shape)
     print("hmax", h.dat.data_ro.max())
     print("hmin", h.dat.data_ro.min())
     print("sal max", sal.dat.data_ro.max())
@@ -861,4 +863,5 @@ if ADJOINT:
 #    print("rf(sal)", rf(sal))
 #    print("rf(salinit)", rf(sal_init_func))
 #    print("peturb rf", rf(sal+h))
-    taylor_test(rf, sal, h)
+#    taylor_test(rf, sal, h)
+    taylor_test(rf, kappa_sal, h)
