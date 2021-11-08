@@ -323,8 +323,8 @@ sal_init_func.assign(sal)
 #sal.dat.data[:] += 1*h.dat.data[:]
 
 
-#if ADJOINT:
-#    c = Control(temp) 
+if ADJOINT:
+    c = Control(sal) 
 
 #    v_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 #    V = VectorFunctionSpace(mesh, v_ele) # Velocity space
@@ -457,7 +457,6 @@ TP1 = TensorFunctionSpace(mesh, "CG", 1)
 mu = Function(TP1, name='viscosity').assign(mu_tensor)
 kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa_tensor)
 kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa_tensor)
-c = Control(kappa_sal)
 
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
@@ -627,8 +626,8 @@ output_step = output_dt/dt
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=mumps_solver_parameters,
                                                           predictor_solver_parameters=mumps_solver_parameters,
-                                                          picard_iterations=1)
-#                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+                                                          picard_iterations=1,
+                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
 
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
@@ -640,8 +639,8 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
 #        vp_timestepper.initialize_pressure()
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
-temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=mumps_solver_parameters)
-sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=mumps_solver_parameters)
+temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
+sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
 
 ##########
 
@@ -851,9 +850,9 @@ if ADJOINT:
 #    grad = rf.derivative()
     #File(folder+'grad.pvd').write(grad)
     
-    h = Function(kappa_sal)
+    h = Function(sal)
     
-    h.dat.data[:] = 1e-3*np.random.random(h.dat.data_ro.shape)
+    h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
     print("hmax", h.dat.data_ro.max())
     print("hmin", h.dat.data_ro.min())
     print("sal max", sal.dat.data_ro.max())
@@ -864,4 +863,4 @@ if ADJOINT:
 #    print("rf(salinit)", rf(sal_init_func))
 #    print("peturb rf", rf(sal+h))
 #    taylor_test(rf, sal, h)
-    taylor_test(rf, kappa_sal, h)
+    taylor_test(rf, sal, h)
