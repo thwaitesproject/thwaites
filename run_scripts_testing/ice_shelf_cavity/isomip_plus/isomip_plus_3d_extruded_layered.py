@@ -4,7 +4,7 @@
 from thwaites import *
 from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, ExtrudedFunction
 from firedrake.petsc import PETSc
-from firedrake import FacetNormal
+from firedrake import FacetNormal, derivative
 import pandas as pd
 import argparse
 import numpy as np
@@ -53,7 +53,19 @@ ny = round(Ly/dy)
 dz = H2/args.nz #40.0
 
 # create mesh
-base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront.msh") 
+if dy == 1000.0:
+   base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront_1km.msh") 
+elif dy == 2000.0:
+   base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront_2km.msh") 
+elif dy == 4000.0:
+   base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront.msh") 
+elif dy == 8000.0: 
+   base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront_8km.msh")
+else:
+   raise NameError("Provided mesh resolution {} does not match 2km, 4km, 8km basemeshes")
+
+ 
+#base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront_western.msh") 
 layers = []
 cell = 0
 yr = 0
@@ -65,11 +77,11 @@ x_base = SpatialCoordinate(base_mesh)
 P1 = FunctionSpace(base_mesh, "CG", 1)
 ocean_thickness = Function(P1)
 ocean_thickness.interpolate(conditional(x_base[0] + 0.5*dy < shelf_length, H2, H3))
-
+rank = base_mesh.comm.rank
 def extruded_cavity_mesh(base_mesh, ocean_thickness):
     P0dg = FunctionSpace(base_mesh, "DG", 0)
     P0dg_cells = Function(P0dg)
-    tmp = ocean_thickness.copy()
+    tmp = ocean_thickness.copy(deepcopy=True)
     P0dg_cells.assign(-1.0)#np.finfo(0.).min)
     par_loop("""for (int i=0; i<bathy.dofs; i++) {
             bathy_max[0] = fmax(bathy[i], bathy_max[0]);
@@ -83,8 +95,10 @@ def extruded_cavity_mesh(base_mesh, ocean_thickness):
 
 
     for i in P0dg_cells_array:
+        if rank == 41:
+            print(i)
         layers.append([0, i])
-
+    print("rank =",rank, " len(layers) = ", len(layers))
     mesh = ExtrudedMesh(base_mesh, layers, layer_height=dz)
     return mesh 
 
@@ -96,6 +110,24 @@ P0_extruded = FunctionSpace(mesh, 'DG', 0)
 p0mesh_cells = Function(P0_extruded)
 PETSc.Sys.Print("number of cells:", len(p0mesh_cells.dat.data[:]))
 
+print("rank", rank, "number of cells:", len(p0mesh_cells.dat.data[:]))
+print ("rank", rank,"len basemesh.coordinates.dat.data", len(base_mesh.coordinates.dat.data[:]))
+print ("rank", rank,"basemesh.coordinates.dat.data", base_mesh.coordinates.dat.data[:])
+print ("rank", rank,"mesh.coordinates.dat.data", mesh.coordinates.dat.data[:])
+
+for count, base_mesh_i in enumerate(base_mesh.coordinates.dat.data[:]):
+	if base_mesh_i[0] < 400000:
+		print(count)
+		print("x has gone < 400000m!")
+		print("x= ", base_mesh_i[0])
+		print("y= ", base_mesh_i[1])
+for count, mesh_i in enumerate(mesh.coordinates.dat.data[:]):
+	if mesh_i[0] < 400000:
+		print(count)
+		print("mesh x has gone < 400000m!")
+		print("x= ", mesh_i[0])
+		print("y= ", mesh_i[1])
+		print("z= ", mesh_i[2])
 
 P1_extruded = FunctionSpace(mesh, 'CG', 1)
 
@@ -106,6 +138,9 @@ ocean_thickness_extruded = ExtrudedFunction(ocean_thickness, mesh_3d=mesh)
 cfs = mesh.coordinates.function_space()
 bc = DirichletBC(cfs, as_vector((x, y, ocean_thickness_extruded.view_3d)), "top")
 bc.apply(mesh.coordinates)
+
+print ("rank", rank,"after squashing ice front mesh.coordinates.dat.data", mesh.coordinates.dat.data[:])
+
 
 # Bathymetry 
 x_bar = Constant(300E3) # Characteristic along flow length scale of the bedrock
@@ -161,6 +196,7 @@ f = Function(Vc).interpolate(as_vector([x, y, conditional(x + 0.5*dy < shelf_len
 #f = Function(Vc).interpolate(as_vector([x, y, ocean_thickness*z/H2 - -bathymetry]))
 mesh.coordinates.assign(f)
 
+print ("rank", rank,"after applying bathy/icedraft mesh.coordinates.dat.data", mesh.coordinates.dat.data[:])
 ds = CombinedSurfaceMeasure(mesh, 5)
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
@@ -168,7 +204,6 @@ PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 print("You have Comm WORLD size = ", mesh.comm.size)
 print("You have Comm WORLD rank = ", mesh.comm.rank)
-
 x, y, z = SpatialCoordinate(mesh)
 
 PETSc.Sys.Print("Area of South side (Gl wall) should be {:.0f}m^2: ".format(H1*Ly), assemble((Constant(1.0)*ds(1, domain=mesh))))
@@ -192,8 +227,8 @@ mesh_file = File("icedraft_icedraftfile.pvd")
 mesh_file.write(ice_draft)
 
 p0mesh_cells.interpolate(CellVolume(mesh))
-PETSc.Sys.Print("max cell volume:", p0mesh_cells.dat.data[:].max())
-PETSc.Sys.Print("min cell volume:", p0mesh_cells.dat.data[:].min())
+print("rank", rank, "max cell volume:", p0mesh_cells.dat.data[:].max())
+print("rank", rank, "min cell volume:", p0mesh_cells.dat.data[:].min())
 mesh_cellvol_file = File("mesh_cell_vol.pvd")
 mesh_cellvol_file.write(p0mesh_cells)
 ##########
@@ -231,6 +266,12 @@ PETSc.Sys.Print("pressure dofs:", W.dim())
 PETSc.Sys.Print("combined dofs:", M.dim())
 PETSc.Sys.Print("scalar dofs:", S.dim())
 PETSc.Sys.Print("P1 dofs (no of nodes):", P1_extruded.dim())
+print("rank", rank, "vel dofs:", V.dim())
+print("rank", rank,"pressure dofs:", W.dim())
+print("rank", rank,"combined dofs:", M.dim())
+print("rank", rank,"scalar dofs:", S.dim())
+print("rank", rank,"P1 dofs (no of nodes):", P1_extruded.dim())
+
 ##########
 # Set up functions
 m = Function(M)
@@ -259,7 +300,7 @@ rho_anomaly = Function(P1_extruded, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/data/3d_isomip_plus/extruded_meshes/21.04.21_3d_isomip+_dt900.0_dtOut43200.0_T1728000.0_ipdef_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80mLy4km_closed_iterlump_deg2ip3_predrtol1e-5_offsetmelt/dump_step_1440.h5" 
+dump_file = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/06.10.21_32cores_from70days_3d_isomip+_dt900.0_dtOut864000.0_T8640000.0_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_closed_coriolis_tracerlims_ip3_alignicefront_backeul_mompchypre/dump_step_7680.h5" 
 
 DUMP = False
 if DUMP:
@@ -545,6 +586,7 @@ predictor_solver_parameters = {
         'snes_monitor': None,
         'snes_type': 'ksponly',
         'ksp_type': 'gmres',
+#        'pc_type': 'gamg',
         'pc_type': 'hypre',
         'pc_hypre_boomeramg_strong_threshold': 0.6,
         'ksp_converged_reason': None,
@@ -584,10 +626,13 @@ output_step = output_dt/dt
 
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
-#                                                          theta=0.5,
                                                           predictor_solver_parameters=predictor_solver_parameters,
                                                           picard_iterations=1,
                                                           pressure_nullspace=VectorSpaceBasis(constant=True))
+vp_timestepper.initialize(m)
+jac = derivative(vp_timestepper.F, m)
+petsc_mat = assemble(jac, mat_type="aij").M.handle
+PETSc.Sys.Print("Jacobian", petsc_mat.norm())
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
 # are meant to decouple from pressure projection, but won't if pressure is not initialised
@@ -604,7 +649,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up Vectorfolder
-folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
+folder = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
          "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul/"
@@ -690,7 +735,9 @@ w_comp = Function(S)
 # Begin time stepping
 t = 0.0
 step = 0
-
+if DUMP:
+    t += 80*24*3600.  # add 80 days to the start
+    step += int(t / dt)
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
