@@ -2,7 +2,8 @@
 #Buoyancy driven overturning circulation
 # beneath ice shelf.
 from thwaites import *
-from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure
+from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, ExtrudedFunction
+from thwaites.utility import offset_backward_step_approx
 from firedrake.petsc import PETSc
 from firedrake import FacetNormal
 import pandas as pd
@@ -14,7 +15,13 @@ import rasterio
 from thwaites.interpolate import interpolate as interpolate_data
 
 ##########
+ADJOINT = True
 
+if ADJOINT:
+    from firedrake_adjoint import *
+    from thwaites.diagnostic_block import DiagnosticBlock
+
+##########
 PETSc.Sys.popErrorHandler()
 
 parser = argparse.ArgumentParser()
@@ -42,18 +49,21 @@ restoring_time = Constant(0.1*86400.)
 ##########
 
 #  Generate mesh
-L = 480E3
-shelf_length = 320E3
+L = 800E3
+grounding_line = 460E3 # Ice domain from isomip+ offsets ocean domain
+domain_length = L - grounding_line
+shelf_length = 640E3
 H1 = 130.
 H2 = 600.
 H3 = 720.
 dy = args.dy 
-ny = round(L/dy)
+ny = round(domain_length/dy)
 dz = H2/args.nz #40.0
 water_depth = H3
 
 # create mesh
-base_mesh = IntervalMesh(ny, L)
+grounding_line = 460E3 # Ice domain from isomip+ offsets ocean domain
+base_mesh = IntervalMesh(ny, grounding_line, L)
 layers = []
 cell = 0
 yr = 0
@@ -63,13 +73,15 @@ tiny_dz = 0.01*dz # workaround zero measure facet issue (fd issue #1858)
 x_base = SpatialCoordinate(base_mesh)
 
 P1 = FunctionSpace(base_mesh, "CG", 1)
-P1_ocean_thickness = Function(P1)
-P1_ocean_thickness.interpolate(conditional(x_base[0] - 0.5*dy < shelf_length, H2, H3))
+ocean_thickness = Function(P1)
+ocean_thickness.interpolate(conditional(x_base[0] + 0.5*dy < shelf_length, H2, H3))
+
+PETSc.Sys.Print(len(ocean_thickness.dat.data[:]))
 
 def extruded_cavity_mesh(base_mesh, ocean_thickness):
     P0dg = FunctionSpace(base_mesh, "DG", 0)
     P0dg_cells = Function(P0dg)
-    tmp = ocean_thickness.copy()
+    tmp = ocean_thickness.copy(deepcopy=True)
     P0dg_cells.assign(np.finfo(0.).min)
     par_loop("""for (int i=0; i<bathy.dofs; i++) {
             bathy_max[0] = fmax(bathy[i], bathy_max[0]);
@@ -86,7 +98,7 @@ def extruded_cavity_mesh(base_mesh, ocean_thickness):
     mesh = ExtrudedMesh(base_mesh, layers, layer_height=dz)
     return mesh 
 
-mesh = extruded_cavity_mesh(base_mesh, P1_ocean_thickness)
+mesh = extruded_cavity_mesh(base_mesh, ocean_thickness)
 x, z = SpatialCoordinate(mesh)
 
 P0_extruded = FunctionSpace(mesh, 'DG', 0)
@@ -95,19 +107,17 @@ PETSc.Sys.Print("number of cells:", len(p0mesh_cells.dat.data[:]))
 
 # Define ocean cavity thickness on extruded mesh
 P1_extruded = FunctionSpace(mesh, 'CG', 1)
-P1_ocean_thickness_ext = Function(P1_extruded)
-P1_ocean_thickness_ext.interpolate(conditional(x - 0.5*dy < shelf_length, H2, H3))
 
+ocean_thickness_extruded = ExtrudedFunction(ocean_thickness, mesh_3d=mesh)
 # move top nodes to correct position:
 cfs = mesh.coordinates.function_space()
-bc = DirichletBC(cfs, as_vector((x, P1_ocean_thickness_ext)), "top")
-
+bc = DirichletBC(cfs, as_vector((x, ocean_thickness_extruded.view_3d)), "top")
 bc.apply(mesh.coordinates)
 
 # Bathymetry 
 
 x_bar = Constant(300E3) # Characteristic along flow length scale of the bedrock
-x_tilda = (x + Constant(320E3) ) / x_bar  # isomip+ x coordinate used for defining along flow bathymetry/bedrock topography (N.b offset by 320km because of ice domain)
+x_tilda = x / x_bar  # isomip+ x coordinate used for defining along flow bathymetry/bedrock topography (N.b offset by 320km because of ice domain)
 B0 = Constant(-150.0) # Bedrock topography at x = 0 (in the ice domain!)
 B2 = Constant(-728.8) # Second bedrock topography coefficient 
 B4 = Constant(343.91) # Third bedrock topography coefficient
@@ -115,28 +125,49 @@ B6 = Constant(-50.57) # Forth bedrock topography coefficient
 
 bathy_x = B0 + B2 * pow(x_tilda, 2) + B4 * pow(x_tilda, 4) + B6 * pow(x_tilda, 6)
 bathymetry = Function(P1_extruded)
-bathymetry.interpolate(conditional(bathy_x < -water_depth,
-                        -water_depth,
-                        bathy_x))
-
+# the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
+with stop_annotating():
+    bathymetry.interpolate(conditional(bathy_x < -water_depth,
+                            -water_depth,
+                            bathy_x))
+#bathymetry.assign(-720)
 print("max bathy : ",bathymetry.dat.data[:].max())
 
 ice_draft_filename = "Ocean1_input_geom_v1.01.nc"
 ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
-#ice_draft = Function(P1_extruded)
-#ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
-ice_draft = interpolate_data(ice_draft_file, P1_extruded)
-print("max icedraft : ",ice_draft.dat.data[:].max())
-print("min icedraft : ",ice_draft.dat.data[:].min())
+ice_draft = Function(P1_extruded)
+#ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3) - water_depth) 
+ice_draft_base = interpolate_data(ice_draft_file, P1, y_transect=41000)  # Get ice shelf draft along y=41km transect i.e the middle
+
+#print("max icedraft : ",ice_draft_base.dat.data[:].max())
+#print("min icedraft : ",ice_draft_base.dat.data[:].min())
 
 ocean_thickness = Function(P1_extruded)
-ocean_thickness.interpolate(ice_draft - bathymetry) 
+
+ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
+#print("max icedraft extruded : ",ice_draft.view_3d.dat.data[:].max())
+#print("min icedraft extruded : ",ice_draft.view_3d.dat.data[:].min())
+# the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
+#with stop_annotating():
+#ocean_thickness.interpolate(ice_draft - bathymetry)
+
+print("max thickness : ", ocean_thickness.dat.data[:].max())
+print("min thickness : ", ocean_thickness.dat.data[:].min())
+# the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
+with stop_annotating():
+    ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(10),
+                                        Constant(10),
+                                        ice_draft.view_3d - bathymetry)) 
+print("max thickness : ", ocean_thickness.dat.data[:].max())
+print("min thickness : ", ocean_thickness.dat.data[:].min())
 
 # Scale the mesh to make ice shelf slope
 Vc = mesh.coordinates.function_space()
 x, z = SpatialCoordinate(mesh)
-f = Function(Vc).interpolate(as_vector([x, conditional(x - 0.5*dy < shelf_length, ocean_thickness*z/H2, z) - -bathymetry]))
-mesh.coordinates.assign(f)
+f = Function(Vc).interpolate(as_vector([x, conditional(x + 0.5*dy < shelf_length, ocean_thickness*z/H2, ocean_thickness*z/H3) - -bathymetry]))
+#f = Function(Vc).interpolate(as_vector([x, ocean_thickness*z/H3 - -bathymetry]))
+with stop_annotating():
+    mesh.coordinates.assign(f)
 
 
 ds = CombinedSurfaceMeasure(mesh, 5)
@@ -151,18 +182,40 @@ print("You have Comm WORLD rank = ", mesh.comm.rank)
 
 x, z = SpatialCoordinate(mesh)
 
-PETSc.Sys.Print("Length of South side (Gl wall) should be 80m: ", assemble((Constant(1.0)*ds(1, domain=mesh))))
+PETSc.Sys.Print("Length of South side (Gl wall) should be 10m: ", assemble((Constant(1.0)*ds(1, domain=mesh))))
 
 PETSc.Sys.Print("Length of North side (open ocean) should be 720m: ", assemble(Constant(1.0)*ds(2, domain=mesh)))
 
-PETSc.Sys.Print("Length of bottom: should be 480e3m: ", assemble(Constant(1.0)*ds("bottom", domain=mesh)))
+PETSc.Sys.Print("Length of bottom: should be 340e3m: ", assemble(Constant(1.0)*ds("bottom", domain=mesh)))
 
 PETSc.Sys.Print("length of ocean surface should be 160e3m", assemble(conditional(x > shelf_length, Constant(1.0), 0.0)*ds("top", domain=mesh)))
 
-PETSc.Sys.Print("Length of iceslope: should be 320000.4225m: ", assemble(conditional(x < shelf_length, Constant(1.0), 0.0)*ds("top", domain=mesh)))
+PETSc.Sys.Print("Length of iceslope: should be ...: ", assemble(conditional(x < shelf_length, Constant(1.0), 0.0)*ds("top", domain=mesh)))
 
 n = FacetNormal(mesh)
 print("ds_v",assemble(avg(dot(n,n))*dS_v(domain=mesh)))
+
+
+mesh_file = File("ocean_thickness_icedraftfile.pvd")
+mesh_file.write(ocean_thickness)
+
+
+if ADJOINT:
+    # don't want to integrate over the entire top surface 
+    # and conditional doesnt seem to work in adjoint when used in J...
+    # wavelength of the step = x distance that fucntion goes from zero to 1. 
+    lambda_step = 2 * dy
+    k = 2.0 * np.pi / lambda_step 
+    x0 = shelf_length - 0.5 * lambda_step  # this is the centre of the step.
+
+
+    PETSc.Sys.Print("Alternatively using approx step function, length of iceslope: should be 320000.64m: ", assemble( Constant(1.0)*offset_backward_step_approx(x,k,x0)*ds("top", domain=mesh)))
+
+    PETSc.Sys.Print("Alternatively using approx step function, length of bottom up to ice shelf: should equal x0 = {}m and hopefully be close to shelf length: ".format(x0), assemble( Constant(1.0)*offset_backward_step_approx(x,k,x0)*ds("bottom", domain=mesh)))
+
+
+
+
 
 ##########
 print(mesh.ufl_cell())
@@ -176,7 +229,7 @@ M = MixedFunctionSpace([V, W])
 # u velocity function space.
 ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 U = FunctionSpace(mesh, ele)
-VDG = VectorFunctionSpace(mesh, "DQ", 2) # velocity for output
+VDG = VectorFunctionSpace(mesh, "DQ", 1) # velocity for output
 vdg_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 VDG1 = VectorFunctionSpace(mesh, vdg_ele) # velocity for output
 
@@ -192,7 +245,6 @@ print("combined dofs:", M.dim())
 print("scalar dofs:", U.dim())
 print("P1 dofs (no. of nodes):", P1.dim())
 ##########
-exit()
 # Set up functions
 m = Function(M)
 v_, p_ = m.split()  # function: velocity, pressure
@@ -220,11 +272,10 @@ rho_anomaly = Function(P1, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/23.04.21_2d_isomip+_dt900.0_dtOut43200.0_T1728000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_glwall80m_closed_nolim_offsetmelt_nolim_strongthreshold0.6_veldq2update12hours/dump_step_1440.h5" 
-
-DUMP = True
+dump_file = "./isomip_2d_dx4km_nz15_closed_dump_step_9600" 
+DUMP = False
 if DUMP:
-    with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+    with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
         # Checkpoint file open for reading and writing
         chk.load(v_, name="velocity")
         chk.load(p_, name="perturbation_pressure")
@@ -255,16 +306,39 @@ else:
     S_surface = 33.8
     S_bottom = 34.7
 
-    T_restore = T_surface + (T_bottom - T_surface) * (z / -water_depth)
-    S_restore = S_surface + (S_bottom - S_surface) * (z / -water_depth)
+    T_restore = T_surface #+ (T_bottom - T_surface) * (z / -water_depth)
+    S_restore = S_surface #+ (S_bottom - S_surface) * (z / -water_depth)
 
     temp_init = T_restore
-    temp.interpolate(temp_init)
+    temp.assign(temp_init)
 
     sal_init = S_restore
-    sal.interpolate(sal_init)
+    sal.assign(sal_init)
+
+sal_init_func = Function(sal)
+sal_init_func.assign(sal)
+#h = Function(sal)
+    
+#h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
+#sal.dat.data[:] += 1*h.dat.data[:]
 
 
+if ADJOINT:
+    c = Control(sal) 
+
+#    v_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
+#    V = VectorFunctionSpace(mesh, v_ele) # Velocity space
+#    M = MixedFunctionSpace([V, W])
+
+
+#    m = Function(M)
+#    v_, p_ = m.split()  # function: velocity, pressure
+#    v, p = split(m)  # expression: velocity, pressure
+#    v_._name = "velocity"
+#    p_._name = "perturbation pressure"
+#
+ #   v_.project(vadj_)
+#    p_.project(padj_)
 ##########
 
 # Set up equations
@@ -373,12 +447,13 @@ DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinit
 gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude estimate for vertical gradient of density anomaly. units m^-1
 #kappa_v.assign(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1))
 
-mu = as_tensor([[mu_h, 0], [0, mu_v]])
-kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
+mu_tensor = as_tensor([[mu_h, 0], [0, mu_v]])
+kappa_tensor = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
-kappa_temp = kappa
-kappa_sal = kappa
-
+#TP1 = TensorFunctionSpace(mesh, "CG", 1)
+mu = mu_tensor #Function(TP1, name='viscosity').assign(mu_tensor)
+kappa_temp = kappa_tensor #Function(TP1, name='temperature diffusion').assign(kappa_tensor)
+kappa_sal = kappa_tensor #Function(TP1, name='salinity diffusion').assign(kappa_tensor)
 ##########
 
 # Equation fields
@@ -392,7 +467,7 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg), 0.5), ice_heat_flux=False)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg) + 1e-6, 0.5), ice_heat_flux=False)
 
 ##########
 
@@ -418,11 +493,15 @@ full_pressure.interpolate(mp.P_full)
 
 # WEAKLY Enforced BCs
 n = FacetNormal(mesh)
-Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
-Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
+Temperature_term = -beta_temp * (T_surface * z + 0.5 * (T_bottom - T_surface) * (pow(z,2) / -water_depth) - T_ref * z)
+Salinity_term = beta_sal *  (S_surface * z + 0.5 * (S_bottom - S_surface) * (pow(z,2) / -water_depth) - S_ref * z)
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
 
+Vinflow = Constant(0.0) # velocity inflow. 10m^3/s 1km x 1m high. doesnt sound that realistic... or 100m x 10m high
+Tinflow = Constant(rho0 * g * 610 * mp.c) # should be -0.46degC which seems too hot I thought it was more like -2degC. is this because deeper? or saltier...
+PETSc.Sys.Print(Tinflow.values()[0])
+Sinflow = Constant(20.0) 
 
 # test stress open_boundary
 #sop = Function(W)
@@ -435,9 +514,10 @@ vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.
         1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
-temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)}}
-
-sal_bcs = {"top": {'flux':  conditional(x + 5*dy < shelf_length, -mp.S_flux_bc, 0.0)}}
+#temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)}}
+temp_bcs = {"top": {'flux': -mp.T_flux_bc * offset_backward_step_approx(x, k, x0) }}
+#sal_bcs = {"top": {'flux':  conditional(x + 5*dy < shelf_length, -mp.S_flux_bc, 0.0)}}
+sal_bcs = {"top": {'flux': -mp.S_flux_bc * offset_backward_step_approx(x, k, x0) }}
 
 
 # STRONGLY Enforced BCs
@@ -463,6 +543,8 @@ pressure_projection_solver_parameters = {
         'snes_type': 'ksponly',
         'snes_monitor': None,
         'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
+        'ksp_converged_reason': None,
+        'ksp_monitor_true_residual': None,
         'mat_type': 'matfree',
         'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'schur',
@@ -470,18 +552,21 @@ pressure_projection_solver_parameters = {
         # velocity mass block:
         'fieldsplit_0': {
             'ksp_converged_reason': None,
-#            'ksp_monitor_true_residual': None,
+            'ksp_monitor_true_residual': None,
             'ksp_type': 'cg',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
             'assembled_pc_type': 'bjacobi',
             'assembled_sub_pc_type': 'sor',
             },
-        # schur system: explicitly assemble the schur system
-        # this only works with pressureprojectionicard if the velocity block is just the mass matrix
-        # and if the velocity is DG so that this mass matrix can be inverted explicitly
+        # schur system: don't explicitly assemble the schur system
+        # use cg for outer krylov solve. Use LaplacePC with vertical lumping to assemble pc.
         'fieldsplit_1': {
             'ksp_type': 'preonly',
+            'ksp_rtol': 1e-7,
+            'ksp_atol': 1e-9,
+            'ksp_converged_reason': None,
+            'ksp_monitor_true_residual': None,
             'pc_type': 'python',
             'pc_python_type': 'thwaites.LaplacePC',
             #'schur_ksp_converged_reason': None,
@@ -490,18 +575,11 @@ pressure_projection_solver_parameters = {
             'laplace_ksp_ksp_rtol': 1e-7,
             'laplace_ksp_ksp_atol': 1e-9,
             'laplace_ksp_ksp_converged_reason': None,
-#            'laplace_ksp_ksp_monitor_true_residual': None,
+            'laplace_ksp_ksp_monitor_true_residual': None,
             'laplace_ksp_pc_type': 'python',
             'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
     }
-if False:
-    fs1 = pressure_projection_solver_parameters['fieldsplit_1']
-    fs1['ksp_type'] = 'cg'
-    fs1['ksp_rtol'] = 1e-7
-    fs1['ksp_atol'] = 1e-9
-    fs1['ksp_monitor_true_residual'] = None
-    fs1['laplace_ksp_ksp_type'] = 'preonly'
 
 predictor_solver_parameters = {
         'snes_monitor': None,
@@ -545,10 +623,10 @@ output_step = output_dt/dt
 # Set up time stepping routines
 
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                          solver_parameters=vp_solver_parameters,
-                                                          predictor_solver_parameters=predictor_solver_parameters,
-                                                          picard_iterations=1,
-                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
+                                                          solver_parameters=mumps_solver_parameters,
+                                                          predictor_solver_parameters=mumps_solver_parameters,
+                                                          picard_iterations=1)
+#                                                          pressure_nullspace=VectorSpaceBasis(constant=True))
 
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
@@ -560,8 +638,8 @@ if not DUMP:
         vp_timestepper.initialize_pressure()
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
-temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
-sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
+temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=mumps_solver_parameters)
+sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=mumps_solver_parameters)
 
 ##########
 
@@ -569,8 +647,8 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_glwall80m_closed_nolim_offsetmelt_nolim_strongthreshold0.6_analytic_bathy/"
-         #+"_extended_domain_with_coriolis_stratified/"  # output folder.
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adjdq1q2/"
+
 #folder = 'tmp/'
 
 
@@ -626,14 +704,31 @@ full_pressure_file.write(full_pressure)
 
 ##########
 
-with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
-    # Checkpoint file open for reading and writing
-    chk.store(v_, name="velocity")
-    chk.store(p_, name="perturbation_pressure")
-    chk.store(temp, name="temperature")
-    chk.store(sal, name="salinity")
+#with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
+#    # Checkpoint file open for reading and writing
+#    chk.store(v_, name="velocity")
+#    chk.store(p_, name="perturbation_pressure")
+#    chk.store(temp, name="temperature")
+#    chk.store(sal, name="salinity")
 
+############
 
+if ADJOINT:
+    # adjoint output
+    tape = get_working_tape()
+
+    adj_s_file = File(folder+"adj_salinity.pvd")
+    tape.add_block(DiagnosticBlock(adj_s_file, sal))
+
+    adj_t_file = File(folder+"adj_temperature.pvd")
+    tape.add_block(DiagnosticBlock(adj_t_file, temp))
+
+    #adj_visc_file = File(folder+"adj_viscosity.pvd")
+    #tape.add_block(DiagnosticBlock(adj_visc_file, mu))
+    #adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
+    #tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
+    #adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
+    #tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
 ####################
 
@@ -663,16 +758,18 @@ while t < T - 0.5*dt:
         sal_timestepper.advance(t)
 
 
-#    limiter.apply(sal)
-#    limiter.apply(temp)
+    limiter.apply(sal)
+    limiter.apply(temp)
 
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
     gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
     #kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
-    
     step += 1
     t += dt
 
+    #if step <= 10: 
+    #    Vinflow.assign(0.01 * step * 0.1)
+    
     with timed_stage('output'):
        if step % output_step == 0:
            # dumb checkpoint for starting from last timestep reached
@@ -713,12 +810,18 @@ while t < T - 0.5*dt:
            full_pressure_file.write(full_pressure)
            Qs_file.write(Q_s)
            Q_ice_file.write(Q_ice)
-    
+           if ADJOINT:
+               # Output adjoint T / S
+               tape.add_block(DiagnosticBlock(adj_t_file, temp))
+               tape.add_block(DiagnosticBlock(adj_s_file, sal))
+           
            time_str = str(step)
     
            PETSc.Sys.Print("t=", t)
     
            PETSc.Sys.Print("integrated melt =", assemble(conditional(x < shelf_length, melt, 0.0) * ds("top")))
+           if ADJOINT:
+               PETSc.Sys.Print("alternatively integrated melt =", assemble(melt * offset_backward_step_approx(x,k,x0) * ds("top")))
 
     if t % (3600 * 24) == 0:
         with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
@@ -727,3 +830,35 @@ while t < T - 0.5*dt:
             chk.store(p_, name="perturbation_pressure")
             chk.store(temp, name="temperature")
             chk.store(sal, name="salinity")
+
+if ADJOINT:
+    melt.project(mp.wb)
+    #J = assemble(conditional(x < shelf_length, mp.wb, 0.0) * ds("top"))
+    J = assemble(sal**2 * dx)
+    print(J)
+    rf = ReducedFunctional(J, c)
+
+    #tape.reset_variables()
+    J.block_variable.adj_value = 1.0
+    #tape.visualise()
+    # evaluate all adjoint blocks to ensure we get complete adjoint solution
+    # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
+    #    meshtype derivative (line 204) is broken, so just return None instead
+    #with timed_stage('adjoint'):
+    #    tape.evaluate_adj()
+#    grad = rf.derivative()
+    #File(folder+'grad.pvd').write(grad)
+    
+    h = Function(sal)
+    
+    h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
+    print("hmax", h.dat.data_ro.max())
+    print("hmin", h.dat.data_ro.min())
+    print("sal max", sal.dat.data_ro.max())
+    print("sal min", sal.dat.data_ro.min())
+    
+    print("J", J)
+#    print("rf(sal)", rf(sal))
+#    print("rf(salinit)", rf(sal_init_func))
+#    print("peturb rf", rf(sal+h))
+    taylor_test(rf, sal, h)

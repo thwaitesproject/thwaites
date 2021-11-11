@@ -3,6 +3,7 @@ from .momentum_equation import PressureGradientTerm, DivergenceTerm
 import firedrake
 from pyop2.profiling import timed_stage
 
+
 class CoupledTimeIntegrator(TimeIntegratorBase):
     def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}):
         """
@@ -40,8 +41,8 @@ class CoupledTimeIntegrator(TimeIntegratorBase):
         self.bcs = bcs
 
         # unique identifier used in solver
-        self.name = '-'.join([self.__class__.__name__] +
-                             [eq.__class__.__name__ for eq in self.equations])
+        self.name = '-'.join([self.__class__.__name__]
+                             + [eq.__class__.__name__ for eq in self.equations])
 
         self.solver_parameters = {}
         self.solver_parameters.update(solver_parameters)
@@ -84,7 +85,6 @@ class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
             self._fields.append(cfields)
 
         self.F = self.equations[0].mass_term(self.test[0], u-u_old)
-        #self.F -= self.dt_const*self.equations[0].residual(self.test[0], u_theta, u_theta, self._fields[0], bcs=self.bcs)
         self.F -= self.dt_const * self.equations[0].residual(self.test[0], u_theta, u_old, self._fields[0],
                                                              bcs=self.bcs)  # linearise using u_old
         self.F -= self.dt_const*self.equations[1].residual(self.test[1], p_theta, p_theta, self._fields[1], bcs=self.bcs)
@@ -107,7 +107,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
                  predictor_solver_parameters={}, picard_iterations=1, pressure_nullspace=None):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         self.theta = firedrake.Constant(theta)
-        self.theta_p = 1 # should not be used for now - maybe revisit with free surface terms
+        self.theta_p = 1  # should not be used for now - maybe revisit with free surface terms
         self.predictor_solver_parameters = predictor_solver_parameters
         self.picard_iterations = picard_iterations
         self.pressure_nullspace = pressure_nullspace
@@ -137,7 +137,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         # setup predictor solve, this solves for u_start only using a fixed p_lag_theta for pressure
         self.fields_star = self.fields.copy()
-        self.fields_star['pressure'] =  p_lag_theta
+        self.fields_star['pressure'] = p_lag_theta
 
         self.Fstar = self.equations[0].mass_term(self.u_star_test, self.u_star-u_old)
         self.Fstar -= self.dt_const*self.equations[0].residual(self.u_star_test, u_star_theta, u_lag_theta, self.fields_star, bcs=self.bcs)
@@ -171,10 +171,11 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution)
         self.solver = firedrake.NonlinearVariationalSolver(self.problem,
                                                            solver_parameters=self.solver_parameters,
-                                                           appctx = {'a': firedrake.derivative(self.F, self.solution),
-                                                                     'schur_nullspace': self.pressure_nullspace,
-                                                                     'dt': self.dt_const, 'dx': self.equations[1].dx},
-                                                           nullspace = mixed_nullspace, transpose_nullspace = mixed_nullspace,
+                                                           appctx={'a': firedrake.derivative(self.F, self.solution),
+                                                                   'schur_nullspace': self.pressure_nullspace,
+                                                                   'dt': self.dt_const, 'dx': self.equations[1].dx,
+                                                                   'ds': self.equations[1].ds, 'bcs': self.bcs, 'n': div_term.n},
+                                                           nullspace=mixed_nullspace, transpose_nullspace=mixed_nullspace,
                                                            options_prefix=self.name)
 
         self._initialized = True
@@ -189,8 +190,8 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         Fstar = self.equations[0].mass_term(self.u_star_test, self.u_star-u_old)
         Fstar -= self.dt_const*self.equations[0].residual(self.u_star_test, u_old, u_old, self.fields_star, bcs=self.bcs)
         # as an explicit solve this is now a trivial mass matrix solve, but let's just borrow the solver parameters of the normal predictor solve
-        firedrake.solve(Fstar==0, self.u_star, solver_parameters=self.predictor_solver_parameters,
-                options_prefix='predictor_momentum_initialise_pressure')
+        firedrake.solve(Fstar == 0, self.u_star, solver_parameters=self.predictor_solver_parameters,
+                        options_prefix='predictor_momentum_initialise_pressure')
         # now do the usual pressure projection step
         # note that the combination of these two is equivalent with solving the fully coupled
         # system but with all momentum terms handled explicitly on the rhs
@@ -214,6 +215,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         # pressure correction solve, solves for final solution (corrected velocity and pressure)
         with timed_stage("correction_solve"):
             self.solver.solve()
+
 
 class CoupledEquationsTimeIntegrator(CoupledTimeIntegrator):
     def __init__(self, equations, solution, fields, dt, bcs=None, mass_terms=None, solver_parameters={}, strong_bcs=None):

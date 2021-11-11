@@ -361,11 +361,11 @@ Point( 355 ) = {533500.0,70582.6952377,0.0 };
 
 // Add these two points later to define where the ice front is
 // Manually add ice front points into overall outline
-Point(400) = {640000.0, 2000.0, 0.0, 2000.0};
-Point(401) = {640000.0, 78000.0, 0.0, 2000.0};
+Point(400) = {640000.0, 8000.0, 0.0, 8000.0};
+Point(401) = {640000.0, 72000.0, 0.0, 8000.0};
 
-Point(402) = {636000.0, 2000.0, 0.0, 2000.0};
-Point(403) = {636000.0, 78000.0, 0.0, 2000.0};
+Point(402) = {627000.0, 8000.0, 0.0, 8000.0};
+Point(403) = {627000.0, 72000.0, 0.0, 8000.0};
 
 // Definitions of 6 B-splines:
 BSpline( 6 ) = {338, 74, 151};
@@ -399,23 +399,22 @@ Physical Surface( 1 ) = {0};
 
 Field[1] = MathEval;
 Field[1].F = "8000";
-// Background Field = 1;
-
+Background Field = 1;
+/*
 // higher res at grounding line
 Field[2] = Attractor;
-Field[2].EdgesList = {4,5};
+Field[2].EdgesList = {3};
 
 Field[3] = Threshold;
-Field[3].DistMax = 30e3;
-Field[3].DistMin = 5e3;
+Field[3].DistMax = 100e3;
+Field[3].DistMin = 10e3;
 Field[3].IField = 2;
-Field[3].LcMin = 2000;
-Field[3].LcMax = 8000;
+Field[3].LcMin = 500;
+Field[3].LcMax = 2000;
 Field[3].Sigmoid = 1;
-
 
 Field[4] = Min;
 Background Field = 4;
-Field[4].FieldsList = {1, 3};
-
+Field[4].FieldsList = {1};
+*/
 
