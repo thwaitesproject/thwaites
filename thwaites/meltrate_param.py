@@ -72,7 +72,7 @@ class TwoEqMeltRateParam(MeltRateParam):
 
 
 class ThreeEqMeltRateParam(MeltRateParam):
-    def __init__(self, salinity, temperature, pressure_perturbation, z, velocity=None, ice_heat_flux=True, HJ99Gamma=False, f=None):
+    def __init__(self, salinity, temperature, pressure_perturbation, z, GammaTfunc=None, velocity=None, ice_heat_flux=True, HJ99Gamma=False, f=None):
         super().__init__(salinity, temperature, pressure_perturbation, z)
 
         if velocity is None:
@@ -133,9 +133,12 @@ class ThreeEqMeltRateParam(MeltRateParam):
                 # ISOMIP+ based on Jenkins et al 2010. Measurement of basal rates beneath Ronne Ice Shelf
                 u_tidal = 0.01
                 u_star = pow(self.C_d*(pow(u, 2)+pow(u_tidal, 2)), 0.5)
-
-                gammaT = self.GammaT * u_star
-                gammaS = self.GammaS * u_star
+                if GammaTfunc is None:
+                    gammaT = self.GammaT * u_star
+                    gammaS = self.GammaS * u_star
+                else:
+                    gammaT = GammaTfunc * u_star
+                    gammaS = (GammaTfunc / 35.0) * u_star
 
                 # print exchange velocities if testing when input velocity is a float.
                 if isinstance(gammaT, float) or isinstance(gammaS, float):
