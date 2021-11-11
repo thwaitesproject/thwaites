@@ -126,10 +126,16 @@ B6 = Constant(-50.57) # Forth bedrock topography coefficient
 bathy_x = B0 + B2 * pow(x_tilda, 2) + B4 * pow(x_tilda, 4) + B6 * pow(x_tilda, 6)
 bathymetry = Function(P1_extruded)
 # the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
-with stop_annotating():
+if ADJOINT:
+    with stop_annotating():
+        bathymetry.interpolate(conditional(bathy_x < -water_depth,
+                            -water_depth,
+                            bathy_x))
+else:
     bathymetry.interpolate(conditional(bathy_x < -water_depth,
                             -water_depth,
                             bathy_x))
+
 #bathymetry.assign(-720)
 print("max bathy : ",bathymetry.dat.data[:].max())
 
@@ -154,10 +160,15 @@ ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
 # the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
-with stop_annotating():
-    ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(10),
+if ADJOINT:
+    with stop_annotating():
+        ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(10),
                                         Constant(10),
-                                        ice_draft.view_3d - bathymetry)) 
+                                        ice_draft.view_3d - bathymetry))
+else: 
+    ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constant(10),
+                                Constant(10),
+                                ice_draft.view_3d - bathymetry)) 
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
 
@@ -166,9 +177,11 @@ Vc = mesh.coordinates.function_space()
 x, z = SpatialCoordinate(mesh)
 f = Function(Vc).interpolate(as_vector([x, conditional(x + 0.5*dy < shelf_length, ocean_thickness*z/H2, ocean_thickness*z/H3) - -bathymetry]))
 #f = Function(Vc).interpolate(as_vector([x, ocean_thickness*z/H3 - -bathymetry]))
-with stop_annotating():
+if ADJOINT:
+    with stop_annotating():
+        mesh.coordinates.assign(f)
+else:
     mesh.coordinates.assign(f)
-
 
 ds = CombinedSurfaceMeasure(mesh, 5)
 
@@ -200,7 +213,7 @@ mesh_file = File("ocean_thickness_icedraftfile.pvd")
 mesh_file.write(ocean_thickness)
 
 
-if ADJOINT:
+if True:
     # don't want to integrate over the entire top surface 
     # and conditional doesnt seem to work in adjoint when used in J...
     # wavelength of the step = x distance that fucntion goes from zero to 1. 
@@ -268,12 +281,15 @@ full_pressure = Function(M.sub(1), name="full pressure")
 
 rho_anomaly = Function(P1, name="density anomaly")
 
+melt_exact = Function(Q, name="melt rate")
+
 ##########
 
 # Define a dump file
 
-dump_file = "./isomip_2d_dx4km_nz15_closed_dump_step_9600" 
-DUMP = False
+dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/08.11.21_adj_nullspaceiter_2d_isomip+_dt900.0_dtOut432000.0_T8640000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay30_icedraft_closed_tracerlims_adj_GammaTfunc1.1e-2/dump_step_9600.h5" 
+melt_dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/08.11.21adjget1stepoutput_2d_isomip+_dt900.0_dtOut900.0_T900.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay30_icedraft_closed_tracerlims_adj_GammaTfunc1.1e-2bump/Melt_dump" 
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
         # Checkpoint file open for reading and writing
@@ -323,8 +339,8 @@ sal_init_func.assign(sal)
 #sal.dat.data[:] += 1*h.dat.data[:]
 
 
-if ADJOINT:
-    c = Control(sal) 
+#if ADJOINT:
+#    c = Control(sal) 
 
 #    v_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
 #    V = VectorFunctionSpace(mesh, v_ele) # Velocity space
@@ -468,7 +484,11 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
 
 ##########
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(vdg, vdg) + 1e-6, 0.5), ice_heat_flux=False)
+GammaT = Function(P1_extruded)
+GammaT.assign(1.1e-2)# + 0.1 * 1.1e-2 * (1.0/cosh(1.25e-4 * (x - 500E3))))
+c = Control(GammaT)
+
+mp = ThreeEqMeltRateParam(sal, temp, p, z, GammaTfunc=GammaT, velocity=pow(dot(vdg, vdg) + 1e-6, 0.5), ice_heat_flux=False)
 
 ##########
 
@@ -648,7 +668,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adjdq1q2/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adj_GammaTfunc1.1e-2bump/"
 
 #folder = 'tmp/'
 
@@ -731,6 +751,8 @@ if ADJOINT:
     adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
     tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
+    adj_GammaT_file = File(folder+"adj_GammaT.pvd")
+    tape.add_block(DiagnosticBlock(adj_GammaT_file, GammaT))
 ####################
 
 # Add limiter for DG functions
@@ -823,6 +845,7 @@ while t < T - 0.5*dt:
            PETSc.Sys.Print("integrated melt =", assemble(conditional(x < shelf_length, melt, 0.0) * ds("top")))
            if ADJOINT:
                PETSc.Sys.Print("alternatively integrated melt =", assemble(melt * offset_backward_step_approx(x,k,x0) * ds("top")))
+    
 
     if t % (3600 * 24) == 0:
         with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
@@ -832,9 +855,19 @@ while t < T - 0.5*dt:
             chk.store(temp, name="temperature")
             chk.store(sal, name="salinity")
 
+MINIMIZE = True
+if MINIMIZE:
+    with DumbCheckpoint(folder+"Melt_dump", mode=FILE_UPDATE) as chk:
+        # Checkpoint file open for reading and writing
+        chk.store(melt, name="melt")
+
+with DumbCheckpoint(melt_dump_file, mode=FILE_READ) as chk:
+        # Checkpoint file open for reading and writing
+    chk.load(melt, name="melt")
+
 if ADJOINT:
-    melt.project(mp.wb)
-    J = assemble(mp.wb * offset_backward_step_approx(x, k, x0) * ds("top"))
+    #melt.project(mp.wb)
+    J = assemble((mp.wb - melt)**2 * offset_backward_step_approx(x, k, x0) * ds("top"))
     #J = assemble(sal**2 * dx)
     print(J)
     rf = ReducedFunctional(J, c)
@@ -850,9 +883,9 @@ if ADJOINT:
 #    grad = rf.derivative()
     #File(folder+'grad.pvd').write(grad)
     
-    h = Function(sal)
+    h = Function(GammaT)
     
-    h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
+    h.dat.data[:] = 1e-2*np.random.random(h.dat.data_ro.shape)
     print("hmax", h.dat.data_ro.max())
     print("hmin", h.dat.data_ro.min())
     print("sal max", sal.dat.data_ro.max())
@@ -863,4 +896,5 @@ if ADJOINT:
 #    print("rf(salinit)", rf(sal_init_func))
 #    print("peturb rf", rf(sal+h))
 #    taylor_test(rf, sal, h)
-    taylor_test(rf, sal, h)
+    #taylor_test(rf, GammaT, h)
+    minimize(rf)
