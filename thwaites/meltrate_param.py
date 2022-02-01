@@ -1,7 +1,7 @@
 from firedrake import conditional
 from firedrake import Constant
 from firedrake import ln
-
+import sympy
 
 class MeltRateParam:
     """methods for calculating melt rate parameterisation used in ice-ocean boundary"""
@@ -165,8 +165,9 @@ class ThreeEqMeltRateParam(MeltRateParam):
 
         S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
         S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
-
-        if isinstance(S1, float):
+        print(type(S1))
+        print(S1)
+        if isinstance(S1, (float, sympy.core.numbers.Float)):
             # Print statements for testing
             print("S1 = ", S1)
             print("S2 = ", S2)
@@ -176,7 +177,8 @@ class ThreeEqMeltRateParam(MeltRateParam):
             else:
                 self.Sb = S2
                 print("Choose S2")
-
+        elif isinstance(S1, sympy.core.add.Add):
+            self.Sb = S2
         else:
             self.Sb = conditional(S1 > 0.0, S1, S2)
 
