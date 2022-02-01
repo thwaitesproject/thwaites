@@ -15,7 +15,7 @@ import rasterio
 from thwaites.interpolate import interpolate as interpolate_data
 
 ##########
-ADJOINT = True
+ADJOINT = False
 
 if ADJOINT:
     from firedrake_adjoint import *
@@ -155,7 +155,7 @@ ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
 #print("min icedraft extruded : ",ice_draft.view_3d.dat.data[:].min())
 # the adjoint of interpolation to extruded functions seems broken/not implemented (unknnow reference element error)
 #with stop_annotating():
-#ocean_thickness.interpolate(ice_draft - bathymetry)
+ocean_thickness.interpolate(ice_draft.view_3d - bathymetry)
 
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
@@ -172,10 +172,38 @@ else:
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
 
-# Scale the mesh to make ice shelf slope
 Vc = mesh.coordinates.function_space()
+
+# Make ice shelf at z =0  
 x, z = SpatialCoordinate(mesh)
-f = Function(Vc).interpolate(as_vector([x, conditional(x + 0.5*dy < shelf_length, ocean_thickness*z/H2, ocean_thickness*z/H3) - -bathymetry]))
+#scale mesh to make ice shelf slope
+f = Function(Vc).interpolate(as_vector([x, conditional(x + 0.5*dy < shelf_length, ocean_thickness*z/H2 - ocean_thickness, ocean_thickness*z/H3 - H2) ]))
+mesh.coordinates.assign(f)
+x, z = SpatialCoordinate(mesh)
+
+mesh_pre_refinement = Function(P1_extruded).assign(0)
+mesh_pr_file = File("mesh_pre_refinement.pvd")
+mesh_pr_file.write(mesh_pre_refinement)
+# Stretch the mesh to get higher res at ice base.
+# wavelength of the step = x distance that fucntion goes from zero to 1. 
+lambda_step = 10 * dy
+k = 2.0 * np.pi / lambda_step 
+x0 = shelf_length -  5 * dy  # this is the centre of the step.
+a = Constant(3)
+b = Constant(0)
+depth_c = 10.0 
+z_scaled = z / ocean_thickness
+Cs = (1.-b) * sinh(a*z_scaled) / sinh(a) + b*(tanh(a*(z_scaled + 0.5))/(2*tanh(0.5*a)) - 0.5)
+f = Function(Vc).interpolate(as_vector([x, offset_backward_step_approx(x,k,x0)*(depth_c*z_scaled + (ocean_thickness - depth_c)*Cs) + (1.0-offset_backward_step_approx(x,k,x0))*z])) #+ (1.0 - offset_backward_step_approx(x,k,x0))*z]))
+mesh.coordinates.assign(f)
+x, z = SpatialCoordinate(mesh)
+
+mesh_refine = Function(P1_extruded).assign(0)
+mesh_r_file = File("mesh_refinement_smooth.pvd")
+mesh_r_file.write(mesh_refine)
+
+#scale mesh to make ice shelf slope
+f = Function(Vc).interpolate(as_vector([x, conditional(x + 0.5*dy < shelf_length, z - -ice_draft.view_3d, z + H2 - -bathymetry)]))
 #f = Function(Vc).interpolate(as_vector([x, ocean_thickness*z/H3 - -bathymetry]))
 if ADJOINT:
     with stop_annotating():
@@ -187,13 +215,23 @@ ds = CombinedSurfaceMeasure(mesh, 5)
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
-# Set ocean surface
-#mesh.coordinates.dat.data[:, 1] -= bathmetry
 
 print("You have Comm WORLD size = ", mesh.comm.size)
 print("You have Comm WORLD rank = ", mesh.comm.rank)
 
 x, z = SpatialCoordinate(mesh)
+if True:
+    # don't want to integrate over the entire top surface 
+    # and conditional doesnt seem to work in adjoint when used in J...
+    # wavelength of the step = x distance that fucntion goes from zero to 1. 
+    lambda_step = 2 * dy
+    k = 2.0 * np.pi / lambda_step 
+    x0 = shelf_length - 0.5 * lambda_step  # this is the centre of the step.
+
+
+    PETSc.Sys.Print("Alternatively using approx step function, length of iceslope: should be 320000.64m: ", assemble( Constant(1.0)*offset_backward_step_approx(x,k,x0)*ds("top", domain=mesh)))
+
+    PETSc.Sys.Print("Alternatively using approx step function, length of bottom up to ice shelf: should equal x0 = {}m and hopefully be close to shelf length: ".format(x0), assemble( Constant(1.0)*offset_backward_step_approx(x,k,x0)*ds("bottom", domain=mesh)))
 
 PETSc.Sys.Print("Length of South side (Gl wall) should be 10m: ", assemble((Constant(1.0)*ds(1, domain=mesh))))
 
@@ -209,10 +247,10 @@ n = FacetNormal(mesh)
 print("ds_v",assemble(avg(dot(n,n))*dS_v(domain=mesh)))
 
 
-mesh_file = File("ocean_thickness_icedraftfile.pvd")
-mesh_file.write(ocean_thickness)
-
-
+mesh_final = Function(P1_extruded).assign(0)
+mesh_f_file = File("mesh_final.pvd")
+mesh_f_file.write(mesh_final)
+exit()
 if True:
     # don't want to integrate over the entire top surface 
     # and conditional doesnt seem to work in adjoint when used in J...
@@ -289,7 +327,7 @@ melt_exact = Function(Q, name="melt rate")
 
 dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/08.11.21_adj_nullspaceiter_2d_isomip+_dt900.0_dtOut432000.0_T8640000.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay30_icedraft_closed_tracerlims_adj_GammaTfunc1.1e-2/dump_step_9600.h5" 
 melt_dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/08.11.21adjget1stepoutput_2d_isomip+_dt900.0_dtOut900.0_T900.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay30_icedraft_closed_tracerlims_adj_GammaTfunc1.1e-2bump/Melt_dump" 
-DUMP = True
+DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
         # Checkpoint file open for reading and writing
@@ -486,7 +524,8 @@ sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': source_sal,
 # Get expressions used in melt rate parameterisation
 GammaT = Function(P1_extruded)
 GammaT.assign(1.1e-2)# + 0.1 * 1.1e-2 * (1.0/cosh(1.25e-4 * (x - 500E3))))
-c = Control(GammaT)
+if ADJOINT:
+    c = Control(GammaT)
 
 mp = ThreeEqMeltRateParam(sal, temp, p, z, GammaTfunc=GammaT, velocity=pow(dot(vdg, vdg) + 1e-6, 0.5), ice_heat_flux=False)
 
@@ -536,9 +575,9 @@ vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.
         "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
 
 #temp_bcs = {"top": {'flux': conditional(x + 5*dy < shelf_length, -mp.T_flux_bc, 0.0)}}
-temp_bcs = {"top": {'flux': -mp.T_flux_bc * offset_backward_step_approx(x, k, x0) }}
+temp_bcs = {"top": {'flux': -mp.T_flux_bc * offset_backward_step_approx(x, k, x0) }, 2:{'q': T_restore}}
 #sal_bcs = {"top": {'flux':  conditional(x + 5*dy < shelf_length, -mp.S_flux_bc, 0.0)}}
-sal_bcs = {"top": {'flux': -mp.S_flux_bc * offset_backward_step_approx(x, k, x0) }}
+sal_bcs = {"top": {'flux': -mp.S_flux_bc * offset_backward_step_approx(x, k, x0) }, 2:{'q': S_restore}}
 
 
 # STRONGLY Enforced BCs
@@ -653,10 +692,10 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
 # this is to avoid inconsistencies in terms (viscosity and advection) that
 # are meant to decouple from pressure projection, but won't if pressure is not initialised
 # do this here, so we can see the initial pressure in pressure_0.pvtu
-#if not DUMP:
+if not DUMP:
     # should not be done when picking up
-#    with timed_stage('initial_pressure'):
-#        vp_timestepper.initialize_pressure()
+    with timed_stage('initial_pressure'):
+        vp_timestepper.initialize_pressure()
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
@@ -668,7 +707,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_closed_tracerlims_adj_GammaTfunc1.1e-2bump/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_tracerlims_closed_refinedtop_a4b0depth10/"
 
 #folder = 'tmp/'
 
@@ -855,7 +894,7 @@ while t < T - 0.5*dt:
             chk.store(temp, name="temperature")
             chk.store(sal, name="salinity")
 
-MINIMIZE = True
+MINIMIZE = False
 if MINIMIZE:
     with DumbCheckpoint(folder+"Melt_dump", mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
