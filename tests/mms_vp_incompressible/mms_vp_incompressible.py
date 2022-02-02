@@ -14,7 +14,7 @@ H1 = 100
 H2 = 100
 L = 100
 depth = 1000
-cells = [10,20,40,80]  # i.e 10x10, 20x20, 40x40, 80x80
+cells = [40,80]  # i.e 10x10, 20x20, 40x40, 80x80
 meshes = ["verification_unstructured_100m_square_res10m.msh",
         "verification_unstructured_100m_square_res5m.msh", 
         "verification_unstructured_100m_square_res2.5m.msh", 
@@ -23,14 +23,36 @@ meshes = ["verification_unstructured_100m_square_res10m.msh",
 def error(mesh_name, nx):
     dx = L/nx
     dz = H2/nx
-    mesh = Mesh(mesh_name)
-    mesh.coordinates.dat.data[:,1] -= depth
+    #mesh1d = IntervalMesh(nx, 0.5)
+    #layers = []
+    #cell = 0
+    #xr = 0
+    #min_dz = 0.01*dz # if top cell is thinner than this, merge with cell below
+    #tiny_dz = 1e-9*dz #  workaround for zero measure exterior facets (fd issue #1858)
+    #for i in range(nx):
+    #    xr += dx  # y of right-node (assumed to be the higher one)
+    #    height = H1 + xr/L * (H2-H1)
+    #    ncells = ceil((height-min_dz)/dz)
+    #    layers.append([0, ncells])
+    #    cell += ncells
+    #mesh = ExtrudedMesh(mesh1d, layers, layer_height=dz)
+    #y = mesh.coordinates.dat.data_ro[:,0]
+    #z = mesh.coordinates.dat.data_ro[:,1]
+    #height = np.maximum(H1 + y/L * (H2-H1), H1 + tiny_dz)
+    #mesh.coordinates.dat.data[:,1] = np.minimum(height, z)
+   # mesh = Mesh(mesh_name)
+    mesh = SquareMesh(nx,nx,np.pi)
+    #mesh.coordinates.dat.data[:,1] -= depth
+
+    #ds = CombinedSurfaceMeasure(mesh, 5)
+    #mesh.coordinates.dat.data[:,0] *= 100
+    # function spaces DG0 for the scalar, and RT1 for the gradient
     
     V = FunctionSpace(mesh, "DG", polynomial_order)
-    U = VectorFunctionSpace(mesh, "DG", polynomial_order)
-    W = FunctionSpace(mesh, "CG", polynomial_order+1)
+    U = VectorFunctionSpace(mesh, "CG", polynomial_order+1)
+    W = FunctionSpace(mesh, "CG", polynomial_order)
     M = MixedFunctionSpace([U, W])
-    
+    # set up prescribed velocity and diffusivity
     x, y = SpatialCoordinate(mesh)
     m = Function(M)
     vel_, p_ = m.split()  # function: y component of velocity, pressure
@@ -40,12 +62,9 @@ def error(mesh_name, nx):
 
     vel_init = zero(mesh.geometric_dimension())
 
-    arg = -2 * np.pi / H2 * (y + depth - H2)
-    u_ana =  x / L * sin(arg)
-    v_ana = - H2 / (2 * np.pi * L) * cos(arg) + H2 / (2 * np.pi * L)
-    pint = x / L * sin(arg) * sin(-2 * np.pi / H2 * (y + depth - H2))
-    p_ana = pint -  sin(-2 * np.pi / H2 * (y + depth - H2)) * sin(-2 * np.pi / H2 * (y + depth - H2))
-
+    u_ana = sin(x)*cos(y)
+    v_ana = -cos(x)*sin(y)
+    p_ana = cos(x)*cos(y)
     vel_ana = as_vector((u_ana,v_ana))
     vel_ana_f = Function(U, name='vel analytical').project(vel_ana)
    
@@ -54,13 +73,14 @@ def error(mesh_name, nx):
 
     p_ana_f = Function(W, name='p analytical').project(p_ana)
     
-    p_.assign(0.0)
-    mu = Constant(1)
-    u_source = sin(6.28318530717959*(-H2 + depth + y)/H2)**2/L + x*sin(6.28318530717959*(-H2 + depth + y)/H2)**2/L**2 - 6.28318530717959*x*(-0.159154943091895*H2*cos(6.28318530717959*(-H2 + depth + y)/H2)/L + 0.159154943091895*H2/L)*cos(6.28318530717959*(-H2 + depth + y)/H2)/(H2*L) - 39.4784176043574*mu*x*sin(6.28318530717959*(-H2 + depth + y)/H2)/(H2**2*L)
-
-    v_source = 1.0*(-0.159154943091895*H2*cos(6.28318530717959*(-H2 + depth + y)/H2)/L + 0.159154943091895*H2/L)*sin(6.28318530717959*(-H2 + depth + y)/H2)/L - 12.5663706143592*sin(6.28318530717959*(-H2 + depth + y)/H2)*cos(6.28318530717959*(-H2 + depth + y)/H2)/H2 - 6.28318530717959*mu*cos(6.28318530717959*(-H2 + depth + y)/H2)/(H2*L) + 12.5663706143592*x*sin(6.28318530717959*(-H2 + depth + y)/H2)*cos(6.28318530717959*(-H2 + depth + y)/H2)/(H2*L)
+    p_.assign(p_ana_f)
+    mu = Constant(0.7)
+    u_source = 2*mu*sin(x)*cos(y) + sin(x)*sin(y)**2*cos(x) + sin(x)*cos(x)*cos(y)**2 - sin(x)*cos(y)
+    v_source = -2*mu*sin(y)*cos(x) + sin(x)**2*sin(y)*cos(y) + sin(y)*cos(x)**2*cos(y) - sin(y)*cos(x)
     vel_source = as_vector((u_source, v_source))
-    
+    # the diffusivity
+    kappa = Constant(0.7)
+
     # We declare the output filename, and write out the initial condition. ::
     vel_outfile = File("vel_gz_mms.pvd")
     vel_outfile.write(vel_, vel_ana_f)
@@ -69,7 +89,7 @@ def error(mesh_name, nx):
 
     # a big timestep, which means BackwardEuler takes us to a steady state almost immediately
     # (needs to be smaller at polynomial_degree>0, 0.1/nx works for p=1 for 4 meshes)
-    dt = Constant(1)
+    dt = Constant(0.001)
 
     # Set up equations
     mom_eq = MomentumEquation(M.sub(0), M.sub(0))
@@ -84,11 +104,14 @@ def error(mesh_name, nx):
     one = Constant(1.0)
     n = FacetNormal(mesh)
     
-
     no_normal_flow = 0.0
-    vp_bcs = {4: {'un': no_normal_flow}, 2: {},
-          3: {'un': no_normal_flow }, 1: {'un': no_normal_flow}}
+    vp_bcs = {} #4: {'u': vel_ana}, 2: {'u': vel_ana},
+#          3: {'u': vel_ana}, 1: {'u': vel_ana}}
     
+    strong_bcs = [DirichletBC(M.sub(0),  vel_ana, 1),
+                DirichletBC(M.sub(0),  vel_ana, 2),
+                DirichletBC(M.sub(0),  vel_ana, 3),
+                DirichletBC(M.sub(0),  vel_ana, 4)]
     mumps_solver_parameters = {
         'snes_monitor': None,
         'ksp_type': 'preonly',
@@ -100,13 +123,15 @@ def error(mesh_name, nx):
     }
 
     vp_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                        solver_parameters=mumps_solver_parameters)
+                                                        solver_parameters=mumps_solver_parameters, strong_bcs=strong_bcs)
     #vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
     #                                                      solver_parameters=mumps_solver_parameters,
     #                                                      predictor_solver_parameters=mumps_solver_parameters,
     #                                                      picard_iterations=1)
      #                                                     pressure_nullspace=VectorSpaceBasis(constant=True))
    # vp_timestepper.initialize_pressure()
+    
+
     v_old, p_old = vp_timestepper.solution_old.split()
     vel_prev = Function(U, name='vel_old')
     p_prev = Function(W, name='p_old')
@@ -128,19 +153,18 @@ def error(mesh_name, nx):
         if step % output_freq == 0:
             vel_outfile.write(vel_, vel_ana_f)
             p_outfile.write(p_, p_ana_f)
-            print("t, v/p change: ", t, vel_change, p_change)
+            print("vel/p change =", vel_change, p_change)
 
     
-
     vel_err = norm(vel-vel_ana)
     p_err = norm(p-p_ana)
-    return vel_err, p_err
+    return temp_err, sal_err, melt_err, integrated_melt_err, vel_err, p_err
 
 errors = np.array([error(meshes[i], cells[i]) for i in range(2)]) #10*2**np.arange(number_of_grids)])
 conv = np.log(errors[:-1]/errors[1:])/np.log(2)
 
 print('Velocity errors:', errors[:,0])
-print('Pressure errors:', errors[:,1])
+print('Pressure errors:', conv[:,1])
 print('Velocity convergence order:', conv[:,0])
 print('Pressure convergence order:', conv[:,1])
 assert all(conv[:,0]> polynomial_order+0.95)
