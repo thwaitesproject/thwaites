@@ -4,9 +4,9 @@ x, y, t, kappa, mu, p, H2, depth, L = symbols('x y t kappa mu p H2 depth L')
 
 print("-----------")
 
-arg = -2 * np.pi / H2 * (y + depth - H2)
-u =  x / L * sin(arg)
-v = - H2 / (2 * np.pi * L) * cos(arg) + H2 / (2 * np.pi * L)
+arg = - np.pi / H2 * (y + depth - H2)
+u =  x / L * cos(arg)
+v = (H2 / np.pi) * sin(arg) / L
 #p = cos(np.pi / L * (x + L)) - cos(- np.pi / H2 * (y + depth - H2))
 #p = x**2 / (2*L) * sin(arg)  + H2 / (2 * np.pi * L) * y
 #u = sin(np.pi * x / (2*L)) * sin(-2 * np.pi / H2 * (y + depth - H2)) 
@@ -53,8 +53,8 @@ print("p at -975m (x=25): ", p.subs([(depth, 1000), (H2, 100), (y, -975), (L,100
 print("p at -975m (x=75): ", p.subs([(depth, 1000), (H2, 100), (y, -975), (L,100), (x, 75)]))
 print("p at -975m (x=100): ", p.subs([(depth, 1000), (H2, 100), (y, -975), (L,100), (x, 100)]))
 
-u_source = diff(u, t) + u * diff(u, x) + v * diff(u, y)  - mu * (diff(u, x, 2)  + diff(u, y, 2)) + diff(p, x)
-v_source = diff(v, t) + u * diff(v, x) + v * diff(v, y)  - mu * (diff(v, x, 2)  + diff(v, y, 2)) + diff(p, y)
+u_source = diff(u, t) + u * diff(u, x) + v * diff(u, y)  - mu * (diff(u, x, 2)  + diff(u, y, 2)) #+ diff(p, x)
+v_source = diff(v, t) + u * diff(v, x) + v * diff(v, y)  - mu * (diff(v, x, 2)  + diff(v, y, 2)) #+ diff(p, y)
 
 print("u_source:", u_source)
 print("v_source:", v_source)
