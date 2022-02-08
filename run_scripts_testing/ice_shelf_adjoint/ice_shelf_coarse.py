@@ -12,7 +12,7 @@ import numpy as np
 from pyop2.profiling import timed_stage
 
 from firedrake_adjoint import *
-from diagnostic_block import DiagnosticBlock
+from thwaites.diagnostic_block import DiagnosticBlock
 ##########
 
 
@@ -93,6 +93,12 @@ Q = FunctionSpace(mesh, "DG", 1)  # melt function space
 K = FunctionSpace(mesh, "DG", 1)    # temperature space
 S = FunctionSpace(mesh, "DG", 1)    # salinity space
 
+P1 = FunctionSpace(mesh, "CG", 1)
+print("vel dofs:", V.dim())
+print("pressure dofs:", W.dim())
+print("combined dofs:", M.dim())
+print("scalar dofs:", U.dim())
+print("P1 dofs (no. of nodes):", P1.dim())
 ##########
 
 # Set up functions
@@ -118,10 +124,9 @@ full_pressure = Function(M.sub(1), name="full pressure")
 ##########
 
 # Define a dump file
-#dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_checkpoint_3cores_67hours.h5"
-dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/dump.h5"
+dump_file = "/data/2d_adjoint/08.02.22_3_eq_param_ufric_dt300.0_dtOutput10800.0_T864000.0_ip50.0_tres86400.0constant_Kh0.01_Kv0.001_structured_dy500_dz2_no_limiter_closed_adjoint/dump.h5"
 
-DUMP = False
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -168,7 +173,7 @@ else:
     sal_init = Constant(34.4)
     #sal_init = S_restore
     sal.assign(sal_init)
-    c = Control(sal)
+c = Control(sal)
 
 
 ##########
@@ -237,7 +242,7 @@ kappa_v = Constant(args.Kh/10.)
 #                             1000. * kappa_v * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
 #                             kappa_v)
 
-kappa = Constant([[kappa_h, 0], [0, kappa_v]])
+kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 TP1 = TensorFunctionSpace(mesh, "CG", 1)
 kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa)
@@ -434,10 +439,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data2/wis15/phd_output/adjoint_timing/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
+folder = "/data/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy500_dz2_no_limiter_closed_timing_adjoint/"
+         +"_structured_dy500_dz2_no_limiter_closed_adjoint_from10daydump/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -525,15 +530,16 @@ while t < T - 0.5*dt:
         #u_timestepper.advance(t)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
-    tape.add_block(DiagnosticBlock(adj_s_file, sal))
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
-    tape.add_block(DiagnosticBlock(adj_t_file, temp))
     step += 1
     t += dt
     with timed_stage('output'):
        if step % output_step == 0:
            # dumb checkpoint for starting from spin up
+           
+           tape.add_block(DiagnosticBlock(adj_s_file, sal))
+           tape.add_block(DiagnosticBlock(adj_t_file, temp))
 
            with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
                # Checkpoint file open for reading and writing
@@ -590,7 +596,9 @@ print(J)
 rf = ReducedFunctional(J, c)
 
 #tape.reset_variables()
-J.adj_value = 1.0
+#J.adj_value = 1.0
+
+J.block_variable.adj_value = 1.0
 #tape.visualise()
 # evaluate all adjoint blocks to ensure we get complete adjoint solution
 # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
