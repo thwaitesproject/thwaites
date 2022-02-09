@@ -12,9 +12,10 @@ number_of_grids =4
 output_freq = 100
 H1 = 100
 H2 = 100
-L = 100
+horizontal_stretching = 1
+L = 100 * horizontal_stretching
 depth = 1000
-cells = [10, 20,40,80]  # i.e 10x10, 20x20, 40x40, 80x80
+cells = [10,20,40,80]  # i.e 10x10, 20x20, 40x40, 80x80
 meshes = ["verification_unstructured_100m_square_res10m.msh",
         "verification_unstructured_100m_square_res5m.msh", 
         "verification_unstructured_100m_square_res2.5m.msh", 
@@ -27,6 +28,7 @@ def error(mesh_name, nx):
     #mesh = SquareMesh(nx, nx, L)
     mesh = Mesh(mesh_name)
     mesh.coordinates.dat.data[:,1] -= depth
+    mesh.coordinates.dat.data[:,0] *= horizontal_stretching
     
     V = FunctionSpace(mesh, "DG", polynomial_order)
     U = VectorFunctionSpace(mesh, "DG", polynomial_order)
@@ -108,7 +110,7 @@ def error(mesh_name, nx):
                                                           picard_iterations=1,
                                                           pressure_nullspace=VectorSpaceBasis(constant=True))
     vp_timestepper.initialize_pressure()
-    vp_timestepper.dt_const.assign(1)
+    vp_timestepper.dt_const.assign(10/nx)
     vel_old, p_old = vp_timestepper.solution_old.split()
     u_prev = Function(V, name='u_old')
     v_prev = Function(V, name='v_old')
