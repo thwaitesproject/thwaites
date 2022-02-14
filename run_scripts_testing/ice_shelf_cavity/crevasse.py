@@ -10,6 +10,7 @@ import pandas as pd
 import argparse
 import numpy as np
 from pyop2.profiling import timed_stage
+from thwaites.utility import FrazilRisingVelocity
 ##########
 
 
@@ -110,6 +111,8 @@ Tb = Function(Q, name="boundary freezing temperature")
 Sb = Function(Q, name="boundary salinity")
 full_pressure = Function(M.sub(1), name="full pressure")
 
+frazil = Function(Q, name="frazil ice concentration") # should this really be P0dg to prevent negative frazil ice?
+frazil_flux = Function(Q, name="frazil ice flux") 
 ##########
 
 # Define a dump file
@@ -125,6 +128,7 @@ if DUMP:
         #chk.load(u, name="u_velocity")
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
+        chk.load(frazil, name="frazil ice concentration")
 
         T_200m_depth = -1.89
 
@@ -162,7 +166,9 @@ else:
     sal_init = Constant(34.34)
     #sal_init = S_restore
     sal.interpolate(sal_init)
-
+    
+    frazil_init = Constant(5e-9) # initialise with a minimum frazil ice concentration
+    frazil.interpolate(frazil_init)
 
 
 ##########
@@ -173,7 +179,7 @@ cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
 #u_eq = ScalarVelocity2halfDEquation(U, U)
 temp_eq = ScalarAdvectionDiffusionEquation(K, K)
 sal_eq = ScalarAdvectionDiffusionEquation(S, S)
-
+frazil_eq = FrazilAdvectionDiffusionEquation(Q,Q)
 ##########
 
 # Terms for equation fields
@@ -184,10 +190,10 @@ S_ref = Constant(34.5)
 beta_temp = Constant(3.87E-5)
 beta_sal = Constant(7.86E-4)
 g = Constant(9.81)
-mom_source = as_vector((0., -g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) 
-
 rho0 = 1030.
-rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
+rho_ice = 920.
+mom_source = as_vector((0., -g))*((1-frazil)*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) + (rho_ice / rho0) * frazil)
+rho.interpolate(rho0*((1-frazil)*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) + (rho_ice / rho0) * frazil))
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
 #f = Constant(-1.409E-4)
 
@@ -201,9 +207,18 @@ kappa = as_tensor([[1e-3, 0], [0, 1e-3]])
 
 kappa_temp = kappa
 kappa_sal = kappa
+kappa_frazil = kappa
 mu = kappa
 
+FRV = FrazilRisingVelocity(0.1)
+w_i = FRV.frazil_rising_velocity() # Picard iterations converge to value for w_i (which only depends on crystal size, here we assume r =7.5e-4m
 
+frazil_mp = FrazilMeltParam(sal, temp, p, z, frazil)
+
+temp_source = (frazil_mp.Tc - frazil_mp.Lf/frazil_mp.c_p_m) * frazil_mp.wc
+temp_absorption = frazil_mp.wc
+sal_absorption = frazil_mp.wc
+frazil_source = -frazil_mp.wc
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
 
@@ -212,13 +227,15 @@ ip_alpha = Constant(3*dy/dz*2*ip_factor)
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
 vp_fields = {'viscosity': mu, 'source': mom_source} #, 'interior_penalty': ip_alpha}
 #u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': v}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v}
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': temp_source, 'absorption coefficient': temp_absorption}
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'absorption coefficient': sal_absorption}
+frazil_fields = {'diffusivity': kappa_frazil, 'velocity': v, 'w_i': Constant(w_i), 'source': frazil_source}
 
 ##########
 
 # Get expressions used in melt rate parameterisation
 mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5), HJ99Gamma=True, ice_heat_flux=False)
+
 
 ##########
 
@@ -232,7 +249,7 @@ melt.interpolate(mp.wb)
 Tb.interpolate(mp.Tb)
 Sb.interpolate(mp.Sb)
 full_pressure.interpolate(mp.P_full)
-
+frazil_flux.interpolate(w_i*frazil)
 ##########
 
 # Plotting top boundary.
@@ -288,7 +305,7 @@ temp_bcs = {4: {'flux': -mp.T_flux_bc}, 3:{'q': T_restore}}
 
 sal_bcs = {4: {'flux': -mp.S_flux_bc}, 3:{'q': S_restore}}
 
-
+frazil_bcs = {}
 
 # STRONGLY Enforced BCs
 # open ocean (RHS): no tangential flow because viscosity of outside ocean resists vertical flow.
@@ -347,6 +364,7 @@ vp_solver_parameters = pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
 temp_solver_parameters = mumps_solver_parameters
 sal_solver_parameters = mumps_solver_parameters
+frazil_solver_parameters = mumps_solver_parameters
 
 ##########
 
@@ -433,12 +451,13 @@ if not DUMP:
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
 sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
+frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, solver_parameters=frazil_solver_parameters)
 
 ##########
 
 # Set up folder
 folder = "/data/2d_crevasse/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -463,6 +482,8 @@ s_file.write(sal)
 rho_file = File(folder+"density.pvd")
 rho_file.write(rho)
 
+frazil_file = File(folder+"frazil.pvd")
+frazil_file.write(frazil)
 ##########
 
 # Output files for melt functions
@@ -481,6 +502,8 @@ m_file.write(melt)
 full_pressure_file = File(folder+"full_pressure.pvd")
 full_pressure_file.write(full_pressure)
 
+frazil_flux_file = File(folder+"frazil_flux.pvd")
+frazil_flux_file.write(frazil_flux)
 ########
 
 # Extra outputs for plotting
@@ -578,11 +601,14 @@ while t < T - 0.5*dt:
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
+    with timed_stage('frazil'):
+        frazil_timestepper.advance(t)
     step += 1
     t += dt
 
     limiter.apply(sal)
     limiter.apply(temp)
+    limiter.apply(frazil)
     
     with timed_stage('output'):
        if step % output_step == 0:
@@ -594,6 +620,7 @@ while t < T - 0.5*dt:
                #chk.store(u, name="u_velocity")
                chk.store(temp, name="temperature")
                chk.store(sal, name="salinity")
+               chk.store(frazil, name="frazil ice concentration")
     
            # Update melt rate functions
            Q_ice.interpolate(mp.Q_ice)
@@ -604,9 +631,10 @@ while t < T - 0.5*dt:
            Tb.interpolate(mp.Tb)
            Sb.interpolate(mp.Sb)
            full_pressure.interpolate(mp.P_full)
+           frazil_flux.interpolate(w_i*frazil)
     
            # Update density for plotting
-           rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
+           rho.interpolate(rho0*((1-frazil)*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) + (rho_ice / rho0) * frazil))
 
            if MATPLOTLIB_OUT:
                # Write v, w, |u| temp, sal, rho to file for plotting later with matplotlib
@@ -620,14 +648,14 @@ while t < T - 0.5*dt:
                t_file.write(temp)
                s_file.write(sal)
                rho_file.write(rho)
-               
+               frazil_file.write(frazil)   
                # Write melt rate functions
                m_file.write(melt)
                Q_mixed_file.write(Q_mixed)
                full_pressure_file.write(full_pressure)
                Qs_file.write(Q_s)
                Q_ice_file.write(Q_ice)
-    
+               frazil_flux_file.write(frazil_flux)
            time_str = str(step)
            #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
     
@@ -649,3 +677,4 @@ while t < T - 0.5*dt:
             #chk.store(u, name="u_velocity")
             chk.store(temp, name="temperature")
             chk.store(sal, name="salinity")
+            chk.store(frazil, name="frazil ice concentration")

@@ -3,6 +3,7 @@ from firedrake import Constant
 from firedrake import ln
 import sympy
 
+
 class MeltRateParam:
     """methods for calculating melt rate parameterisation used in ice-ocean boundary"""
     a = -5.73E-2  # salinity coefficient of freezing equation
@@ -41,6 +42,8 @@ class MeltRateParam:
     # need to work this out...?
     k = 0.4  # Von Karman's constant, dimensionless
     nu = 1.95e-6  # Kinematic viscosity of seawater, m^2/s
+    kappa_T = 1.4e-7  # Thermal diffusivity of seawater, m^2/s
+    kappa_S = 8e-10  # Thermal diffusivity of seawater, m^2/s
 
     def __init__(self, salinity, temperature, pressure_perturbation, z):
         P_hydrostatic = -self.rho0 * self.g * z
@@ -200,3 +203,40 @@ class ThreeEqMeltRateParam(MeltRateParam):
 
         self.T_flux_bc = -(self.wb + gammaT) * (self.Tb - self.T)
         self.S_flux_bc = -(self.wb + gammaS) * (self.Sb - self.S)
+
+
+class FrazilMeltParam(MeltRateParam):
+    def __init__(self, salinity, temperature, pressure_perturbation, z, C, r=7.5e-4):
+        super().__init__(salinity, temperature, pressure_perturbation, z)
+
+        epsilon = 0.0625  # aspect ratio of frazil ice disks = 1/16
+        Nusselt = 1.0  # ratio of convective /conductive heat transfer.
+        gammaT_frazil = Nusselt * self.kappa_T / (epsilon * r)
+        gammaS_frazil = Nusselt * self.kappa_S / (epsilon * r)
+
+        Aa = self.a
+        Bb = -self.T + self.b + self.c * self.P_full
+        Bb -= gammaS_frazil * self.Lf / (gammaT_frazil * self.c_p_m)
+        Cc = self.S * gammaS_frazil * self.Lf / (gammaT_frazil * self.c_p_m)
+
+        S1 = (-Bb + pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        S2 = (-Bb - pow(Bb ** 2 - 4.0 * Aa * Cc, 0.5)) / (2.0 * Aa)
+        print(type(S1))
+        print(S1)
+        if isinstance(S1, (float, sympy.core.numbers.Float)):
+            # Print statements for testing
+            print("S1 = ", S1)
+            print("S2 = ", S2)
+            if S1 > 0:
+                self.Sc = S1
+                print("Choose S1")
+            else:
+                self.Sc = S2
+                print("Choose S2")
+        elif isinstance(S1, sympy.core.add.Add):
+            self.Sc = S2
+        else:
+            self.Sc = conditional(S1 > 0.0, S1, S2)
+
+        self.Tc = self.a * self.Sc + self.b + self.c * self.P_full
+        self.wc = ((1-C) * gammaS_frazil * (self.S - self.Sc) * 2 * C/r) / self.Sc
