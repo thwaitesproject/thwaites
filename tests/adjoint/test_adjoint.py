@@ -1759,7 +1759,7 @@ def test_backwardstep_melt_with_evaladj_dump(T):
     print("peturb rf", rf(sal+h))
     tt = taylor_test(rf, sal, h)
     assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=1e-1)
-@ptest.mark.xfail
+@pytest.mark.xfail
 @pytest.mark.parametrize("T", [(9000.)])
 def test_backwardstep_melt_with_evaladj_dump_gammaTfunc(T):
     # from dump works ok with gammaT as control. because static field?
