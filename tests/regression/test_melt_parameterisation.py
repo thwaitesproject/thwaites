@@ -369,7 +369,9 @@ def test_integrate_frazil():
         t += dt
 
     C_fromJordanthesis = 0.1*mp.c_p_m/mp.Lf  # FIXME is this right?
+    C_change = (T-Tinit)*mp.c_p_m/mp.Lf  # Frazil ice production based on actual change in temperature
     assert(abs(C-C_fromJordanthesis)/C_fromJordanthesis <= 2.5e-2)  # Only agrees to 2.5%...
+    assert(abs(C-C_change)/C_change <= 2e-4)  # Agrees to 0.02%...
     assert(C > 0)
     assert(S > Sinit)
     assert(T > Tinit)
