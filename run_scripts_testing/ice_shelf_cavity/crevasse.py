@@ -54,7 +54,7 @@ ny = round(L/dy)
 dz = 1.0
 
 # create mesh
-mesh = Mesh("./Crevasse_rounded_refined.msh")
+mesh = Mesh("./Crevasse_refined.msh")
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -116,8 +116,7 @@ frazil_flux = Function(Q, name="frazil ice flux")
 ##########
 
 # Define a dump file
-#dump_file = "/data/2d_mitgcm_comparison/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs/29.03.20_3_eq_param_ufric_dt30.0_dtOutput3600.0_T432000.0_ip50.0_tres86400.0constant_Kh0.001_Kv0.0001_structured_dy50_dz1_no_limiter_closed_no_TS_diric_freeslip_rhs_checkpoint_3cores_67hours.h5"
-dump_file = "/data/2d_mitgcm_comparison/14.04.20_3_eq_param_ufricHJ99_dt30.0_dtOutput30.0_T900.0_ip50.0_tres86400.0_Kh0.001_Kv0.0001_dy50_dz1_closed_iterative/dump_step_30.h5"
+dump_file = "/data/2d_crevasse/17.02.22_3_eq_param_ufricHJ99_dt5.0_dtOutput3600.0_T864000.0_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil_sharpmesh_3changedensity_allsource_salsource_limfraz5e-9/dump_step_172800.h5"
 
 DUMP = False
 if DUMP:
@@ -130,7 +129,7 @@ if DUMP:
         chk.load(temp, name="temperature")
         chk.load(frazil, name="frazil ice concentration")
 
-        T_200m_depth = -1.89
+        T_200m_depth = -1.965
 
         S_200m_depth = 34.34
         #S_bottom = 34.8
@@ -192,8 +191,10 @@ beta_sal = Constant(7.86E-4)
 g = Constant(9.81)
 rho0 = 1030.
 rho_ice = 920.
-mom_source = as_vector((0., -g))*((1-frazil)*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) + (rho_ice / rho0) * frazil)
-rho.interpolate(rho0*((1-frazil)*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) + (rho_ice / rho0) * frazil))
+
+rho_perb = -beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)  # Linear eos (already divided by rho0)
+mom_source = as_vector((0., -g)) * (rho_perb - frazil * (1 + rho_perb) + frazil * (rho_ice / rho0))
+rho.interpolate(rho0*((1-frazil) * (1 + rho_perb)) + frazil * rho_ice)
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
 #f = Constant(-1.409E-4)
 
@@ -210,15 +211,17 @@ kappa_sal = kappa
 kappa_frazil = kappa
 mu = kappa
 
-FRV = FrazilRisingVelocity(0.1)
+FRV = FrazilRisingVelocity(0.1)  # initial velocity guess needs to be >0
 w_i = FRV.frazil_rising_velocity() # Picard iterations converge to value for w_i (which only depends on crystal size, here we assume r =7.5e-4m
 
 frazil_mp = FrazilMeltParam(sal, temp, p, z, frazil)
+temp_source = (frazil_mp.Tc - temp - frazil_mp.Lf/frazil_mp.c_p_m) * frazil_mp.wc
+temp_absorption = 0 
+sal_source = -sal *frazil_mp.wc
+sal_absorption = 0 
+frazil_source =  -frazil_mp.wc
+frazil_absorption = 0
 
-temp_source = (frazil_mp.Tc - frazil_mp.Lf/frazil_mp.c_p_m) * frazil_mp.wc
-temp_absorption = frazil_mp.wc
-sal_absorption = frazil_mp.wc
-frazil_source = -frazil_mp.wc
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
 
@@ -228,8 +231,8 @@ vp_coupling = [{'pressure': 1}, {'velocity': 0}]
 vp_fields = {'viscosity': mu, 'source': mom_source} #, 'interior_penalty': ip_alpha}
 #u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': temp_source, 'absorption coefficient': temp_absorption}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'absorption coefficient': sal_absorption}
-frazil_fields = {'diffusivity': kappa_frazil, 'velocity': v, 'w_i': Constant(w_i), 'source': frazil_source}
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': sal_source, 'absorption coefficient': sal_absorption, }
+frazil_fields = {'diffusivity': kappa_frazil, 'velocity': v, 'w_i': Constant(w_i), 'source': frazil_source, 'absorption coefficient': frazil_absorption}
 
 ##########
 
@@ -457,7 +460,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/2d_crevasse/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil_sharpmesh_3changedensity_allsource_salsource_limfraz5e-9_from10days/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -609,7 +612,7 @@ while t < T - 0.5*dt:
     limiter.apply(sal)
     limiter.apply(temp)
     limiter.apply(frazil)
-    
+    frazil.interpolate(conditional(frazil < 5e-9, 5e-9, frazil))
     with timed_stage('output'):
        if step % output_step == 0:
            # dumb checkpoint for starting from last timestep reached

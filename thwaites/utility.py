@@ -257,6 +257,7 @@ class FrazilRisingVelocity:
     def __init__(self, w_i, r=7.5e-4, picard_steps=10):
         self.r = r
         self.w_i = w_i
+        assert(self.w_i > 0)  # Initial velocity guess needs to be greater than zero.
         self.w_i_old = self.w_i
         self.picard_steps = picard_steps
 
