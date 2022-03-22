@@ -1,7 +1,7 @@
-# Buoyancy driven overturning circulation
-# beneath ice shelf. Wedge geometry. 5km
-# Outside temp forcing stratified according to ocean0 isomip.
-# viscosity = temp diffusivity = sal diffusivity: varies linearly over the domain, vertical is 10x weaker.
+# Buoyancy driven circulation
+# beneath ice shelf with idealised basal crevasse.
+# See Jordan et al. 2014 and Ben Yeager thesis (2018)
+# for further details of the setup.
 from thwaites import *
 from thwaites.utility import get_top_boundary, cavity_thickness
 from firedrake.petsc import PETSc
@@ -10,9 +10,7 @@ import pandas as pd
 import argparse
 import numpy as np
 from pyop2.profiling import timed_stage
-
-from firedrake_adjoint import *
-from thwaites.diagnostic_block import DiagnosticBlock
+from thwaites.utility import FrazilRisingVelocity
 ##########
 
 
@@ -22,8 +20,8 @@ parser.add_argument("date", help="date format: dd.mm.yy")
                   #  type=float)
 #parser.add_argument("nz", help="no. of layers in vertical",
 #                    type=int)
-parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
-                    type=float)
+#parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
+ #                   type=float)
 #parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
    #                 type=float)
 #parser.add_argument("restoring_time", help="restoring time in s",
@@ -56,29 +54,27 @@ ny = round(L/dy)
 dz = 1.0
 
 # create mesh
-mesh = Mesh("coarse.msh")
+mesh = Mesh("./Crevasse_refined.msh")
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
-PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
+PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(3, domain=mesh)))
 
 PETSc.Sys.Print("Length of rhs", assemble(Constant(1.0)*ds(2, domain=mesh)))
 
-PETSc.Sys.Print("Length of bottom", assemble(Constant(1.0)*ds(3, domain=mesh)))
+PETSc.Sys.Print("Length of bottom", assemble(Constant(1.0)*ds(1, domain=mesh)))
 
 PETSc.Sys.Print("Length of top", assemble(Constant(1.0)*ds(4, domain=mesh)))
 
 
-water_depth = 600.0
-mesh.coordinates.dat.data[:, 1] -= water_depth
 
 
 print("You have Comm WORLD size = ", mesh.comm.size)
 print("You have Comm WORLD rank = ", mesh.comm.rank)
 
 y, z = SpatialCoordinate(mesh)
-
+water_depth = 400
 ##########
 
 # Set up function spaces
@@ -93,12 +89,6 @@ Q = FunctionSpace(mesh, "DG", 1)  # melt function space
 K = FunctionSpace(mesh, "DG", 1)    # temperature space
 S = FunctionSpace(mesh, "DG", 1)    # salinity space
 
-P1 = FunctionSpace(mesh, "CG", 1)
-print("vel dofs:", V.dim())
-print("pressure dofs:", W.dim())
-print("combined dofs:", M.dim())
-print("scalar dofs:", U.dim())
-print("P1 dofs (no. of nodes):", P1.dim())
 ##########
 
 # Set up functions
@@ -107,7 +97,7 @@ v_, p_ = m.split()  # function: y component of velocity, pressure
 v, p = split(m)  # expression: y component of velocity, pressure
 v_._name = "v_velocity"
 p_._name = "perturbation pressure"
-#u = Function(U, name="x velocity")  # x component of velocity
+u = Function(U, name="x velocity")  # x component of velocity
 
 rho = Function(K, name="density")
 temp = Function(K, name="temperature")
@@ -121,25 +111,27 @@ Tb = Function(Q, name="boundary freezing temperature")
 Sb = Function(Q, name="boundary salinity")
 full_pressure = Function(M.sub(1), name="full pressure")
 
+frazil = Function(Q, name="frazil ice concentration") # should this really be P0dg to prevent negative frazil ice?
+frazil_flux = Function(Q, name="frazil ice flux") 
 ##########
 
 # Define a dump file
-dump_file = "/data/2d_adjoint/08.02.22_3_eq_param_ufric_dt300.0_dtOutput10800.0_T864000.0_ip50.0_tres86400.0constant_Kh0.01_Kv0.001_structured_dy500_dz2_no_limiter_closed_adjoint/dump.h5"
+dump_file = "/data/2d_crevasse/17.02.22_3_eq_param_ufricHJ99_dt5.0_dtOutput3600.0_T864000.0_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil_sharpmesh_3changedensity_allsource_salsource_limfraz5e-9/dump_step_172800.h5"
 
-DUMP = True
+DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
         chk.load(v_, name="v_velocity")
         chk.load(p_, name="perturbation_pressure")
-        #chk.load(u, name="u_velocity")
+        chk.load(u, name="u_velocity")
         chk.load(sal, name="salinity")
         chk.load(temp, name="temperature")
+        chk.load(frazil, name="frazil ice concentration")
 
-        # from holland et al 2008b. constant T below 200m depth. varying sal.
-        T_200m_depth = 1.0
+        T_200m_depth = -1.965
 
-        S_200m_depth = 34.4
+        S_200m_depth = 34.34
         #S_bottom = 34.8
         #salinity_gradient = (S_bottom - S_200m_depth) / -H2
         #S_surface = S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
@@ -153,27 +145,29 @@ else:
     v_init = zero(mesh.geometric_dimension())
     v_.assign(v_init)
 
-    #u_init = Constant(0.0)
-    #u.interpolate(u_init)
+    u_init = Constant(0.0)
+    u.interpolate(u_init)
 
-    # from holland et al 2008b. constant T below 200m depth. varying sal.
-    T_200m_depth = 1.0
+    # baseline T3
+    T_200m_depth = -1.965
 
 
     #S_bottom = 34.8
     #salinity_gradient = (S_bottom - S_200m_depth) / -H2
-    S_surface = 34.4 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
+    S_surface = 34.34 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
 
     T_restore = Constant(T_200m_depth)
     S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
 
     temp_init = T_restore
-    temp.assign(temp_init)
+    temp.interpolate(temp_init)
 
-    sal_init = Constant(34.4)
+    sal_init = Constant(34.34)
     #sal_init = S_restore
-    sal.assign(sal_init)
-c = Control(sal)
+    sal.interpolate(sal_init)
+    
+    frazil_init = Constant(5e-9) # initialise with a minimum frazil ice concentration
+    frazil.interpolate(frazil_init)
 
 
 ##########
@@ -181,74 +175,52 @@ c = Control(sal)
 # Set up equations
 mom_eq = MomentumEquation(M.sub(0), M.sub(0))
 cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
-#u_eq = ScalarVelocity2halfDEquation(U, U)
+u_eq = ScalarVelocity2halfDEquation(U, U)
 temp_eq = ScalarAdvectionDiffusionEquation(K, K)
 sal_eq = ScalarAdvectionDiffusionEquation(S, S)
-
+frazil_eq = FrazilAdvectionDiffusionEquation(Q,Q)
 ##########
 
 # Terms for equation fields
 
-# momentum source: the buoyancy term Boussinesq approx. From mitgcm default
-T_ref = Constant(0.0)
-S_ref = Constant(35)
-beta_temp = Constant(2.0E-4)
-beta_sal = Constant(7.4E-4)
+# momentum source: the buoyancy term Boussinesq approx. From Jordan etal 14
+T_ref = Constant(-2.0)
+S_ref = Constant(34.5)
+beta_temp = Constant(3.87E-5)
+beta_sal = Constant(7.86E-4)
 g = Constant(9.81)
-mom_source = as_vector((0., -g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref))
-
 rho0 = 1030.
-rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
+rho_ice = 920.
+
+rho_perb = -beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)  # Linear eos (already divided by rho0)
+mom_source = as_vector((0., -g)) * (rho_perb - frazil * (1 + rho_perb) + frazil * (rho_ice / rho0))
+rho.interpolate(rho0*((1-frazil) * (1 + rho_perb)) + frazil * rho_ice)
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
-#f = Constant(-1.409E-4)
+f = Constant(-1.409E-4)
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
 sponge_fraction = 0.06  # fraction of domain where sponge
 # Temperature source term
-source_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          absorption_factor * T_restore,
-                          0.0)
-
-# Salinity source term
-source_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor * S_restore,
-                         0.0)
-
-# Temperature absorption term
-absorp_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          absorption_factor,
-                          0.0)
-
-# Salinity absorption term
-absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor,
-                         0.0)
 
 
-# linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
-kappa_h = Constant(args.Kh)
-kappa_v = Constant(args.Kh/10.)
-#kappa_v = Constant(args.Kh*dz/dy)
-#grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
-#kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
-#kappa_v = grounding_line_kappa_v + y*kappa_v_grad
+kappa = as_tensor([[1e-3, 0], [0, 1e-3]])
 
-#sponge_kappa_h = conditional(y > (1.0-sponge_fraction) * L,
-#                             1000. * kappa_h * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
-#                             kappa_h)
+kappa_temp = kappa
+kappa_sal = kappa
+kappa_frazil = kappa
+mu = kappa
 
-#sponge_kappa_v = conditional(y > (1.0-sponge_fraction) * L,
-#                             1000. * kappa_v * ((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
-#                             kappa_v)
+FRV = FrazilRisingVelocity(0.1)  # initial velocity guess needs to be >0
+w_i = FRV.frazil_rising_velocity() # Picard iterations converge to value for w_i (which only depends on crystal size, here we assume r =7.5e-4m
 
-kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
-
-TP1 = TensorFunctionSpace(mesh, "CG", 1)
-kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa)
-kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa)
-mu = Function(TP1, name='viscosity').assign(kappa)
-
+frazil_mp = FrazilMeltParam(sal, temp, p, z, frazil)
+temp_source = (frazil_mp.Tc - temp - frazil_mp.Lf/frazil_mp.c_p_m) * frazil_mp.wc
+temp_absorption = 0 
+sal_source = -sal *frazil_mp.wc
+sal_absorption = 0 
+frazil_source =  -frazil_mp.wc
+frazil_absorption = 0
 
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
@@ -256,17 +228,17 @@ mu = Function(TP1, name='viscosity').assign(kappa)
 ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
-#u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
-               'absorption coefficient': absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
-              'absorption coefficient': absorp_sal}
+vp_fields = {'viscosity': mu, 'source': mom_source} #, 'interior_penalty': ip_alpha}
+u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f}
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': temp_source, 'absorption coefficient': temp_absorption}
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': sal_source, 'absorption coefficient': sal_absorption, }
+frazil_fields = {'diffusivity': kappa_frazil, 'velocity': v, 'w_i': Constant(w_i), 'source': frazil_source, 'absorption coefficient': frazil_absorption}
 
 ##########
 
 # Get expressions used in melt rate parameterisation
-mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5), HJ99Gamma=True)
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v) + pow(u, 2), 0.5), HJ99Gamma=True, f=f)
+
 
 ##########
 
@@ -280,11 +252,11 @@ melt.interpolate(mp.wb)
 Tb.interpolate(mp.Tb)
 Sb.interpolate(mp.Sb)
 full_pressure.interpolate(mp.P_full)
-
+frazil_flux.interpolate(w_i*frazil)
 ##########
 
 # Plotting top boundary.
-shelf_boundary_points = get_top_boundary(cavity_length=L, cavity_height=H2, water_depth=water_depth)
+shelf_boundary_points = get_top_boundary(cavity_length=L, cavity_height=H2, water_depth=water_depth, n=400)
 top_boundary_mp = pd.DataFrame()
 
 
@@ -328,15 +300,15 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow},
-          3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
-#u_bcs = {2: {'q': Constant(0.0)}}
+vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary}, 
+        3: {'un': -0.025}, 1: {'un': no_normal_flow, 'drag': 2.5e-3}}
+u_bcs = {}
 
-temp_bcs = {4: {'flux': -mp.T_flux_bc}}
+temp_bcs = {4: {'flux': -mp.T_flux_bc}, 3:{'q': T_restore}}
 
-sal_bcs = {4: {'flux': -mp.S_flux_bc}}
+sal_bcs = {4: {'flux': -mp.S_flux_bc}, 3:{'q': S_restore}}
 
-
+frazil_bcs = {}
 
 # STRONGLY Enforced BCs
 # open ocean (RHS): no tangential flow because viscosity of outside ocean resists vertical flow.
@@ -357,10 +329,45 @@ mumps_solver_parameters = {
     'snes_atol': 1e-6,
 }
 
-vp_solver_parameters = mumps_solver_parameters
+pressure_projection_solver_parameters = {
+        'snes_type': 'ksponly',
+        'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
+        'mat_type': 'matfree',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'pc_fieldsplit_schur_fact_type': 'full',
+        # velocity mass block:
+        'fieldsplit_0': {
+            'ksp_type': 'gmres',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.AssembledPC',
+            'ksp_converged_reason': None,
+            'assembled_ksp_type': 'preonly',
+            'assembled_pc_type': 'bjacobi',
+            'assembled_sub_pc_type': 'ilu',
+            },
+        # schur system: explicitly assemble the schur system
+        # this only works with pressureprojectionicard if the velocity block is just the mass matrix
+        # and if the velocity is DG so that this mass matrix can be inverted explicitly
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'thwaites.AssembledSchurPC',
+            'schur_ksp_type': 'cg',
+            'schur_ksp_max_it': 1000,
+            'schur_ksp_rtol': 1e-7,
+            'schur_ksp_atol': 1e-9,
+            'schur_ksp_converged_reason': None,
+            'schur_pc_type': 'gamg',
+            'schur_pc_gamg_threshold': 0.01
+            },
+        }
+
+vp_solver_parameters = pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
 temp_solver_parameters = mumps_solver_parameters
 sal_solver_parameters = mumps_solver_parameters
+frazil_solver_parameters = mumps_solver_parameters
 
 ##########
 
@@ -429,20 +436,31 @@ output_step = output_dt/dt
 ##########
 
 # Set up time stepping routines
-vp_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                        solver_parameters=vp_solver_parameters, strong_bcs=strong_bcs)
 
-#u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
+vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
+                                                          solver_parameters=vp_solver_parameters,
+                                                          predictor_solver_parameters=u_solver_parameters,
+                                                          picard_iterations=1)
+
+# performs pseudo timestep to get good initial pressure
+# this is to avoid inconsistencies in terms (viscosity and advection) that
+# are meant to decouple from pressure projection, but won't if pressure is not initialised
+# do this here, so we can see the initial pressure in pressure_0.pvtu
+if not DUMP:
+    # should not be done when picking up
+    with timed_stage('initial_pressure'):
+        vp_timestepper.initialize_pressure()
+
+u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
 sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
+frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, solver_parameters=frazil_solver_parameters)
 
 ##########
 
 # Set up folder
-folder = "/data/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-         "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy500_dz2_no_limiter_closed_adjoint_from10daydump/"
+folder = "/data/2.5d_crevasse/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil_sharpmesh_frazillim_2.5d/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -455,8 +473,8 @@ v_file.write(v_)
 p_file = File(folder+"pressure.pvd")
 p_file.write(p_)
 
-#u_file = File(folder+"u_velocity.pvd")
-#u_file.write(u)
+u_file = File(folder+"u_velocity.pvd")
+u_file.write(u)
 
 t_file = File(folder+"temperature.pvd")
 t_file.write(temp)
@@ -467,6 +485,8 @@ s_file.write(sal)
 rho_file = File(folder+"density.pvd")
 rho_file.write(rho)
 
+frazil_file = File(folder+"frazil.pvd")
+frazil_file.write(frazil)
 ##########
 
 # Output files for melt functions
@@ -485,29 +505,13 @@ m_file.write(melt)
 full_pressure_file = File(folder+"full_pressure.pvd")
 full_pressure_file.write(full_pressure)
 
-######
-
-# adjoint output
-tape = get_working_tape()
-
-adj_s_file = File(folder+"adj_salinity.pvd")
-tape.add_block(DiagnosticBlock(adj_s_file, sal))
-
-adj_t_file = File(folder+"adj_temperature.pvd")
-tape.add_block(DiagnosticBlock(adj_t_file, temp))
-
-adj_visc_file = File(folder+"adj_viscosity.pvd")
-tape.add_block(DiagnosticBlock(adj_visc_file, mu))
-adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
-adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
-
+frazil_flux_file = File(folder+"frazil_flux.pvd")
+frazil_flux_file.write(frazil_flux)
 ########
 
 # Extra outputs for plotting
 # Melt rate functions along ice-ocean boundary
-top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
+#top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
 
 # Depth profiles
 #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
@@ -518,37 +522,109 @@ top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
 
 ########
 
+# Extra outputs for matplotlib plotting
+
+def matplotlib_out(t):
+
+    v_array = v_.dat.data[:, 0]
+    w_array = v_.dat.data[:, 1]
+    temp_array = temp.dat.data
+    sal_array = sal.dat.data
+    rho_array = rho.dat.data
+        
+    # Gather all pieces to one array. 
+    v_array = mesh.comm.gather(v_array, root=0)
+    w_array = mesh.comm.gather(w_array, root=0)
+    temp_array = mesh.comm.gather(temp_array, root=0)
+    sal_array = mesh.comm.gather(sal_array, root=0)
+    rho_array = mesh.comm.gather(rho_array, root=0)
+
+    if mesh.comm.rank == 0:
+        # concatenate arrays
+        v_array_f = np.concatenate(v_array)
+        w_array_f = np.concatenate(w_array)
+        vel_mag_array_f = np.sqrt(v_array_f**2 + w_array_f**2)
+        temp_array_f = np.concatenate(temp_array)
+        sal_array_f = np.concatenate(sal_array)
+        rho_array_f = np.concatenate(rho_array)
+            
+        # Add concatenated arrays to data frame
+        matplotlib_df['v_array_{:.0f}hours'.format(t/3600)] = v_array_f
+        matplotlib_df['w_array_{:.0f}hours'.format(t/3600)] = w_array_f
+        matplotlib_df['vel_mag_array_{:.0f}hours'.format(t/3600)] = vel_mag_array_f
+        matplotlib_df['temp_array_{:.0f}hours'.format(t/3600)] = temp_array_f
+        matplotlib_df['sal_array_{:.0f}hours'.format(t/3600)] = sal_array_f
+        matplotlib_df['rho_array_{:.0f}hours'.format(t/3600)] = rho_array_f
+        
+        # write dataframe to output file
+        matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
+
+MATPLOTLIB_OUT = False
+
+if MATPLOTLIB_OUT:
+    
+    # Interpolate coordinates to arrays
+    y_array, z_array = interpolate(y, Function(U)).dat.data, interpolate(z, Function(U)).dat.data
+
+    # Gather pieces of array to process zero
+    y_array = mesh.comm.gather(y_array, root=0)
+    z_array = mesh.comm.gather(z_array, root=0) 
+
+    if mesh.comm.rank == 0:
+        # Concatanate arrays to have one complete array
+        y_array_f = np.concatenate(y_array)
+        z_array_f = np.concatenate(z_array)
+
+        # Create a data frame to store arrays for matplotlib plotting later
+        matplotlib_df = pd.DataFrame()
+
+        # Add concatenated arrays to data frame
+        matplotlib_df['y_array'] = y_array_f
+        matplotlib_df['z_array'] = z_array_f
+
+        # Write data frame to file
+        matplotlib_df.to_hdf(folder+"matplotlib_arrays.h5", key="0")
+    
+    # Add initial conditions for v, w, temp, sal, and rho to data frame
+    matplotlib_out(0)
+
+########
+# Add limiter for DG functions
+limiter = VertexBasedP1DGLimiter(S)
 
 # Begin time stepping
 t = 0.0
 step = 0
 
-
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
         vp_timestepper.advance(t)
-        #u_timestepper.advance(t)
+        u_timestepper.advance(t)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
+    with timed_stage('frazil'):
+        frazil_timestepper.advance(t)
     step += 1
     t += dt
+
+    limiter.apply(sal)
+    limiter.apply(temp)
+    limiter.apply(frazil)
+    frazil.interpolate(conditional(frazil < 5e-9, 5e-9, frazil))
     with timed_stage('output'):
        if step % output_step == 0:
-           # dumb checkpoint for starting from spin up
-           
-           tape.add_block(DiagnosticBlock(adj_s_file, sal))
-           tape.add_block(DiagnosticBlock(adj_t_file, temp))
-
+           # dumb checkpoint for starting from last timestep reached
            with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
                # Checkpoint file open for reading and writing
                chk.store(v_, name="v_velocity")
                chk.store(p_, name="perturbation_pressure")
-               #chk.store(u, name="u_velocity")
+               chk.store(u, name="u_velocity")
                chk.store(temp, name="temperature")
                chk.store(sal, name="salinity")
-
+               chk.store(frazil, name="frazil ice concentration")
+    
            # Update melt rate functions
            Q_ice.interpolate(mp.Q_ice)
            Q_mixed.interpolate(mp.Q_mixed)
@@ -558,56 +634,50 @@ while t < T - 0.5*dt:
            Tb.interpolate(mp.Tb)
            Sb.interpolate(mp.Sb)
            full_pressure.interpolate(mp.P_full)
-
+           frazil_flux.interpolate(w_i*frazil)
+    
            # Update density for plotting
-           rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
+           rho.interpolate(rho0*((1-frazil)*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) + (rho_ice / rho0) * frazil))
 
-           # Write out files
-           v_file.write(v_)
-           p_file.write(p_)
-           #u_file.write(u)
-           t_file.write(temp)
-           s_file.write(sal)
-           rho_file.write(rho)
-
-           # Write melt rate functions
-           m_file.write(melt)
-           Q_mixed_file.write(Q_mixed)
-           full_pressure_file.write(full_pressure)
-           Qs_file.write(Q_s)
-           Q_ice_file.write(Q_ice)
-
+           if MATPLOTLIB_OUT:
+               # Write v, w, |u| temp, sal, rho to file for plotting later with matplotlib
+               matplotlib_out(t)
+           
+           else:
+               # Write out files
+               v_file.write(v_)
+               p_file.write(p_)
+               u_file.write(u)
+               t_file.write(temp)
+               s_file.write(sal)
+               rho_file.write(rho)
+               frazil_file.write(frazil)   
+               # Write melt rate functions
+               m_file.write(melt)
+               Q_mixed_file.write(Q_mixed)
+               full_pressure_file.write(full_pressure)
+               Qs_file.write(Q_s)
+               Q_ice_file.write(Q_ice)
+               frazil_flux_file.write(frazil_flux)
            time_str = str(step)
-           top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
-
-           #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
-           #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
-           #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
-           #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
-           #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
-
+           #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
+    
+   #        depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
+    #       depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
+     #      depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
+      #     depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
+       #    depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
+    
            PETSc.Sys.Print("t=", t)
-
+    
            PETSc.Sys.Print("integrated melt =", assemble(melt * ds(4)))
 
-melt.project(mp.wb)
-J = assemble(mp.wb*ds(4))
-print(J)
-rf = ReducedFunctional(J, c)
-
-#tape.reset_variables()
-#J.adj_value = 1.0
-
-J.block_variable.adj_value = 1.0
-#tape.visualise()
-# evaluate all adjoint blocks to ensure we get complete adjoint solution
-# currently requires fix in dolfin_adjoint_common/blocks/solving.py:
-#    meshtype derivative (line 204) is broken, so just return None instead
-with timed_stage('adjoint'):
-    tape.evaluate_adj()
-#grad = rf.derivative()
-#File(folder+'grad.pvd').write(grad)
-
-#h = Function(sal)
-#h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
-#taylor_test(rf, sal, h)
+    if step % (output_step * 24) == 0:
+        with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
+            # Checkpoint file open for reading and writing at regular interval
+            chk.store(v_, name="v_velocity")
+            chk.store(p_, name="perturbation_pressure")
+            chk.store(u, name="u_velocity")
+            chk.store(temp, name="temperature")
+            chk.store(sal, name="salinity")
+            chk.store(frazil, name="frazil ice concentration")

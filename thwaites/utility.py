@@ -4,6 +4,7 @@ A module with utitity functions for Thwaites
 from firedrake import outer, ds_v, ds_t, ds_b, CellDiameter, CellVolume
 from firedrake import sqrt, exp, Function, FiniteElement, TensorProductElement, FunctionSpace, VectorFunctionSpace
 import ufl
+import numpy as np
 
 
 class CombinedSurfaceMeasure(ufl.Measure):
@@ -243,3 +244,52 @@ def get_functionspace(mesh, h_family, h_degree, v_family=None, v_degree=None,
 
     constructor = VectorFunctionSpace if vector else FunctionSpace
     return constructor(mesh, elt, **kwargs)
+
+
+class FrazilRisingVelocity:
+    epsilon = 0.0625  # aspect ratio of frazil disk = 1/16
+    rho_ice = 920.0  # density of ice / kg /m^3
+    rho_seawater = 1030.0  # density of seawater / kg/m^2
+    R = -1.0 * (rho_ice - rho_seawater) / rho_seawater
+    g = 9.81  # gravitational constant / m/s^2
+    nu = 1.95e-6  # kinematic viscosity of seawater / m^2/s
+
+    def __init__(self, w_i, r=7.5e-4, picard_steps=10):
+        self.r = r
+        self.w_i = w_i
+        assert(self.w_i > 0)  # Initial velocity guess needs to be greater than zero.
+        self.w_i_old = self.w_i
+        self.picard_steps = picard_steps
+
+    def calculate_rising_velocity(self, Cd):
+        return pow(4 * self.R * self.g * self.r * self.epsilon / Cd, 0.5)
+
+    def calculate_drag_coefficient(self, Re_disk):
+        log10_Re_disk = np.log10(Re_disk)
+        log10_Cd = 1.386 - 0.892*log10_Re_disk + 0.111*pow(log10_Re_disk, 2)
+        return pow(10, log10_Cd)
+
+    def calculate_Re_disk(self, w_i):
+        return w_i * 2 * self.r / self.nu
+
+    def picard_step(self):
+        self.w_i_old = (self.w_i)
+        Re_disk_update = self.calculate_Re_disk(self.w_i)
+        Cd_update = self.calculate_drag_coefficient(Re_disk_update)
+        self.w_i = self.calculate_rising_velocity(Cd_update)
+
+    def frazil_rising_velocity(self):
+        step = 0
+        print(step)
+        w_i_change = 1
+        print(w_i_change)
+        while w_i_change > 1e-6:
+            print("hello world")
+            self.picard_step()
+            w_i_change = abs(self.w_i - self.w_i_old)
+            step += 1
+            print("Step ", step, ": wi old = ", self.w_i_old, " -> wi new = ", self.w_i)
+            print("Step ", step, ": change in frazil ice rising velocity =", w_i_change)
+            if step > self.picard_steps:
+                break
+        return self.w_i

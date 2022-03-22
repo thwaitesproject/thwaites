@@ -1,6 +1,6 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, div, grad, as_tensor, avg, jump, sign
-from firedrake import min_value, split, FacetNormal, Identity
+from firedrake import min_value, split, FacetNormal, Identity, Dx
 from firedrake import FacetArea, CellVolume
 from .utility import is_continuous, normal_is_continuous, cell_edge_integral_ratio
 r"""
@@ -203,6 +203,18 @@ class ScalarVelocity2halfDTerm(BaseTerm):
         return -F
 
 
+class FrazilRisingVelocity(BaseTerm):
+    r"""
+            Rising velocity (negative of sediment settling velocity) for frazil ice  :math:`wi dc / dz`
+                         """
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        assert 'w_i' in fields
+        w_i = fields["w_i"]
+        vert_dim = self.dim-1
+        F = w_i * Dx(trial, vert_dim) * test * self.dx
+        return -F
+
+
 class ScalarAdvectionEquation(BaseEquation):
     """
     Scalar equation with only an advection term.
@@ -226,6 +238,14 @@ class ScalarVelocity2halfDEquation(BaseEquation):
 
     terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm, ScalarAbsorptionTerm,
              ScalarVelocity2halfDTerm]
+
+
+class FrazilAdvectionDiffusionEquation(BaseEquation):
+    """
+    Scalar equation with advection and diffusion for frazil ice.
+    """
+
+    terms = [ScalarAdvectionTerm, ScalarDiffusionTerm, ScalarSourceTerm, ScalarAbsorptionTerm, FrazilRisingVelocity]
 
 
 class HybridizedScalarEquation(BaseEquation):

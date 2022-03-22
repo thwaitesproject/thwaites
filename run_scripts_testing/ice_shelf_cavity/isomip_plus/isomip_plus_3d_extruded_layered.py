@@ -57,7 +57,7 @@ water_depth = H3
 dy = args.dy 
 nx = round(L/dy)
 ny = round(Ly/dy)
-dz = H2/args.nz #40.0
+dz = 20.0 #H2/args.nz
 
 # create mesh
 if dy == 1000.0:
@@ -79,13 +79,53 @@ yr = 0
 min_dz = 0.5*dz # if top cell is thinner than this, merge with cell below
 tiny_dz = 0.01*dz # workaround zero measure facet issue (fd issue #1858)
 
-x_base = SpatialCoordinate(base_mesh)
+x_base, y_base = SpatialCoordinate(base_mesh)
 
 P1 = FunctionSpace(base_mesh, "CG", 1)
+
+# Bathymetry 
+x_bar = Constant(300E3) # Characteristic along flow length scale of the bedrock
+x_tilda = x_base / x_bar  # isomip+ x coordinate used for defining along flow bathymetry/bedrock topography 
+B0 = Constant(-150.0) # Bedrock topography at x = 0 (in the ice domain!)
+B2 = Constant(-728.8) # Second bedrock topography coefficient 
+B4 = Constant(343.91) # Third bedrock topography coefficient
+B6 = Constant(-50.57) # Forth bedrock topography coefficient
+
+bathy_x = B0 + B2 * pow(x_tilda, 2) + B4 * pow(x_tilda, 4) + B6 * pow(x_tilda, 6)
+
+d_c =  Constant(500.0) # Depth of the trough compared with the side walls
+w_c = Constant(24E3) # Half width of the trough 
+f_c = Constant(4E3) # Characteristic width of the side of the channel
+
+bathy_y = d_c / (1 + exp(-2 * (y_base - 0.5 * Ly - w_c) / f_c))  + d_c / (1 + exp(2 * (y_base - 0.5 * Ly + w_c) / f_c))
+
+bathymetry_base = Function(P1)
+bathymetry_base.interpolate(conditional(bathy_x + bathy_y < -water_depth,
+                        -water_depth,
+                        bathy_x + bathy_y))
+
+print("max bathy : ", bathymetry_base.dat.data[:].max())
+
+ice_draft_file = rasterio.open(f'netcdf:Ocean1_input_geom_v1.01.nc:lowerSurface', 'r')
+#ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
+
+
+#P1 = FunctionSpace(base_mesh, "CG", 1)
+ice_draft_base = interpolate_data(ice_draft_file, P1)
+print("max icedraft : ",ice_draft_base.dat.data[:].max())
+print("min icedraft : ",ice_draft_base.dat.data[:].min())
+
+
 ocean_thickness = Function(P1)
-ocean_thickness.interpolate(conditional(x_base[0] + 0.5*dy < shelf_length, H2, H3))
+ocean_thickness.interpolate
+
+ocean_thickness.interpolate(conditional(ice_draft_base - bathymetry_base < Constant(45),
+                                        Constant(45),
+                                        ice_draft_base - bathymetry_base))
+#ocean_thickness.interpolate(conditional(x_base[0] + 0.5*dy < shelf_length, H2, H3))
 rank = base_mesh.comm.rank
-def extruded_cavity_mesh(base_mesh, ocean_thickness):
+def extruded_cavity_mesh(base_mesh, ocean_thickness, bathymetry_base):
+        
     P0dg = FunctionSpace(base_mesh, "DG", 0)
     P0dg_cells = Function(P0dg)
     tmp = ocean_thickness.copy(deepcopy=True)
@@ -95,21 +135,31 @@ def extruded_cavity_mesh(base_mesh, ocean_thickness):
             }""",
             dx, {'bathy_max': (P0dg_cells, RW), 'bathy': (tmp, READ)})
 
-    P0dg_cells /= dz
+    P0dg_cells.dat.data[:] = np.ceil((P0dg_cells.dat.data[:]-min_dz)/dz)
 
     P0dg_cells_array = P0dg_cells.dat.data_ro_with_halos[:]
 
+    bottom_offset = Function(P0dg)
+    tmp2 = bathymetry_base.copy(deepcopy=True)
+    tmp2.dat.data[:] -= -720.0
+    bottom_offset.assign(720)#np.finfo(0.).min)
+    par_loop("""for (int i=0; i<bathy.dofs; i++) {
+            bathy_max[0] = fmin(bathy[i], bathy_max[0]);
+            }""",
+            dx, {'bathy_max': (bottom_offset, RW), 'bathy': (tmp2, READ)})
+    bottom_offset.dat.data[:] = np.floor((bottom_offset.dat.data[:]+min_dz)/dz)
+    bottom_offset_array = bottom_offset.dat.data_ro_with_halos[:]
 
-
-    for i in P0dg_cells_array:
+    for i,j in zip(P0dg_cells_array, bottom_offset_array):
+        print(i, j)
         if rank == 41:
             print(i)
         layers.append([0, i])
     print("rank =",rank, " len(layers) = ", len(layers))
     mesh = ExtrudedMesh(base_mesh, layers, layer_height=dz)
-    return mesh 
+    return mesh, P0dg_cells 
 
-mesh = extruded_cavity_mesh(base_mesh, ocean_thickness)
+mesh, P0dg_cells_base = extruded_cavity_mesh(base_mesh, ocean_thickness, bathymetry_base)
 x, y, z = SpatialCoordinate(mesh)
 
 
@@ -136,52 +186,40 @@ for count, mesh_i in enumerate(mesh.coordinates.dat.data[:]):
 		print("y= ", mesh_i[1])
 		print("z= ", mesh_i[2])
 
+#
 P1_extruded = FunctionSpace(mesh, 'CG', 1)
 
 # Redefine thickness (without ice slope!) on extruded mesh
 ocean_thickness_extruded = ExtrudedFunction(ocean_thickness, mesh_3d=mesh)
 
-# move top nodes to correct position:
-cfs = mesh.coordinates.function_space()
-bc = DirichletBC(cfs, as_vector((x, y, ocean_thickness_extruded.view_3d)), "top")
-bc.apply(mesh.coordinates)
+p0mesh_cells.interpolate(CellVolume(mesh))
+mesh_cellvol_file = File("mesh_cell_vol_20m_presquashing.pvd")
+mesh_cellvol_file.write(p0mesh_cells)
 
 print ("rank", rank,"after squashing ice front mesh.coordinates.dat.data", mesh.coordinates.dat.data[:])
+bathymetry = ExtrudedFunction(bathymetry_base, mesh_3d=mesh)
+ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
+P0dg_cells = ExtrudedFunction(P0dg_cells_base, mesh_3d=mesh)
 
+# move top nodes to correct position:
+cfs = mesh.coordinates.function_space()
+bc = DirichletBC(cfs, as_vector((x, y, conditional(x + dy > shelf_length, ocean_thickness_extruded.view_3d, z))), "top")
+bc.apply(mesh.coordinates)
+p0mesh_cells.interpolate(CellVolume(mesh))
+mesh_cellvol_file = File("mesh_cell_vol_20m_topnodes_oceanthickness.pvd")
+mesh_cellvol_file.write(p0mesh_cells)
+#ocean_thickness = Function(P1_extruded)
+cfs = mesh.coordinates.function_space()
+bc = DirichletBC(cfs, as_vector((x, y, conditional(x + dy < shelf_length, P0dg_cells.view_3d *dz, z))), "top")
+bc.apply(mesh.coordinates)
+p0mesh_cells.interpolate(CellVolume(mesh))
+mesh_cellvol_file = File("mesh_cell_vol_20m_topnodes_oceanthickness_innerdomain.pvd")
+mesh_cellvol_file.write(p0mesh_cells)
 
-# Bathymetry 
-x_bar = Constant(300E3) # Characteristic along flow length scale of the bedrock
-x_tilda = x / x_bar  # isomip+ x coordinate used for defining along flow bathymetry/bedrock topography 
-B0 = Constant(-150.0) # Bedrock topography at x = 0 (in the ice domain!)
-B2 = Constant(-728.8) # Second bedrock topography coefficient 
-B4 = Constant(343.91) # Third bedrock topography coefficient
-B6 = Constant(-50.57) # Forth bedrock topography coefficient
-
-bathy_x = B0 + B2 * pow(x_tilda, 2) + B4 * pow(x_tilda, 4) + B6 * pow(x_tilda, 6)
-
-d_c =  Constant(500.0) # Depth of the trough compared with the side walls
-w_c = Constant(24E3) # Half width of the trough 
-f_c = Constant(4E3) # Characteristic width of the side of the channel
-
-bathy_y = d_c / (1 + exp(-2 * (y - 0.5 * Ly - w_c) / f_c))  + d_c / (1 + exp(2 * (y - 0.5 * Ly + w_c) / f_c))
-
-bathymetry = Function(P1_extruded)
-bathymetry.interpolate(conditional(bathy_x + bathy_y < -water_depth,
-                        -water_depth,
-                        bathy_x + bathy_y))
-
-print("max bathy : ", bathymetry.dat.data[:].max())
-
-ice_draft_file = rasterio.open(f'netcdf:Ocean1_input_geom_v1.01.nc:lowerSurface', 'r')
-#ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
-
-
-#P1 = FunctionSpace(base_mesh, "CG", 1)
-ice_draft_base = interpolate_data(ice_draft_file, P1)
-print("max icedraft : ",ice_draft_base.dat.data[:].max())
-print("min icedraft : ",ice_draft_base.dat.data[:].min())
-
-ocean_thickness = Function(P1_extruded)
+#ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
+#print("max icedraft extruded : ",ice_draft.view_3d.dat.data[:].max())
+#print("min icedraft extruded : ",ice_draft.view_3d.dat.data[:].min())
+#ocean_thickness.interpolate(ice_draft.view_3d - bathymetry)
 
 ice_draft = ExtrudedFunction(ice_draft_base, mesh_3d=mesh)
 print("max icedraft extruded : ",ice_draft.view_3d.dat.data[:].max())
@@ -262,12 +300,12 @@ mesh_file.write(ocean_thickness)
 mesh_file = File("bathy_icedraftfile.pvd")
 mesh_file.write(bathymetry)
 mesh_file = File("icedraft_icedraftfile.pvd")
-mesh_file.write(ice_draft)
+mesh_file.write(ice_draft_base)
 
 p0mesh_cells.interpolate(CellVolume(mesh))
 print("rank", rank, "max cell volume:", p0mesh_cells.dat.data[:].max())
 print("rank", rank, "min cell volume:", p0mesh_cells.dat.data[:].min())
-mesh_cellvol_file = File("mesh_cell_vol.pvd")
+mesh_cellvol_file = File("mesh_cell_vol_10m.pvd")
 mesh_cellvol_file.write(p0mesh_cells)
 ##########
 PETSc.Sys.Print("mesh cell type", mesh.ufl_cell())
@@ -823,7 +861,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up Vectorfolder
-folder = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
+folder = "/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
          "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul_from96days/" #_smagviscmax"+str(max_nu)+"_officeshelf/"
