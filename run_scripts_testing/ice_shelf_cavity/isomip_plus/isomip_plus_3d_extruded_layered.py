@@ -2,7 +2,8 @@
 #Buoyancy driven overturning circulation
 # beneath ice shelf.
 from thwaites import *
-from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, ExtrudedFunction
+from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, ExtrudedFunction, get_functionspace
+from thwaites.utility import offset_backward_step_approx
 from firedrake.petsc import PETSc
 from firedrake import FacetNormal, derivative
 import pandas as pd
@@ -21,12 +22,18 @@ parser.add_argument("dy", help="horizontal mesh resolution in m",
                     type=float)
 parser.add_argument("nz", help="no. of layers in vertical",
                     type=int)
-#parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
-#                    type=float)
-#parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
-#                    type=float)
+parser.add_argument("mu_h", help="horizontal eddy viscosity in m^2/s",
+                    type=float)
+parser.add_argument("mu_v", help="vertical eddy viscosity in m^2/s",
+                    type=float)
+parser.add_argument("Kh", help="horizontal eddy viscosity/diffusivity in m^2/s",
+                    type=float)
+parser.add_argument("Kv", help="vertical eddy viscosity/diffusivity in m^2/s",
+                    type=float)
 #parser.add_argument("restoring_time", help="restoring time in s",
                    # type=float)
+#parser.add_argument("a", help="coefficient stretching surface 0 < a < 20",
+#                    type=float)
 parser.add_argument("dt", help="time step in seconds",
                     type=float)
 parser.add_argument("output_dt", help="output time step in seconds",
@@ -65,7 +72,7 @@ else:
    raise NameError("Provided mesh resolution {} does not match 2km, 4km, 8km basemeshes")
 
  
-#base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront_western.msh") 
+#base_mesh = Mesh("./isomip_outline_mesh_res_alignedinterioricefront_westerngl2km_8km.msh") 
 layers = []
 cell = 0
 yr = 0
@@ -188,19 +195,50 @@ ocean_thickness.interpolate(conditional(ice_draft.view_3d - bathymetry < Constan
                                         ice_draft.view_3d - bathymetry)) 
 print("max thickness : ", ocean_thickness.dat.data[:].max())
 print("min thickness : ", ocean_thickness.dat.data[:].min())
-
-# Scale the mesh to make ice shelf slope
 Vc = mesh.coordinates.function_space()
+
+# Make ice shelf at z =0
 x, y, z = SpatialCoordinate(mesh)
 f = Function(Vc).interpolate(as_vector([x, y, conditional(x + 0.5*dy < shelf_length, ocean_thickness*z/H2, ocean_thickness*z/H3) - -bathymetry]))
-#f = Function(Vc).interpolate(as_vector([x, y, ocean_thickness*z/H2 - -bathymetry]))
 mesh.coordinates.assign(f)
 
-print ("rank", rank,"after applying bathy/icedraft mesh.coordinates.dat.data", mesh.coordinates.dat.data[:])
+##### uncomment for roms surface squshing
+##scale mesh to make ice shelf slope
+#f = Function(Vc).interpolate(as_vector([x, y,conditional(x + 0.5*dy < shelf_length, ocean_thickness*z/H2 - ocean_thickness, ocean_thickness*z/H3 - H2) ]))
+#mesh.coordinates.assign(f)
+#x, y, z = SpatialCoordinate(mesh)
+
+#mesh_pre_refinement = Function(P1_extruded).assign(0)
+#mesh_pr_file = File("mesh_pre_refinement.pvd")
+#mesh_pr_file.write(mesh_pre_refinement)
+## Stretch the mesh to get higher res at ice base.
+## wavelength of the step = x distance that fucntion goes from zero to 1.
+#lambda_step = 10 * dy
+#k = 2.0 * np.pi / lambda_step
+#x0 = shelf_length -  5 * dy  # this is the centre of the step.
+#a = Constant(args.a)
+#b = Constant(0)
+#depth_c = 10.0
+#z_scaled = z / ocean_thickness
+#Cs = (1.-b) * sinh(a*z_scaled) / sinh(a) + b*(tanh(a*(z_scaled + 0.5))/(2*tanh(0.5*a)) - 0.5)
+#f = Function(Vc).interpolate(as_vector([x, y, offset_backward_step_approx(x,k,x0)*(depth_c*z_scaled + (ocean_thickness - depth_c)*Cs) + (1.0-offset_backward_step_approx(x,k,x0))*z])) #+ (1.0 - offset_backward_step_approx(x,k,x0))*z]))
+#mesh.coordinates.assign(f)
+#x, y, z = SpatialCoordinate(mesh)
+
+#mesh_refine = Function(P1_extruded).assign(0)
+#mesh_r_file = File("mesh_refinement_smooth.pvd")
+#mesh_r_file.write(mesh_refine)
+
+##scale mesh to make ice shelf slope
+#f = Function(Vc).interpolate(as_vector([x, y, conditional(x + 0.5*dy < shelf_length, z - -ice_draft.view_3d, z + H2 - -bathymetry)]))
+#mesh.coordinates.assign(f)
+#print ("rank", rank,"after applying bathy/icedraft mesh.coordinates.dat.data", mesh.coordinates.dat.data[:])
 ds = CombinedSurfaceMeasure(mesh, 5)
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
-
+#mesh_final = Function(P1_extruded).assign(0)
+#mesh_f_file = File("mesh_final.pvd")
+#mesh_f_file.write(mesh_final)
 
 print("You have Comm WORLD size = ", mesh.comm.size)
 print("You have Comm WORLD rank = ", mesh.comm.rank)
@@ -300,9 +338,9 @@ rho_anomaly = Function(P1_extruded, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/06.10.21_32cores_from70days_3d_isomip+_dt900.0_dtOut864000.0_T8640000.0_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx2km_lay30_closed_coriolis_tracerlims_ip3_alignicefront_backeul_mompchypre/dump_step_7680.h5" 
+dump_file = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/17.02.22_32cores_3d_isomip+_dt900.0_dtOut864000.0_T8640000.0_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay60_closed_coriolis_tracerlims_ip3_alignicefront_backeul_from70days/dump_step_9216.h5" 
 
-DUMP = False
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -433,18 +471,154 @@ absorp_sal = conditional(x > (1.0-sponge_fraction) * L,
                          absorption_factor * ((x - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                          0.0)
 
+class SmagorinskyViscosity(object):
+    r"""
+    Computes Smagorinsky subgrid scale horizontal viscosity
+
+    This formulation is according to Ilicak et al. (2012) and
+    Griffies and Hallberg (2000).
+
+    .. math::
+        \nu = (C_s \Delta x)^2 |S|
+
+    with the deformation rate
+
+    .. math::
+        |S| &= \sqrt{D_T^2 + D_S^2} \\
+        D_T &= \frac{\partial u}{\partial x} - \frac{\partial v}{\partial y} \\
+        D_S &= \frac{\partial u}{\partial y} + \frac{\partial v}{\partial x}
+
+    :math:`\Delta x` is the horizontal element size and :math:`C_s` is the
+    Smagorinsky coefficient.
+
+    To match a certain mesh Reynolds number :math:`Re_h` set
+    :math:`C_s = 1/\sqrt{Re_h}`.
+
+    Ilicak et al. (2012). Spurious dianeutral mixing and the role of
+    momentum closure. Ocean Modelling, 45-46(0):37-58.
+    http://dx.doi.org/10.1016/j.ocemod.2011.10.003
+
+    Griffies and Hallberg (2000). Biharmonic friction with a
+    Smagorinsky-like viscosity for use in large-scale eddy-permitting
+    ocean models. Monthly Weather Review, 128(8):2935-2946.
+    http://dx.doi.org/10.1175/1520-0493(2000)128%3C2935:BFWASL%3E2.0.CO;2
+    """
+    def __init__(self, uv, output, c_s, h_elem_size, max_val, min_val=1e-10,
+                 weak_form=True, solver_parameters=None):
+        """
+        :arg uv_3d: horizontal velocity
+        :type uv_3d: 3D vector :class:`Function`
+        :arg output: Smagorinsky viscosity field
+        :type output: 3D scalar :class:`Function`
+        :arg c_s: Smagorinsky coefficient
+        :type c_s: float or :class:`Constant`
+        :arg h_elem_size: field that defines the horizontal element size
+        :type h_elem_size: 3D scalar :class:`Function` or :class:`Constant`
+        :arg float max_val: Maximum allowed viscosity. Viscosity will be clipped at
+            this value.
+        :kwarg float min_val: Minimum allowed viscosity. Viscosity will be clipped at
+            this value.
+        :kwarg bool weak_form: Compute velocity shear by integrating by parts.
+            Necessary for some function spaces (e.g. P0).
+        :kwarg dict solver_parameters: PETSc solver options
+        """
+        if solver_parameters is None:
+            solver_parameters = {}
+        solver_parameters.setdefault('ksp_atol', 1e-12)
+        solver_parameters.setdefault('ksp_rtol', 1e-16)
+#        assert max_val.function_space() == output.function_space(), \
+#            'max_val function must belong to the same space as output'
+        self.max_val = max_val
+        self.min_val = min_val
+        self.output = output
+        self.weak_form = weak_form
+
+        if self.weak_form:
+            # solve grad(u) weakly
+            mesh = output.function_space().mesh()
+            fs_grad = get_functionspace(mesh, 'DP', 1, 'DP', 1, vector=True, dim=4)
+            self.grad = Function(fs_grad, name='uv_grad')
+
+            tri_grad = TrialFunction(fs_grad)
+            test_grad = TestFunction(fs_grad)
+
+            normal = FacetNormal(mesh)
+            a = inner(tri_grad, test_grad)*dx
+
+            rhs_terms = []
+            for iuv in range(2):
+                for ix in range(2):
+                    i = 2*iuv + ix
+                    vol_term = -inner(Dx(test_grad[i], ix), uv[iuv])*dx
+                    int_term = inner(avg(uv[iuv]), jump(test_grad[i], normal[ix]))*dS_v
+                    ext_term = inner(uv[iuv], test_grad[i]*normal[ix])*ds_v
+                    rhs_terms.extend([vol_term, int_term, ext_term])
+            l = sum(rhs_terms)
+            prob = LinearVariationalProblem(a, l, self.grad)
+            self.weak_grad_solver = LinearVariationalSolver(prob, solver_parameters=solver_parameters)
+
+            # rate of strain tensor
+            d_t = self.grad[0] - self.grad[3]
+            d_s = self.grad[1] + self.grad[2]
+        else:
+            # rate of strain tensor
+            d_t = Dx(uv[0], 0) - Dx(uv[1], 1)
+            d_s = Dx(uv[0], 1) + Dx(uv[1], 0)
+
+        fs = output.function_space()
+        tri = TrialFunction(fs)
+        test = TestFunction(fs)
+
+        nu = c_s**2*h_elem_size**2 * sqrt(d_t**2 + d_s**2)
+
+        a = test*tri*dx
+        l = test*nu*dx
+        self.prob = LinearVariationalProblem(a, l, output)
+        self.solver = LinearVariationalSolver(self.prob, solver_parameters=solver_parameters)
+
+    def solve(self):
+        """Compute viscosity"""
+        if self.weak_form:
+            self.weak_grad_solver.solve()
+        self.solver.solve()
+        # remove negative values
+        ix = self.output.dat.data < self.min_val
+        self.output.dat.data[ix] = self.min_val
+
+        # crop too large values
+        ix = self.output.dat.data > self.max_val #.dat.data
+        self.output.dat.data[ix] = self.max_val #.dat.data[ix]
+
+
+smag_solver_parameters = {
+        'snes_monitor': None,
+        'snes_type': 'ksponly',
+        'ksp_type': 'gmres',
+        'pc_type': 'sor',
+        'ksp_converged_reason': None,
+#        'ksp_monitor_true_residual': None,
+        'ksp_rtol': 1e-5,
+        'ksp_max_it': 300,
+        }
 
 # set Viscosity/diffusivity (m^2/s)
-mu_h = Constant(6.0)
-mu_v = Constant(1e-3)
-kappa_h = Constant(1.0)
-kappa_v = Constant(5e-5)
+mu_h = Constant(args.mu_h)
+mu_v = Constant(args.mu_v)
+kappa_h = Constant(args.Kh)
+kappa_v = Constant(args.Kv)
 
-
+smag_visc = Function(P1_extruded)
+c_s = Constant(1./np.sqrt(2.))  # Grid Re = 2
+max_nu = 10 * 1.0 * dy / 2.0  # 10x U dx / 2 to have grid reynolds 
+smag_visc_solver = SmagorinskyViscosity(v_, smag_visc, c_s, Constant(dy), max_nu, solver_parameters=smag_solver_parameters)
+smag_visc_solver.solve()
 #kappa_v = Function(P1_extruded) 
 DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinity over restoring region
 gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude estimate for vertical gradient of density anomaly. units m^-1
 #kappa_v.assign(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1))
+
+step_ice_transition = conditional(x - 2.0 * dy > shelf_length, 1.0,
+				conditional(x + 2.0 * dy < shelf_length, 1.0, 0.0))
 
 mu = as_tensor([[mu_h, 0, 0], [0, mu_h, 0], [0, 0, mu_v]])
 kappa = as_tensor([[kappa_h, 0, 0], [0, kappa_h, 0], [0, 0, kappa_v]])
@@ -652,7 +826,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul/"
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul_from96days/" #_smagviscmax"+str(max_nu)+"_officeshelf/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -689,6 +863,8 @@ rho_file.write(rho)
 rhograd_file = File(folder+"density_anomaly_grad.pvd")
 rhograd_file.write(gradrho)
 
+smag_visc_file = File(folder+"smag_visc.pvd")
+smag_visc_file.write(smag_visc)
 #kappav_file = File(folder+"kappav.pvd")
 #kappav_file.write(kappa_v)
 ##########
@@ -736,7 +912,7 @@ w_comp = Function(S)
 t = 0.0
 step = 0
 if DUMP:
-    t += 80*24*3600.  # add 80 days to the start
+    t += 96*24*3600.  # add days to the start
     step += int(t / dt)
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
@@ -760,7 +936,7 @@ while t < T - 0.5*dt:
     rho_anomaly_projector.project()
     gradrho_projector.project()
     #kappa_v_projector.project()
-    
+    smag_visc_solver.solve()
     step += 1
     t += dt
 
@@ -799,6 +975,7 @@ while t < T - 0.5*dt:
            rho_file.write(rho)
                
            rhograd_file.write(gradrho)
+           smag_visc_file.write(smag_visc)
 #          kappav_file.write(kappa_v)
           # Write melt rate functions
            m_file.write(melt)
