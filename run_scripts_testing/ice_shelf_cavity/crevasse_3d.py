@@ -302,7 +302,7 @@ ice_drag = 0.0097
 
 vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary}, 
         3: {'un': -0.025}, 1: {'un': no_normal_flow, 'drag': 2.5e-3},
-        5: {'un': no_normal_flow, 'drag': 2.5e-3}, 6: {'un': no_normal_flow, 'drag': 2.5e-3},}
+        5: {'un': no_normal_flow}, 6: {'un': no_normal_flow},}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
 temp_bcs = {4: {'flux': -mp.T_flux_bc}, 3:{'q': T_restore}}
@@ -364,11 +364,34 @@ pressure_projection_solver_parameters = {
             },
         }
 
+predictor_solver_parameters = {
+        'snes_monitor': None,
+        'snes_type': 'ksponly',
+        'ksp_type': 'gmres',
+#        'pc_type': 'gamg',
+        'pc_type': 'hypre',
+#        'pc_hypre_boomeramg_strong_threshold': 0.6,
+        'ksp_converged_reason': None,
+#        'ksp_monitor_true_residual': None,
+        'ksp_rtol': 1e-5,
+        'ksp_max_it': 300,
+        }
+
+gmres_solver_parameters = {
+        'snes_monitor': None,
+        'snes_type': 'ksponly',
+        'ksp_type': 'gmres',
+        'pc_type': 'sor',
+        'ksp_converged_reason': None,
+#        'ksp_monitor_true_residual': None,
+        'ksp_rtol': 1e-5,
+        'ksp_max_it': 300,
+        }
 vp_solver_parameters = pressure_projection_solver_parameters
 u_solver_parameters = mumps_solver_parameters
-temp_solver_parameters = mumps_solver_parameters
-sal_solver_parameters = mumps_solver_parameters
-frazil_solver_parameters = mumps_solver_parameters
+temp_solver_parameters = gmres_solver_parameters
+sal_solver_parameters = gmres_solver_parameters
+frazil_solver_parameters = gmres_solver_parameters
 
 ##########
 
@@ -440,7 +463,7 @@ output_step = output_dt/dt
 
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
-                                                          predictor_solver_parameters=u_solver_parameters,
+                                                          predictor_solver_parameters=predictor_solver_parameters,
                                                           picard_iterations=1)
 
 # performs pseudo timestep to get good initial pressure
@@ -461,7 +484,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/3d_crevasse/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_3d_isotropicdx10to25m_open_0.025inflow_qice0_400mdepth_frazil_sharpmesh_50m_wide_direct/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_3d_isotropicdx10to25m_open_0.025inflow_qice0_400mdepth_frazil_sharpmesh_50m_wide_iterative_nodragside/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
