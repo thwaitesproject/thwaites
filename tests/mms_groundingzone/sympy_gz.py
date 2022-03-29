@@ -1,19 +1,23 @@
 from sympy import *
 import numpy as np
-x, y, t, kappa, mu, p, H2, depth, L = symbols('x y t kappa mu p H2 depth L')
+x, y, t, kappa, mu_h, mu_v, p, H2, depth, L, g, beta_temp, beta_sal, T_ref, S_ref = symbols('x y t kappa mu_h mu_v p H2 depth L g beta_temp beta_sal T_ref S_ref')
 
 print("-----------")
 
 arg = - np.pi / H2 * (y + depth - H2)
 u =  x / L * cos(arg)
 v = (H2 / np.pi) * sin(arg) / L
+#u =  pow(x,2) / L**2 * cos(arg)
+#v = 2*x *(H2 / np.pi) * sin(arg) / L**2
 #p = cos(np.pi / L * (x + L)) - cos(- np.pi / H2 * (y + depth - H2))
 #p = x**2 / (2*L) * sin(arg)  + H2 / (2 * np.pi * L) * y
 #u = sin(np.pi * x / (2*L)) * sin(-2 * np.pi / H2 * (y + depth - H2)) 
 #v = - np.pi/(2*L) * cos(np.pi * x / (2*L)) * (H2/(2*np.pi) *cos(-2 * np.pi / H2 * (y + depth - H2)) - H2/(2*np.pi)) 
 #p = -2 *L / np.pi * cos(np.pi * x / (2*L)) * (H2/(2*np.pi)*sin(-2 * np.pi / H2 * (y + depth - H2))-y*H2/(2*np.pi))
-pint = x / L * sin(arg) * sin(-2 * np.pi / H2 * (y + depth - H2)) 
-p = pint -  sin(-2 * np.pi / H2 * (y + depth - H2)) * sin(-2 * np.pi / H2 * (y + depth - H2))
+#pint = x / L * sin(arg) * sin(-2 * np.pi / H2 * (y + depth - H2)) 
+#p = pint -  sin(-2 * np.pi / H2 * (y + depth - H2)) * sin(-2 * np.pi / H2 * (y + depth - H2))
+
+p = -( 2*L / np.pi ) * cos(0.5 * np.pi * x / L) * cos(arg) #cos(arg) * cos(np.pi * x / L)
 
 #p = 2.0 
 print("dudx", diff(u,x) )
@@ -53,19 +57,59 @@ print("p at -975m (x=25): ", p.subs([(depth, 1000), (H2, 100), (y, -975), (L,100
 print("p at -975m (x=75): ", p.subs([(depth, 1000), (H2, 100), (y, -975), (L,100), (x, 75)]))
 print("p at -975m (x=100): ", p.subs([(depth, 1000), (H2, 100), (y, -975), (L,100), (x, 100)]))
 
-u_source = diff(u, t) + u * diff(u, x) + v * diff(u, y)  - mu * (diff(u, x, 2)  + diff(u, y, 2)) #+ diff(p, x)
-v_source = diff(v, t) + u * diff(v, x) + v * diff(v, y)  - mu * (diff(v, x, 2)  + diff(v, y, 2)) #+ diff(p, y)
+
+print("dp/dx at (x=0): ", diff(p,x).subs([(depth, 1000), (H2, 100), (y, -975), (L,100), (x, 0)]))
+print("dp/dx at (x=100): ", diff(p,x).subs([(depth, 1000), (H2, 100), (y, -975), (L,100), (x, 100)]))
+
+
+print("dp/dy at (y=-1000): ", diff(p,y).subs([(depth, 1000), (H2, 100), (y, 1000), (L,100), (x, 0)]))
+print("dp/dy at (y=-900): ", diff(p,y).subs([(depth, 1000), (H2, 100), (y, -900), (L,100), (x, 100)]))
+
+# y = -900 T = -0.5
+# y = -910 T = 0.0
+# y = -1000 T = 1
+depths = [-900, -910, -1000]
+temperature = [-0.5, 0.0, 1]
+p_temperature = np.polyfit(depths, temperature, 2) 
+print("p = ", p_temperature)
+
+salinity = [33.8,34.0, 34.5]
+p_salt = np.polyfit(depths, salinity, 2) 
+print("p salt = ", p_salt)
+print(type(p_salt[0]))
+
+
+T =  0.1*sin(4*np.pi*x/L) + p_temperature[0]*Pow(y,2) + p_temperature[1]*y + p_temperature[2]
+S = 0.01* 34.5 * cos(4*np.pi*x/L)  +  p_salt[0]*Pow(y,2) + p_salt[1]*y + p_salt[2]
+
+
+
+print("temp at -975m (x=100): ", T.subs([(depth, 1000), (H2, 100), (y, -900), (L,100), (x, 100)]))
+
+u_source = diff(u, t) + u * diff(u, x) + v * diff(u, y)  - mu_h * diff(u, x, 2)  - mu_v * diff(u, y, 2) # + diff(p, x)
+v_source = diff(v, t) + u * diff(v, x) + v * diff(v, y)  - mu_h * diff(v, x, 2)  - mu_v * diff(v, y, 2) #+ diff(p,y) #+ g*(-beta_temp*(T - T_ref) + beta_sal * (S - S_ref)) #+ diff(p, y)
 
 print("u_source:", u_source)
 print("v_source:", v_source)
 
-T =  sin(25*x*y) - 2*y / sqrt(x)
-S =  30 + cos(25*x*y) - 2*y / sqrt(x)
 
 T_source = diff(T, t) + u * diff(T, x) + v * diff(T, y)  - kappa * (diff(T, x, 2)  + diff(T, y, 2))
 S_source = diff(S, t) + u * diff(S, x) + v * diff(S, y)  - kappa * (diff(S, x, 2)  + diff(S, y, 2))
 print("T_source:", T_source)
 print("S_source:", S_source)
+print()
+
+
+#print("old sources for just temp/sal")
+
+
+#T =  sin(25*x*y) - 2*y / sqrt(x)
+#S =  30 + cos(25*x*y) - 2*y / sqrt(x)
+#
+#T_source = diff(T, t) + u * diff(T, x) + v * diff(T, y)  - kappa * (diff(T, x, 2)  + diff(T, y, 2))
+#S_source = diff(S, t) + u * diff(S, x) + v * diff(S, y)  - kappa * (diff(S, x, 2)  + diff(S, y, 2))
+#print("T_source:", T_source)
+#print("S_source:", S_source)
 
 print("-----------")
 
