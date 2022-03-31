@@ -15,16 +15,19 @@ H2 = 100
 horizontal_stretching = 1
 L = 100 * horizontal_stretching
 depth = 1000
-cells = [10,20,40, 80]  # i.e 10x10, 20x20, 40x40, 80x80
-meshes = ["verification_unstructured_100m_square_res10m.msh",
-        "verification_unstructured_100m_square_res5m.msh", 
-        "verification_unstructured_100m_square_res2.5m.msh", 
-        "verification_unstructured_100m_square_res1.25m.msh"]
+cells = [40, 80]  # i.e 10x10, 20x20, 40x40, 80x80
+#meshes = ["verification_unstructured_100m_square_res10m.msh",
+#        "verification_unstructured_100m_square_res5m.msh", 
+#        "verification_unstructured_100m_square_res2.5m.msh", 
+#        "verification_unstructured_100m_square_res1.25m.msh"]
 
+meshes = ["verification_unstructured_100m_square_res2.5m.msh", 
+        "verification_unstructured_100m_square_res1.25m.msh"]
 def error(mesh_name, nx):
     dx = L/nx
     dz = H2/nx
     mesh = Mesh(mesh_name)
+#    mesh = SquareMesh(nx, nx, L)
     mesh.coordinates.dat.data[:,1] -= depth
     mesh.coordinates.dat.data[:,0] *= horizontal_stretching
     print(mesh.coordinates.dat.data[:,0].min())
@@ -46,8 +49,8 @@ def error(mesh_name, nx):
     arg = - np.pi / H2 * (y + depth - H2)
     u_ana =  x / L * cos(arg)
     v_ana = (H2 / np.pi) * sin(arg) / L
-    p_ana = Constant(0.0)
-    #p_ana = cos(arg) * cos(np.pi * x / L) 
+    #p_ana = Constant(0.0)
+    p_ana = cos(arg) * cos(np.pi * x / L) 
 #    p_ana = -(2*L/np.pi)*cos(0.5*np.pi * x / L)*cos(arg) 
     vel_ana = as_vector((u_ana,v_ana))
     vel_ana_f = Function(U, name='vel analytical').project(vel_ana)
@@ -56,7 +59,7 @@ def error(mesh_name, nx):
 
     p_ana_f = Function(W, name='p analytical').project(p_ana)
      
-#    p_.assign(0)
+    p_.interpolate(p_ana + 0.1*p_ana)
     pavg = assemble(p_*dx) / (L * H2)
     
 #    area = assemble(1.0*dx(domain=mesh))
@@ -64,19 +67,19 @@ def error(mesh_name, nx):
     mu_v = Constant(1)
     #mu = as_tensor([[mu_h, 0], [0, mu_v]])
     ramp = Constant(0.0)
-    u_source =  1.0*x*sin(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + x*cos(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + 9.86960440108936*mu_v*x*cos(3.14159265358979*(-H2 + depth + y)/H2)/(H2**2*L)
-    v_source = 0.318309886183791*H2*sin(3.14159265358979*(-H2 + depth + y)/H2)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L**2 - 3.14159265358979*mu_v*sin(3.14159265358979*(-H2 + depth + y)/H2)/(H2*L) 
+    u_source =  -3.14159265358979*sin(3.14159265358979*x/L)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L + 1.0*x*sin(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + x*cos(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + 9.86960440108936*mu_v*x*cos(3.14159265358979*(-H2 + depth + y)/H2)/(H2**2*L)
+    v_source = 0.318309886183791*H2*sin(3.14159265358979*(-H2 + depth + y)/H2)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L**2 - 3.14159265358979*sin(3.14159265358979*(-H2 + depth + y)/H2)*cos(3.14159265358979*x/L)/H2 - 3.14159265358979*mu_v*sin(3.14159265358979*(-H2 + depth + y)/H2)/(H2*L)
     vel_source = as_vector((u_source, v_source))
     
     # We declare the output filename, and write out the initial condition. ::
-    vel_outfile = File("vel_gz_mms_L"+str(L)+"m_nx"+str(nx)+"_constdt1_scaleMuh1_zerop.pvd")
+    vel_outfile = File("vel_gz_mms_L"+str(L)+"m_nx"+str(nx)+"_constdt100_scaleMuh1_cosp_p10percent_noinitp_noavg_whileorp1e-4_2pic_pavg_udiff1e-8.pvd")
     vel_outfile.write(vel_, vel_ana_f)
-    p_outfile = File("p_gz_mms_L"+str(L)+"m_nx"+str(nx)+"_constdt1_scaleMuh1_zerop_rhs_exactvelinit_noinitp_whileorp1e-6.pvd")
+    p_outfile = File("p_gz_mms_L"+str(L)+"m_nx"+str(nx)+"_constdt100_scaleMuh1_cosp_p10percent_noinitp_noavg_whileorp1e-4_2pic_pavg_udiff1e-8.pvd")
     p_outfile.write(p_, p_ana_f)
 
     # a big timestep, which means BackwardEuler takes us to a steady state almost immediately
     # (needs to be smaller at polynomial_degree>0, 0.1/nx works for p=1 for 4 meshes)
-    dt = Constant(1/nx)
+    dt = Constant(100)
 
     # Set up equations
     mom_eq = MomentumEquation(M.sub(0), M.sub(0))
@@ -145,10 +148,10 @@ def error(mesh_name, nx):
     vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=mumps_solver_parameters,
                                                          predictor_solver_parameters=mumps_solver_parameters,
-                                                         picard_iterations=1,
+                                                         picard_iterations=2,
                                                           pressure_nullspace=VectorSpaceBasis(constant=True))
-    vp_timestepper.initialize_pressure()
-    vp_timestepper.dt_const.assign(1) #*L/nx)
+#    vp_timestepper.initialize_pressure()
+#    vp_timestepper.dt_const.assign(10) #*L/nx)
     vel_old, p_old = vp_timestepper.solution_old.split()
     u_prev = Function(V, name='u_old')
     v_prev = Function(V, name='v_old')
@@ -163,7 +166,7 @@ def error(mesh_name, nx):
     u_change = 1.0
     v_change = 1.0
     p_change = 1.0
-    while (u_change>1e-6) and  (v_change>1e-6) and (p_change>1e-6): 
+    while (u_change>1e-8) or (v_change>1e-8) or (p_change>1e-4): 
 
         u_prev.interpolate(vel_old[0])
         v_prev.interpolate(vel_old[1])
@@ -206,7 +209,7 @@ def error(mesh_name, nx):
     p_err = norm(p_ - p_ana)
     return u_err, v_err, p_err
 
-errors = np.array([error(meshes[i], cells[i]) for i in range(4)]) #10*2**np.arange(number_of_grids)])
+errors = np.array([error(meshes[i], cells[i]) for i in range(2)]) #10*2**np.arange(number_of_grids)])
 
 
 conv = np.log(errors[:-1]/errors[1:])/np.log(2)
