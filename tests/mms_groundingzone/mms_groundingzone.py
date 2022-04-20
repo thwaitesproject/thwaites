@@ -8,7 +8,7 @@ import numpy as np
 from math import ceil
 from firedrake import dx
 polynomial_order = 1
-number_of_grids =4 
+number_of_grids =4
 output_freq = 100
 H1 = 100
 H2 = 100
@@ -56,8 +56,8 @@ def error(mesh_name, nx):
      
     pavg = assemble(p_*dx) / (L * H2)
     
-    mu_h = Constant(1*horizontal_stretching)
-    mu_v = Constant(1)
+    mu_h = Constant(0.1*L/nx*horizontal_stretching)
+    mu_v = Constant(0.1*H2/nx)
     mu = as_tensor([[mu_h, 0], [0, mu_v]])
     ramp = Constant(0.0)
     u_source =  -3.14159265358979*sin(3.14159265358979*x/L)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L + 1.0*x*sin(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + x*cos(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + 9.86960440108936*mu_v*x*cos(3.14159265358979*(-H2 + depth + y)/H2)/(H2**2*L)
@@ -186,7 +186,7 @@ def error(mesh_name, nx):
     p_err = norm(p_ - p_ana)
     return u_err, v_err, p_err
 
-errors = np.array([error(meshes[i], cells[i]) for i in range(4)]) 
+errors = np.array([error(m, c) for m, c in zip(meshes, cells)])
 
 
 conv = np.log(errors[:-1]/errors[1:])/np.log(2)
