@@ -18,13 +18,13 @@ depth = 1000
 cells = [10, 20, 40, 80]  # i.e 10x10, 20x20, 40x40, 80x80
 meshes = ["verification_unstructured_100m_square_res10m.msh",
         "verification_unstructured_100m_square_res5m.msh", 
-        "verification_unstructured_100m_square_res2.5m.msh", 
+        "verification_unstructured_100m_square_res2.5m.msh",
         "verification_unstructured_100m_square_res1.25m.msh"]
 
 def error(mesh_name, nx):
-    dx = L/nx
+    dx_grid = L/nx
     dz = H2/nx
-    mesh = Mesh(mesh_name)
+#    mesh = Mesh(mesh_name)
     mesh = SquareMesh(nx, nx, L)
     mesh.coordinates.dat.data[:,1] -= depth
     mesh.coordinates.dat.data[:,0] *= horizontal_stretching
@@ -56,8 +56,8 @@ def error(mesh_name, nx):
      
     pavg = assemble(p_*dx) / (L * H2)
     
-    mu_h = Constant(0.1*L/nx*horizontal_stretching)
-    mu_v = Constant(0.1*H2/nx)
+    mu_h = Constant(1*horizontal_stretching)
+    mu_v = Constant(1)
     mu = as_tensor([[mu_h, 0], [0, mu_v]])
     ramp = Constant(0.0)
     u_source =  -3.14159265358979*sin(3.14159265358979*x/L)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L + 1.0*x*sin(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + x*cos(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + 9.86960440108936*mu_v*x*cos(3.14159265358979*(-H2 + depth + y)/H2)/(H2**2*L)
@@ -65,9 +65,9 @@ def error(mesh_name, nx):
     vel_source = as_vector((u_source, v_source))
     
     # We declare the output filename, and write out the initial condition. ::
-    vel_outfile = File("vel_gz_mms_L"+str(L)+"m_nx"+str(nx)+"_dt4overnx_100stepsdtLovernx_scaleMuh1_cosp_initzero_pavg_whileor_2pic_pudiff1e-6_backeul_Square.pvd")
+    vel_outfile = File("vel_gz_mms_L"+str(L)+"m_nx"+str(nx)+"_dt4overnx_100stepsdtLovernx_scaleMuh1_then0.1_cosp_initzero_pavg_whileor_2pic_pudiff1e-6_backeul_square.pvd")
     vel_outfile.write(vel_, vel_ana_f)
-    p_outfile = File("p_gz_mms_L"+str(L)+"m_nx"+str(nx)+"_constdt4overnx_100stepsdtLovernx_scaleMuh1_cosp_initzero_pavg_whileor_2pic_pudiff1e-6_back_eul_Square.pvd")
+    p_outfile = File("p_gz_mms_L"+str(L)+"m_nx"+str(nx)+"_constdt4overnx_100stepsdtLovernx_scaleMuh1_then0.1_cosp_initzero_pavg_whileor_2pic_pudiff1e-6_back_eul_square.pvd")
     p_outfile.write(p_, p_ana_f)
 
     # a big timestep, which means BackwardEuler takes us to a steady state almost immediately
@@ -173,6 +173,11 @@ def error(mesh_name, nx):
         if step == 100:
             vp_timestepper.dt_const.assign(L/nx)
             dt = L /nx
+
+        if step == 100 *int(nx/10):             
+            mu_h.assign(0.1*horizontal_stretching)
+            mu_v.assign(0.1)
+
         if step % output_freq == 0:
             vel_outfile.write(vel_, vel_ana_f)
             p_outfile.write(p_, p_ana_f)
