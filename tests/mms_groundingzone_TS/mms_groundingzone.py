@@ -27,7 +27,7 @@ meshes = ["verification_unstructured_100m_square_res10m.msh",
         "verification_unstructured_100m_square_res1.25m.msh"]
 print(depth)
 def error(mesh_name, nx):
-    dx = L/nx
+    dx_grid = L/nx
     depth = 1000
     dz = H2/nx
     print(type(depth))
@@ -46,7 +46,6 @@ def error(mesh_name, nx):
     M = MixedFunctionSpace([U, W])
     # set up prescribed velocity and diffusivity
     x, y = SpatialCoordinate(mesh)
-    print(type(y))
     m = Function(M)
     vel_, p_ = m.split()  # function: y component of velocity, pressure
     vel, p = split(m)  # expression: y component of velocity, pressure
@@ -61,18 +60,15 @@ def error(mesh_name, nx):
     v_ana = (H2 / np.pi) * sin(arg) / L
     vel_ana = as_vector((u_ana,v_ana))
     vel_ana_f = Function(U, name='vel analytical').project(vel_ana)
-    vel_.interpolate(vel_ana - 0.01*vel_ana)
-    #vel_.interpolate(vel_ana)
+    vel_.interpolate(vel_init)
 
-    #p_ana = -cos(np.pi * x / L) + cos(arg) 
-    p_ana = Constant(0) 
+    p_ana = cos(np.pi * x / L) * cos(arg) 
     p_ana_f = Function(W, name='p analytical').project(p_ana)
-    p_.assign(0.0)
     mu_h = Constant(1*horizontal_stretching)
     mu_v = Constant(1)
     mu = as_tensor([[mu_h, 0], [0, mu_v]])
-    u_source = 1.0*x*sin(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + x*cos(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + 9.86960440108936*mu_v*x*cos(3.14159265358979*(-H2 + depth + y)/H2)/(H2**2*L) 
-    v_source =  0.318309886183791*H2*sin(3.14159265358979*(-H2 + depth + y)/H2)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L**2 + g*(beta_sal*(-S_ref - 0.000144444444444565*y**2 - 0.281444444444675*y + 0.345*cos(12.5663706143592*x/L) - 102.50000000011) - beta_temp*(-T_ref - 0.00038888888888923*y**2 - 0.753888888889541*y + 0.1*sin(12.5663706143592*x/L) - 364.00000000031)) - 3.14159265358979*mu_v*sin(3.14159265358979*(-H2 + depth + y)/H2)/(H2*L) 
+    u_source = -3.14159265358979*sin(3.14159265358979*x/L)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L + 1.0*x*sin(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + x*cos(3.14159265358979*(-H2 + depth + y)/H2)**2/L**2 + 9.86960440108936*mu_v*x*cos(3.14159265358979*(-H2 + depth + y)/H2)/(H2**2*L) 
+    v_source =  0.318309886183791*H2*sin(3.14159265358979*(-H2 + depth + y)/H2)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L**2 + g*(beta_sal*(-S_ref - 0.000144444444444565*y**2 - 0.281444444444675*y + 0.345*cos(12.5663706143592*x/L) - 102.50000000011) - beta_temp*(-T_ref - 0.00038888888888923*y**2 - 0.753888888889541*y + 0.1*sin(12.5663706143592*x/L) - 364.00000000031)) - 3.14159265358979*sin(3.14159265358979*(-H2 + depth + y)/H2)*cos(3.14159265358979*x/L)/H2 - 3.14159265358979*mu_v*sin(3.14159265358979*(-H2 + depth + y)/H2)/(H2*L) 
    
     vel_source = as_vector((u_source, v_source))
     
@@ -89,9 +85,9 @@ def error(mesh_name, nx):
     print("p salt = ", p_salt)
     depth = 1000
     temp_ana =  0.1*sin(4*np.pi*x/L) + p_temperature[0]*pow(y,2) + p_temperature[1]*y + p_temperature[2]
-    temp_ana_f = Function(V, name='temp analytical').project(temp_ana + 0.01*temp_ana)
+    temp_ana_f = Function(V, name='temp analytical').project(temp_ana)
     sal_ana  = 0.01* 34.5 * cos(4*np.pi*x/L) + p_salt[0]*pow(y,2) + p_salt[1]*y + p_salt[2]
-    sal_ana_f = Function(V, name='sal analytical').project(sal_ana+0.01*sal_ana)
+    sal_ana_f = Function(V, name='sal analytical').project(sal_ana)
     print("type H2" , type(H2))
     print("type kappa" , type(kappa))
     print("type L" , type(L))
@@ -100,26 +96,26 @@ def error(mesh_name, nx):
 
     sal_source = -0.318309886183791*H2*(-0.000288888888889131*y - 0.281444444444675)*sin(3.14159265358979*(-H2 + depth + y)/H2)/L - kappa*(-0.000288888888889131 - 54.4802162940133*cos(12.5663706143592*x/L)/L**2) - 4.33539786195391*x*sin(12.5663706143592*x/L)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L**2 
 
-    temp = Function(V, name='temperature').interpolate(temp_ana) #+ 0.01*temp_ana)
-    sal = Function(V, name='salinity').interpolate(sal_ana) # + 0.01*sal_ana) # Initialising salinity with zero leads to nans, probably because messes up the melt rate with S<0.
+    temp = Function(V, name='temperature').assign(0) 
+    sal = Function(V, name='salinity').assign(34.5)  # Initialising salinity with zero leads to nans, probably because messes up the melt rate with S<0.
     
     mom_source = as_vector((0.,-g))*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) 
     
     melt = Function(V, name='melt')
     
     # We declare the output filename, and write out the initial condition. ::
-    vel_outfile = File("vel_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_staticTS.pvd")
+    vel_outfile = File("vel_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt.pvd")
     vel_outfile.write(vel_, vel_ana_f)
-    p_outfile = File("p_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_staticTS.pvd")
+    p_outfile = File("p_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt.pvd")
     p_outfile.write(p_, p_ana_f)
-    temp_outfile = File("temp_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_staticTS.pvd")
+    temp_outfile = File("temp_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt.pvd")
     temp_outfile.write(temp, temp_ana_f)
-    sal_outfile = File("sal_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_staticTS.pvd")
+    sal_outfile = File("sal_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt.pvd")
     sal_outfile.write(sal, sal_ana_f)
 
     # a big timestep, which means BackwardEuler takes us to a steady state almost immediately
     # (needs to be smaller at polynomial_degree>0, 0.1/nx works for p=1 for 4 meshes)
-    dt = Constant(L/nx)
+    dt = Constant(4/nx)
 
     # Set up equations
     mom_eq = MomentumEquation(M.sub(0), M.sub(0))
@@ -191,7 +187,7 @@ def error(mesh_name, nx):
                 'snes_type': 'ksponly',
             })
 
-#    vp_timestepper.dt_const.assign(0.6*L/nx)
+    vp_timestepper.initialize_pressure()
     v_old, p_old = vp_timestepper.solution_old.split()
     u_prev = Function(V, name='u_old')
     v_prev = Function(V, name='v_old')
@@ -213,7 +209,7 @@ def error(mesh_name, nx):
     v_change = 1.0
     p_change = 1.0
     #while (vel_change>1e-9) and (p_change>1e-9): #(sal_change > 1e-9) and (temp_change>1e-9) and (vel_change >1e-9:
-    while (u_change> 1e-6) or (v_change>1e-6) or (p_change>1e-6): # or (sal_change>1e-6) or  (temp_change>1e-6): 
+    while (u_change> 1e-6) or (v_change>1e-6) or (p_change>1e-6) or (sal_change>1e-6) or  (temp_change>1e-6): 
 
         u_prev.interpolate(v_old[0])
         v_prev.interpolate(v_old[1])
@@ -231,6 +227,17 @@ def error(mesh_name, nx):
         p_change = norm(p_- p_prev)
         temp_change = norm(temp-temp_prev)
         sal_change = norm(sal-sal_prev)
+        
+        if step == 100:
+            vp_timestepper.dt_const.assign(L/nx)
+            temp_timestepper.dt_const.assign(L/nx)
+            sal_timestepper.dt_const.assign(L/nx)
+            dt = L /nx
+            
+#        if step == 1*100 *int(nx/10):             
+#            mu_h.assign(0.1*horizontal_stretching)
+#            mu_v.assign(0.1)
+        
         if step % output_freq == 0:
             temp_outfile.write(temp, temp_ana_f)
             sal_outfile.write(sal, sal_ana_f)
@@ -239,6 +246,9 @@ def error(mesh_name, nx):
             print("t, temp/sal change =", t, temp_change, sal_change)
             print("t, u/v/p change: ", t, u_change, v_change, p_change)
 
+    
+    pavg = assemble(p_*dx)/ (L*H2) #assemble(Constant(1.0, domain=mesh)*dx)
+    p_.interpolate(p_ - pavg)
     
     u_err = norm(vel_[0]-u_ana)
     v_err = norm(vel_[1]-v_ana)
@@ -256,7 +266,7 @@ def error(mesh_name, nx):
     integrated_melt_err = abs(integrated_melt - integrated_melt_ana)
     return temp_err, sal_err, melt_err, integrated_melt_err, u_err, v_err, p_err
 
-errors = np.array([error(meshes[i], cells[i]) for i in range(4)]) #10*2**np.arange(number_of_grids)])
+errors = np.array([error(m, c) for m, c in zip(meshes, cells)]) #10*2**np.arange(number_of_grids)])
 conv = np.log(errors[:-1]/errors[1:])/np.log(2)
 
 print('Temperature errors: ', errors[:,0])
@@ -276,3 +286,8 @@ print('V velocity convergence order:', conv[:,5])
 print('Pressure convergence order:', conv[:,6])
 assert all(conv[:,0]> polynomial_order+0.95)
 assert all(conv[:,1]> polynomial_order+0.95)
+assert all(conv[:,2]> polynomial_order+0.95)
+assert all(conv[:,3]> polynomial_order+0.95)
+assert all(conv[:,4]> polynomial_order+0.95)
+assert all(conv[:,5]> polynomial_order+0.95)
+assert all(conv[:,6]> polynomial_order+0.95)
