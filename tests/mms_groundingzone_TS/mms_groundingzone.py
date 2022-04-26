@@ -20,7 +20,7 @@ S_ref = Constant(34.2)
 beta_temp = Constant(3.733E-5)
 beta_sal = Constant(7.843E-4)
 depth = 1000
-cells = [10,20,40,80]  # i.e 10x10, 20x20, 40x40, 80x80
+cells = [10,20, 40, 80]  # i.e 10x10, 20x20, 40x40, 80x80
 meshes = ["verification_unstructured_100m_square_res10m.msh",
         "verification_unstructured_100m_square_res5m.msh", 
         "verification_unstructured_100m_square_res2.5m.msh", 
@@ -32,6 +32,7 @@ def error(mesh_name, nx):
     dz = H2/nx
     print(type(depth))
     mesh = Mesh(mesh_name)
+#    mesh = SquareMesh(nx, nx, 100)
     mesh.coordinates.dat.data[:,1] -= depth
     mesh.coordinates.dat.data[:,0] *= horizontal_stretching
     print(mesh.coordinates.dat.data[:,0].min())
@@ -73,7 +74,10 @@ def error(mesh_name, nx):
     vel_source = as_vector((u_source, v_source))
     
     # the diffusivity
-    kappa = Constant(1)
+#    kappa = Constant(1)
+    kappa_h = Constant(1*horizontal_stretching)
+    kappa_v = Constant(1)
+    kappa = as_tensor([[mu_h, 0], [0, mu_v]])
 
     depths = [-900, -910, -1000]
     temperature = [-0.5, 0.0, 1]
@@ -92,9 +96,8 @@ def error(mesh_name, nx):
     print("type kappa" , type(kappa))
     print("type L" , type(L))
 
-    temp_source =  -0.318309886183791*H2*(-0.000777777777778461*y - 0.753888888889541)*sin(3.14159265358979*(-H2 + depth + y)/H2)/L - kappa*(-0.000777777777778461 - 15.791367041743*sin(12.5663706143592*x/L)/L**2) + 1.25663706143592*x*cos(3.14159265358979*(-H2 + depth + y)/H2)*cos(12.5663706143592*x/L)/L**2
-
-    sal_source = -0.318309886183791*H2*(-0.000288888888889131*y - 0.281444444444675)*sin(3.14159265358979*(-H2 + depth + y)/H2)/L - kappa*(-0.000288888888889131 - 54.4802162940133*cos(12.5663706143592*x/L)/L**2) - 4.33539786195391*x*sin(12.5663706143592*x/L)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L**2 
+    temp_source =  -0.318309886183791*H2*(-0.000777777777778461*y - 0.753888888889541)*sin(3.14159265358979*(-H2 + depth + y)/H2)/L + 0.000777777777778461*kappa_v + 15.791367041743*kappa_h*sin(12.5663706143592*x/L)/L**2 + 1.25663706143592*x*cos(3.14159265358979*(-H2 + depth + y)/H2)*cos(12.5663706143592*x/L)/L**2
+    sal_source = -0.318309886183791*H2*(-0.000288888888889131*y - 0.281444444444675)*sin(3.14159265358979*(-H2 + depth + y)/H2)/L + 0.000288888888889131*kappa_v + 54.4802162940133*kappa_h*cos(12.5663706143592*x/L)/L**2 - 4.33539786195391*x*sin(12.5663706143592*x/L)*cos(3.14159265358979*(-H2 + depth + y)/H2)/L**2 
 
     temp = Function(V, name='temperature').assign(0) 
     sal = Function(V, name='salinity').assign(34.5)  # Initialising salinity with zero leads to nans, probably because messes up the melt rate with S<0.
@@ -104,13 +107,13 @@ def error(mesh_name, nx):
     melt = Function(V, name='melt')
     
     # We declare the output filename, and write out the initial condition. ::
-    vel_outfile = File("vel_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt.pvd")
+    vel_outfile = File("vel_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt_scalekappa_dt4overnx_1pic_square_density.pvd")
     vel_outfile.write(vel_, vel_ana_f)
-    p_outfile = File("p_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt.pvd")
+    p_outfile = File("p_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt_scalekappa_dt4overnx_1pic_square_density.pvd")
     p_outfile.write(p_, p_ana_f)
-    temp_outfile = File("temp_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt.pvd")
+    temp_outfile = File("temp_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt_scalekappa_dt4overnx_1pic_square_density.pvd")
     temp_outfile.write(temp, temp_ana_f)
-    sal_outfile = File("sal_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt.pvd")
+    sal_outfile = File("sal_gz_mms_TSmelt_L"+str(L)+"_nx"+str(nx)+"buoyancy_fromrest_fixmu1_updateTSdt_scalekappa_dt4overnx_1pic_square_density.pvd")
     sal_outfile.write(sal, sal_ana_f)
 
     # a big timestep, which means BackwardEuler takes us to a steady state almost immediately
@@ -141,8 +144,8 @@ def error(mesh_name, nx):
 
     S_flux_bc_sympy =  (-(-1.79109398044554e-9*y**2 - 3.47623225622948e-6*y - 0.001606428294557*(-1.19016244848201e-10*y**2 - 2.31898575538836e-7*y + 4.35093659764574e-6*(0.000759376404*y + 0.0832)*(-1.45888888889011e-7*y**2 - 0.000284258888889122*y + 0.00034845*cos(12.5663706143592*x/L) - 0.103525000000111) + (1.06954636059547e-6*y**2 + 0.00207547565184312*y - 0.000275011331425855*sin(12.5663706143592*x/L) - 1.38171291402741e-7*cos(12.5663706143592*x/L) + 1)**2 + 2.84265723271811e-7*cos(12.5663706143592*x/L) - 8.44557583634546e-5)**0.5 + 4.41785984126286e-7*sin(12.5663706143592*x/L) + 1.74446962272005e-7*cos(12.5663706143592*x/L) - 0.00165819079455705)/(0.00340227630891293*y**2 + 6.60218378571271*y + 3181.04612783564*(-1.19016244848201e-10*y**2 - 2.31898575538836e-7*y + 4.35093659764574e-6*(0.000759376404*y + 0.0832)*(-1.45888888889011e-7*y**2 - 0.000284258888889122*y + 0.00034845*cos(12.5663706143592*x/L) - 0.103525000000111) + (1.06954636059547e-6*y**2 + 0.00207547565184312*y - 0.000275011331425855*sin(12.5663706143592*x/L) - 1.38171291402741e-7*cos(12.5663706143592*x/L) + 1)**2 + 2.84265723271811e-7*cos(12.5663706143592*x/L) - 8.44557583634546e-5)**0.5 - 0.874823730943141*sin(12.5663706143592*x/L) - 0.00043952925149474*cos(12.5663706143592*x/L) + 3181.04612783564) - 5.05e-7)*(0.00354672075335749*y**2 + 6.88362823015738*y + 3181.04612783564*(-1.19016244848201e-10*y**2 - 2.31898575538836e-7*y + 4.35093659764574e-6*(0.000759376404*y + 0.0832)*(-1.45888888889011e-7*y**2 - 0.000284258888889122*y + 0.00034845*cos(12.5663706143592*x/L) - 0.103525000000111) + (1.06954636059547e-6*y**2 + 0.00207547565184312*y - 0.000275011331425855*sin(12.5663706143592*x/L) - 1.38171291402741e-7*cos(12.5663706143592*x/L) + 1)**2 + 2.84265723271811e-7*cos(12.5663706143592*x/L) - 8.44557583634546e-5)**0.5 - 0.874823730943141*sin(12.5663706143592*x/L) - 0.345439529251495*cos(12.5663706143592*x/L) + 3283.54612783575)
 
-    temp_melt_source =  kappa*dot(n, grad(temp_ana)) + T_flux_bc_sympy
-    sal_melt_source =  kappa*dot(n, grad(sal_ana)) + S_flux_bc_sympy
+    temp_melt_source =  kappa_v * dot(n, grad(temp_ana)) + T_flux_bc_sympy
+    sal_melt_source = kappa_v * dot(n, grad(sal_ana)) + S_flux_bc_sympy
     melt_ana =  (-1.79109398044554e-9*y**2 - 3.47623225622948e-6*y - 0.001606428294557*(-1.19016244848201e-10*y**2 - 2.31898575538836e-7*y + 4.35093659764574e-6*(0.000759376404*y + 0.0832)*(-1.45888888889011e-7*y**2 - 0.000284258888889122*y + 0.00034845*cos(12.5663706143592*x/L) - 0.103525000000111) + (1.06954636059547e-6*y**2 + 0.00207547565184312*y - 0.000275011331425855*sin(12.5663706143592*x/L) - 1.38171291402741e-7*cos(12.5663706143592*x/L) + 1)**2 + 2.84265723271811e-7*cos(12.5663706143592*x/L) - 8.44557583634546e-5)**0.5 + 4.41785984126286e-7*sin(12.5663706143592*x/L) + 1.74446962272005e-7*cos(12.5663706143592*x/L) - 0.00165819079455705)/(0.00340227630891293*y**2 + 6.60218378571271*y + 3181.04612783564*(-1.19016244848201e-10*y**2 - 2.31898575538836e-7*y + 4.35093659764574e-6*(0.000759376404*y + 0.0832)*(-1.45888888889011e-7*y**2 - 0.000284258888889122*y + 0.00034845*cos(12.5663706143592*x/L) - 0.103525000000111) + (1.06954636059547e-6*y**2 + 0.00207547565184312*y - 0.000275011331425855*sin(12.5663706143592*x/L) - 1.38171291402741e-7*cos(12.5663706143592*x/L) + 1)**2 + 2.84265723271811e-7*cos(12.5663706143592*x/L) - 8.44557583634546e-5)**0.5 - 0.874823730943141*sin(12.5663706143592*x/L) - 0.00043952925149474*cos(12.5663706143592*x/L) + 3181.04612783564)
 
     no_normal_flow = 0.0
@@ -151,13 +154,13 @@ def error(mesh_name, nx):
     
     temp_bcs = {
         left_id: {'q': temp_ana},
-        bottom_id: {'flux':  kappa*dot(n, grad(temp_ana))},
+        bottom_id: {'flux':  kappa_v*dot(n, grad(temp_ana))},
         right_id:  {'q': temp_ana},
         top_id: {'flux': -mp.T_flux_bc + temp_melt_source},
     }
     sal_bcs = {
         left_id: {'q': sal_ana},
-        bottom_id: {'flux':  kappa*dot(n, grad(sal_ana))},
+        bottom_id: {'flux':  kappa_v*dot(n, grad(sal_ana))},
         right_id:  {'q': sal_ana},
         top_id:  {'flux': -mp.S_flux_bc + sal_melt_source},
         } 
@@ -175,7 +178,7 @@ def error(mesh_name, nx):
     vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=mumps_solver_parameters,
                                                          predictor_solver_parameters=mumps_solver_parameters,
-                                                         picard_iterations=2,
+                                                         picard_iterations=1,
                                                           pressure_nullspace=VectorSpaceBasis(constant=True))
     
     temp_timestepper = BackwardEuler(temp_eq, temp, temp_fields, dt, temp_bcs, 
@@ -228,7 +231,7 @@ def error(mesh_name, nx):
         temp_change = norm(temp-temp_prev)
         sal_change = norm(sal-sal_prev)
         
-        if step == 100:
+        if step == 100: # * int(nx/10):
             vp_timestepper.dt_const.assign(L/nx)
             temp_timestepper.dt_const.assign(L/nx)
             sal_timestepper.dt_const.assign(L/nx)

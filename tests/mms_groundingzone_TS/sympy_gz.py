@@ -1,6 +1,6 @@
 from sympy import *
 import numpy as np
-x, y, t, kappa, mu_h, mu_v, p, H2, depth, L, g, beta_temp, beta_sal, T_ref, S_ref = symbols('x y t kappa mu_h mu_v p H2 depth L g beta_temp beta_sal T_ref S_ref')
+x, y, t, kappa_h, kappa_v, mu_h, mu_v, p, H2, depth, L, g, beta_temp, beta_sal, T_ref, S_ref = symbols('x y t kappa_h kappa_v mu_h mu_v p H2 depth L g beta_temp beta_sal T_ref S_ref')
 
 print("-----------")
 
@@ -17,7 +17,7 @@ v = (H2 / np.pi) * sin(arg) / L
 #pint = x / L * sin(arg) * sin(-2 * np.pi / H2 * (y + depth - H2)) 
 #p = pint -  sin(-2 * np.pi / H2 * (y + depth - H2)) * sin(-2 * np.pi / H2 * (y + depth - H2))
 
-p = -cos(np.pi * x / L) + cos(arg) #cos(arg) * cos(np.pi * x / L)
+p = cos(np.pi * x / L) * cos(arg) #cos(arg) * cos(np.pi * x / L)
 
 #p = 2.0 
 print("dudx", diff(u,x) )
@@ -86,15 +86,17 @@ S = 0.01* 34.5 * cos(4*np.pi*x/L) +  p_salt[0]*Pow(y,2) + p_salt[1]*y + p_salt[2
 
 print("temp at -975m (x=100): ", T.subs([(depth, 1000), (H2, 100), (y, -900), (L,100), (x, 100)]))
 
-u_source = diff(u, t) + u * diff(u, x) + v * diff(u, y)  - mu_h * diff(u, x, 2)  - mu_v * diff(u, y, 2) #+ diff(p, x)
-v_source = diff(v, t) + u * diff(v, x) + v * diff(v, y)  - mu_h * diff(v, x, 2)  - mu_v * diff(v, y, 2) + g*(-beta_temp*(T - T_ref) + beta_sal * (S - S_ref)) #+ diff(p, y)
+u_source = diff(u, t) + u * diff(u, x) + v * diff(u, y)  - mu_h * diff(u, x, 2)  - mu_v * diff(u, y, 2) + diff(p, x)
+v_source = diff(v, t) + u * diff(v, x) + v * diff(v, y)  - mu_h * diff(v, x, 2)  - mu_v * diff(v, y, 2) + g*(-beta_temp*(T - T_ref) + beta_sal * (S - S_ref)) + diff(p, y)
 
 print("u_source:", u_source)
 print("v_source:", v_source)
 
+print("u_source latex:", latex(u_source))
+print("v_source latex:", latex(v_source))
 
-T_source = diff(T, t) + u * diff(T, x) + v * diff(T, y)  - kappa * (diff(T, x, 2)  + diff(T, y, 2))
-S_source = diff(S, t) + u * diff(S, x) + v * diff(S, y)  - kappa * (diff(S, x, 2)  + diff(S, y, 2))
+T_source = diff(T, t) + u * diff(T, x) + v * diff(T, y)  - kappa_h * diff(T, x, 2)  - kappa_v * diff(T, y, 2)
+S_source = diff(S, t) + u * diff(S, x) + v * diff(S, y)  - kappa_h * diff(S, x, 2)  - kappa_v * diff(S, y, 2)
 print("T_source:", T_source)
 print("S_source:", S_source)
 print()
