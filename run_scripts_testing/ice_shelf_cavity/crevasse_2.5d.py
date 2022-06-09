@@ -116,7 +116,7 @@ frazil_flux = Function(Q, name="frazil ice flux")
 ##########
 
 # Define a dump file
-dump_file = "/data/2d_crevasse/17.02.22_3_eq_param_ufricHJ99_dt5.0_dtOutput3600.0_T864000.0_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil_sharpmesh_3changedensity_allsource_salsource_limfraz5e-9/dump_step_172800.h5"
+dump_file = "/data/2.5d_crevasse/16.05.22_3_eq_param_ufricHJ99_dt60.0_dtOutput3600.0_T864000.0_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil_sharpmesh_frazillim_2.5d_-ve_uin/dump_step_14400.h5"
 
 DUMP = False
 if DUMP:
@@ -228,7 +228,7 @@ frazil_absorption = 0
 ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source} #, 'interior_penalty': ip_alpha}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'coriolis_frequency': f, 'u_velocity': u} #, 'interior_penalty': ip_alpha}
 u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': temp_source, 'absorption coefficient': temp_absorption}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': sal_source, 'absorption coefficient': sal_absorption, }
@@ -301,8 +301,8 @@ ice_drag = 0.0097
 
 
 vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary}, 
-        3: {'un': -0.025}, 1: {'un': no_normal_flow, 'drag': 2.5e-3}}
-u_bcs = {}
+        3: {'stress': stress_open_boundary*0.9}, 1: {'un': no_normal_flow, 'drag': 2.5e-3}}
+u_bcs = {3:{'q': Constant(0.0)}} 
 
 temp_bcs = {4: {'flux': -mp.T_flux_bc}, 3:{'q': T_restore}}
 
@@ -460,7 +460,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/2.5d_crevasse/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil_sharpmesh_frazillim_2.5d/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_qice=0_400mdepth_frazil_sharpmesh_frazillim_2.5d_ulim_lhsstress0.9/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -609,6 +609,7 @@ while t < T - 0.5*dt:
     step += 1
     t += dt
 
+    limiter.apply(u)
     limiter.apply(sal)
     limiter.apply(temp)
     limiter.apply(frazil)
@@ -665,7 +666,8 @@ while t < T - 0.5*dt:
    #        depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
     #       depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
      #      depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
-      #     depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
+      
+     #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", time_str)
        #    depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", time_str)
     
            PETSc.Sys.Print("t=", t)

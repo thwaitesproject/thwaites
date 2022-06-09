@@ -301,7 +301,7 @@ ice_drag = 0.0097
 
 
 vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary}, 
-        3: {'un': -0.025}, 1: {'un': no_normal_flow, 'drag': 2.5e-3}}
+        3: {'stress': stress_open_boundary*0.9}, 1: {'un': no_normal_flow, 'drag': 2.5e-3}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
 temp_bcs = {4: {'flux': -mp.T_flux_bc}, 3:{'q': T_restore}}
@@ -460,7 +460,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/2d_crevasse/"+str(args.date)+"_3_eq_param_ufricHJ99_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_0.025inflow_qice=0_400mdepth_frazil_sharpmesh_3changedensity_allsource_salsource_limfraz5e-9_from10days/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to25m_open_iterative_qice=0_400mdepth_frazil_sharpmesh_3changedensity_allsource_salsource_limfraz5e-9_lhsstress0.9x/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
