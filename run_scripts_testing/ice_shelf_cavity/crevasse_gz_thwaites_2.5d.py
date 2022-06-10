@@ -54,7 +54,7 @@ ny = round(L/dy)
 dz = 1.0
 
 # create mesh
-mesh = Mesh("./thwaites_gz_crevasse_sloped.msh")
+mesh = Mesh("./thwaites_gz_crevasse.msh")
 
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -194,10 +194,12 @@ rho0 = 1030.
 rho_ice = 920.
 
 rho_perb = -beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)  # Linear eos (already divided by rho0)
-mom_source = as_vector((0., -g)) * (rho_perb - frazil * (1 + rho_perb) + frazil * (rho_ice / rho0))
-rho.interpolate(rho0*((1-frazil) * (1 + rho_perb)) + frazil * rho_ice)
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
 f = Constant(-1.409E-4)
+horizontal_stress = f * 0.01  # geostrophic stress ~ |f v| drives a flow of 0.01 m/s?
+horizontal_source = as_vector((conditional(z<-500, horizontal_stress, 0.0),0.0))
+mom_source = as_vector((0, -g)) * (rho_perb - frazil * (1 + rho_perb) + frazil * (rho_ice / rho0))
+rho.interpolate(rho0*((1-frazil) * (1 + rho_perb)) + frazil * rho_ice)
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
@@ -229,7 +231,7 @@ frazil_absorption = 0
 ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'coriolis_frequency': f, 'u_velocity': u} #, 'interior_penalty': ip_alpha}
+vp_fields = {'viscosity': mu, 'source': mom_source+horizontal_source, 'coriolis_frequency': f, 'u_velocity': u} #, 'interior_penalty': ip_alpha}
 u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': temp_source, 'absorption coefficient': temp_absorption}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': sal_source, 'absorption coefficient': sal_absorption, }
@@ -305,7 +307,7 @@ ice_drag = 0.0097
 
 
 vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary}, 
-        3: {'stress': stress_open_boundary*0.9}, 1: {'un': no_normal_flow, 'drag': 2.5e-3}}
+        3: {'stress': stress_open_boundary}, 1: {'un': no_normal_flow, 'drag': 2.5e-3}}
 u_bcs = {} 
 
 temp_bcs = {4: {'flux': -mp.T_flux_bc}, 3:{'q': T_restore}, 2:{'q': T_restore}}
@@ -464,7 +466,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/2.5d_crevasse/"+str(args.date)+"_thwaites_3_eq_param_ufricHJ99_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to10m_open_iterative_qice=0_600mdepth_nofrazil_ulim_lhsstress0.9x_rhsdirc_sloped/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5to10m_open_iterative_qice=0_600mdepth_nofrazil_ulim_rhsdirc_fvstress/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
