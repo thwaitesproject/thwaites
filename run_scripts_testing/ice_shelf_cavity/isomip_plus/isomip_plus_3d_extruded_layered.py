@@ -338,9 +338,9 @@ rho_anomaly = Function(P1_extruded, name="density anomaly")
 
 # Define a dump file
 
-dump_file = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/17.02.22_32cores_3d_isomip+_dt900.0_dtOut864000.0_T8640000.0_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay60_closed_coriolis_tracerlims_ip3_alignicefront_backeul_from70days/dump_step_9216.h5" 
+dump_file = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/12.04.22_32cores_3d_isomip+_dt900.0_dtOut864000.0_T8640000.0_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv0.0001_dx4km_lay60_closed_coriolis_tracerlims_ip3_alignicefront_backeul_from46days/dump_step_7488.h5" 
 
-DUMP = True
+DUMP = False
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -412,7 +412,7 @@ rho0 = 1027.51
 rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))
 rho_anomaly_projector = Projector(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref), rho_anomaly)
 
-gradrho = Function(P1_extruded)  # vertical component of gradient of density anomaly units m^-1
+gradrho = Function(P0_extruded)  # vertical component of gradient of density anomaly units m^-1
 gradrho_projector = Projector(Dx(rho_anomaly, mesh.geometric_dimension() - 1), gradrho)
 
 
@@ -603,18 +603,28 @@ smag_solver_parameters = {
 
 # set Viscosity/diffusivity (m^2/s)
 mu_h = Constant(args.mu_h)
-mu_v = Constant(args.mu_v)
+#mu_v = Constant(args.mu_v)
 kappa_h = Constant(args.Kh)
-kappa_v = Constant(args.Kv)
+#kappa_v = Constant(args.Kv)
 
 smag_visc = Function(P1_extruded)
 c_s = Constant(1./np.sqrt(2.))  # Grid Re = 2
 max_nu = 10 * 1.0 * dy / 2.0  # 10x U dx / 2 to have grid reynolds 
 smag_visc_solver = SmagorinskyViscosity(v_, smag_visc, c_s, Constant(dy), max_nu, solver_parameters=smag_solver_parameters)
 smag_visc_solver.solve()
-#kappa_v = Function(P1_extruded) 
+
+mu_v = Function(P0_extruded)
+#mu_v.assign(args.mu_v)
+kappa_v = Function(P0_extruded)
+#kappa_v.assign(args.Kv)
 DeltaS = Constant(1.0)  # rough order of magnitude estimate of change in salinity over restoring region
 gradrho_scale = DeltaS * beta_sal / water_depth  # rough order of magnitude estimate for vertical gradient of density anomaly. units m^-1
+rho_anomaly_projector.project()
+gradrho_projector.project()
+mu_v_projector = Projector(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1), mu_v)
+mu_v_projector.project()
+kappa_v_projector = Projector(conditional(gradrho / gradrho_scale < 1e-1, 5e-5, 1e-1), kappa_v)
+kappa_v_projector.project()
 #kappa_v.assign(conditional(gradrho / gradrho_scale < 1e-1, 1e-3, 1e-1))
 
 step_ice_transition = conditional(x - 2.0 * dy > shelf_length, 1.0,
@@ -825,8 +835,8 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 # Set up Vectorfolder
 folder = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_StratLinTres"+str(restoring_time.values()[0])+\
-         "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul_from96days/" #_smagviscmax"+str(max_nu)+"_officeshelf/"
+         "_Muh"+str(mu_h.values()[0])+"_switchMuv"+"_Kh"+str(kappa_h.values()[0])+"_switchKv"+\
+         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul_fromrest_switchP0dg/" #_smagviscmax"+str(max_nu)+"_officeshelf/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -865,8 +875,8 @@ rhograd_file.write(gradrho)
 
 smag_visc_file = File(folder+"smag_visc.pvd")
 smag_visc_file.write(smag_visc)
-#kappav_file = File(folder+"kappav.pvd")
-#kappav_file.write(kappa_v)
+kappav_file = File(folder+"kappav.pvd")
+kappav_file.write(kappa_v)
 ##########
 
 # Output files for melt functions
@@ -912,7 +922,7 @@ w_comp = Function(S)
 t = 0.0
 step = 0
 if DUMP:
-    t += 96*24*3600.  # add days to the start
+    t += 78*24*3600.  # add days to the start
     step += int(t / dt)
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
@@ -935,7 +945,8 @@ while t < T - 0.5*dt:
 
     rho_anomaly_projector.project()
     gradrho_projector.project()
-    #kappa_v_projector.project()
+    kappa_v_projector.project()
+    mu_v_projector.project()
     smag_visc_solver.solve()
     step += 1
     t += dt
@@ -976,7 +987,7 @@ while t < T - 0.5*dt:
                
            rhograd_file.write(gradrho)
            smag_visc_file.write(smag_visc)
-#          kappav_file.write(kappa_v)
+           kappav_file.write(kappa_v)
           # Write melt rate functions
            m_file.write(melt)
  #          Q_mixed_file.write(Q_mixed)
