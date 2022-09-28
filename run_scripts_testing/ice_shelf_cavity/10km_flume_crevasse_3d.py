@@ -122,7 +122,8 @@ sop_file = File("10kmflume_newmesh.pvd")
 sop_file.write(sop)
 
 
-exit()'''
+exit()
+'''
 # do initialisation again.... 
 x, y, z = SpatialCoordinate(mesh)
 water_depth = 600

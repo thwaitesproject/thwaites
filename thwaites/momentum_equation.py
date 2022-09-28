@@ -126,7 +126,12 @@ class ViscosityTerm(BaseTerm):
             sigma = 1.0
         else:
             nf = self.mesh.ufl_cell().num_facets()
-            sigma = alpha * cell_edge_integral_ratio(self.mesh, degree) * nf
+            family = self.trial_space.ufl_element().family()
+            if family in ['DQ', 'TensorProductElement', 'EnrichedElement']:
+                degree_gradient = degree
+            else:
+                degree_gradient = degree - 1
+            sigma = alpha * cell_edge_integral_ratio(self.mesh, degree_gradient) * nf
         # we use (3.23) + (3.20) from https://www.researchgate.net/publication/260085826
         # instead of maximum over two adjacent cells + and -, we just sum (which is 2*avg())
         # and the for internal facets we have an extra 0.5:
