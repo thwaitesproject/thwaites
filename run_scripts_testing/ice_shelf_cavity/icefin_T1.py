@@ -116,9 +116,9 @@ frazil_flux = Function(Q, name="frazil ice flux")
 ##########
 
 # Define a dump file
-dump_file = "/data/2.5d_crevasse/10.06.22_thwaites_3_eq_param_ufricHJ99_dt30.0_dtOutput3600.0_T864000.0_isotropicdx5to10m_open_iterative_qice=0_600mdepth_nofrazil_ulim_rhsdirc_minfvstress1dayramp/dump_step_28800.h5"
+dump_file = "/data/icefin_simulations/04.10.22_thwaites_3_eq_param_ufricHJ99_dt150.0_dtOutput43200.0_T8640000.0_isotropicdx5_open_iterative_qice=0_600mdepth_nofrazil_ulim_sponge_fvforcing_kappa1e-3vert_muv1e-3_spongeTS_newmesh_dec30/dump_step_20736.h5"
 
-DUMP = False
+DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -216,7 +216,7 @@ horizontal_source = conditional(y > (1.0-sponge_fraction) * L,
 #horizontal_source = as_vector((conditional(z<-500, horizontal_stress, 0.0),0.0)) * ramp
 
 mu = as_tensor([[1e-3, 0], [0, 1e-3]])
-kappa = as_tensor([[1e-3, 0], [0, 1e-5]])
+kappa = as_tensor([[1e-3, 0], [0, 1e-3]])
 
 kappa_temp = kappa
 kappa_sal = kappa
@@ -493,7 +493,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/icefin_simulations/"+str(args.date)+"_thwaites_3_eq_param_ufricHJ99_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5_open_iterative_qice=0_600mdepth_nofrazil_ulim_sponge_fvforcing_kappa1e-5vert_muv1e-3_spongeTS_newmesh_dec30/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5_open_iterative_qice=0_600mdepth_nofrazil_ulim_sponge_fvforcing_kappa1e-3vert_muv1e-3_spongeTS_newmesh_dec30_meltat36days_vomcavity/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -621,6 +621,78 @@ if MATPLOTLIB_OUT:
     # Add initial conditions for v, w, temp, sal, and rho to data frame
     matplotlib_out(0)
 
+### add vertex only mesh for points below ice....
+
+import gmsh
+import sys
+from scipy import signal
+
+
+
+ice_file = np.loadtxt("/data/Icefin_data/T1_ice.csv", delimiter=',',usecols=(2,3))
+ocean_nodes = np.loadtxt("/data/Icefin_data/T1_ocean.csv", delimiter=',',usecols=(3,4))
+print(np.shape(ocean_nodes))
+TS_ocean_file = np.loadtxt("/data/Icefin_data/T1_ocean.csv", delimiter=',',usecols=(7,8))
+print(np.shape(TS_ocean_file))
+ice_decimate = signal.decimate(ice_file,30,ftype='fir', axis=0)
+
+ice = ice_decimate[10:-10,:]
+
+vertexcoords = np.subtract(ice,np.array([0,0.1]))  # add coordinates for just below ice boundary...
+
+boundary_nodes = VertexOnlyMesh(mesh,vertexcoords)
+
+DG0_vom = FunctionSpace(boundary_nodes, "DG", 0)
+
+melt_vom = Function(DG0_vom)
+melt_vom.interpolate(mp.wb)
+
+TS_nodes = VertexOnlyMesh(mesh,ocean_nodes,missing_points_behaviour='warn')
+
+DG0_vom_TS = FunctionSpace(TS_nodes, "DG", 0)
+
+T_vom = Function(DG0_vom_TS)
+T_vom.interpolate(temp)
+S_vom = Function(DG0_vom_TS)
+S_vom.interpolate(sal)
+def melt_vom_out(t):
+    melt_vom_array = melt_vom.dat.data
+    melt_vom_array = mesh.comm.gather(melt_vom_array, root=0)
+    if mesh.comm.rank == 0:
+        # concatenate arrays
+        melt_vom_array_f = np.concatenate(melt_vom_array)
+        melt_vom_matplotlib_df['melt_vom_array_{:.0f}hours'.format(t/3600)] = melt_vom_array_f
+        #melt_vom_matplotlib_df.to_hdf(folder+"melt_vom_arrays.h5", key="0")
+        melt_vom_matplotlib_df.to_csv(folder+"melt_vom_arrays.csv")
+def TS_vom_out(t):
+    T_vom_array = T_vom.dat.data
+    S_vom_array = S_vom.dat.data
+    T_vom_array = mesh.comm.gather(T_vom_array, root=0)
+    S_vom_array = mesh.comm.gather(S_vom_array, root=0)
+    if mesh.comm.rank == 0:
+        # concatenate arrays
+        T_vom_array_f = np.concatenate(T_vom_array)
+        TS_vom_matplotlib_df['T_vom_array_{:.0f}hours'.format(t/3600)] = T_vom_array_f
+        S_vom_array_f = np.concatenate(S_vom_array)
+        TS_vom_matplotlib_df['S_vom_array_{:.0f}hours'.format(t/3600)] = S_vom_array_f
+        #melt_vom_matplotlib_df.to_hdf(folder+"melt_vom_arrays.h5", key="0")
+        TS_vom_matplotlib_df.to_csv(folder+"TS_vom_arrays.csv")
+
+melt_vom_matplotlib_df = pd.DataFrame()
+melt_vom_matplotlib_df['coords_vom_array_y'] = vertexcoords[:,0]
+melt_vom_matplotlib_df['coords_vom_array_z'] = vertexcoords[:,1]
+melt_vom_matplotlib_df.to_csv(folder+"melt_vom_arrays.csv")
+melt_vom_out(0)
+
+TS_vom_matplotlib_df = pd.DataFrame()
+#TS_vom_matplotlib_df['coords_vom_array_y'] = ocean_nodes[:,0]
+#TS_vom_matplotlib_df['coords_vom_array_z'] = ocean_nodes[:,1]
+TS_vom_matplotlib_df.to_csv(folder+"TS_vom_arrays.csv")
+TS_vom_out(0)
+
+########
+
+
 ########
 # Add limiter for DG functions
 limiter = VertexBasedP1DGLimiter(S)
@@ -676,7 +748,9 @@ while t < T - 0.5*dt:
     
            # Update density for plotting
            rho.interpolate(rho0*((1-frazil)*(-beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)) + (rho_ice / rho0) * frazil))
-
+                   
+           melt_vom.interpolate(mp.wb)
+           melt_vom_out(t)
            if MATPLOTLIB_OUT:
                # Write v, w, |u| temp, sal, rho to file for plotting later with matplotlib
                matplotlib_out(t)
