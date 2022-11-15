@@ -275,7 +275,7 @@ ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
 vp_fields = {'viscosity': mu, 'source': mom_source, 'coriolis_frequency': f, 'u_velocity': u} #, 'interior_penalty': ip_alpha}
-u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f, 'source': horizontal_stress*ramp}
+u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f}
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': temp_source+source_temp, 'absorption coefficient': temp_absorption+absorp_temp}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': sal_source+source_sal, 'absorption coefficient': sal_absorption+absorp_sal, }
 frazil_fields = {'diffusivity': kappa_frazil, 'velocity': v, 'w_i': Constant(w_i), 'source': frazil_source, 'absorption coefficient': frazil_absorption}
@@ -352,7 +352,7 @@ ice_drag = 0.0097
 vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
         1: {'un': no_normal_flow}, 3: {'un': no_normal_flow}} #, 'drag': ice_drag}}
 #vp_bcs = {2: {'un': no_normal_flow, 'drag': ice_drag}, 1: {'un': no_normal_flow}} # periodic
-u_bcs = {2:{'q': -0.01}, 4:{'drag': ice_drag}} #,3:{'drag':ice_drag}} 
+u_bcs = {2:{'q': 0.0}, 4:{'drag': ice_drag}} #,3:{'drag':ice_drag}} 
 #u_bcs = {2:{'drag': ice_drag}} #,3:{'drag':ice_drag}} # periodic
 
 #temp_bcs = {4: {'flux': -mp.T_flux_bc}, 2:{'q': T_restore}}
@@ -518,7 +518,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/icefin_simulations/simple_forcing/"+str(args.date)+"_thwaites_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5_iterative_600mdepth_ulim_kappa1e-4vert_muv1e-3_L100m_initTSconstant_nomelt_draguvtop_uinit0_closedlhs_uforcf0.00001/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5_iterative_600mdepth_ulim_kappa1e-4vert_muv1e-3_L100m_initTSconstant_nomelt_draguvtop_uinit0_closedlhs/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
