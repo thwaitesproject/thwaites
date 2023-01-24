@@ -38,7 +38,7 @@ jobs:
           id -u
           id -g
           ls -l
-          sudo apt-get install libgdal-dev gdal-bin
+          docker pull osgeo/gdal:ubuntu-small-3.6.2
           gdalinfo --version
           python -m pip install -r requirements.txt
           python -m pip install -e .
