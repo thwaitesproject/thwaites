@@ -1,7 +1,5 @@
 # Buoyancy driven overturning circulation
-# beneath ice shelf. Wedge geometry. 5km
-# Outside temp forcing stratified according to ocean0 isomip.
-# viscosity = temp diffusivity = sal diffusivity: varies linearly over the domain, vertical is 10x weaker.
+# beneath ice shelf. Wedge geometry. 10km
 from thwaites import *
 from thwaites.utility import get_top_boundary, cavity_thickness
 from firedrake.petsc import PETSc
@@ -124,7 +122,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 ##########
 
 # Define a dump file
-dump_file = "/data/2d_adjoint/08.02.22_3_eq_param_ufric_dt300.0_dtOutput10800.0_T864000.0_ip50.0_tres86400.0constant_Kh0.01_Kv0.001_structured_dy500_dz2_no_limiter_closed_adjoint/dump.h5"
+dump_file = "/data/2d_adjoint/16.02.22_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_closed_forward50days/dump.h5"
 
 DUMP = True
 if DUMP:
@@ -173,7 +171,7 @@ else:
     sal_init = Constant(34.4)
     #sal_init = S_restore
     sal.assign(sal_init)
-c = Control(sal)
+#c = Control(temp)
 
 
 ##########
@@ -204,7 +202,7 @@ rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
-sponge_fraction = 0.06  # fraction of domain where sponge
+sponge_fraction = 0.2  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(y > (1.0-sponge_fraction) * L,
                           absorption_factor * T_restore,
@@ -228,7 +226,7 @@ absorp_sal = conditional(y > (1.0-sponge_fraction) * L,
 
 # linearly vary viscosity/diffusivity over domain. reduce vertical/diffusion
 kappa_h = Constant(args.Kh)
-kappa_v = Constant(args.Kh/10.)
+kappa_v = Constant(args.Kh/250.)
 #kappa_v = Constant(args.Kh*dz/dy)
 #grounding_line_kappa_v = Constant(open_ocean_kappa_v*H1/H2)
 #kappa_v_grad = (open_ocean_kappa_v-grounding_line_kappa_v)/L
@@ -243,6 +241,7 @@ kappa_v = Constant(args.Kh/10.)
 #                             kappa_v)
 
 kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
+#kappa = Constant([[kappa_h, 0], [0, kappa_v]]) # for taylor test need to use Constant for some reason...
 
 TP1 = TensorFunctionSpace(mesh, "CG", 1)
 kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa)
@@ -250,6 +249,7 @@ kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa)
 mu = Function(TP1, name='viscosity').assign(kappa)
 
 
+c = Control(mu)
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
 
@@ -442,7 +442,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy500_dz2_no_limiter_closed_adjoint_from10daydump/"
+         +"_structured_dy500_dz2_no_limiter_closed_from50days_adjoint/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -608,6 +608,6 @@ with timed_stage('adjoint'):
 #grad = rf.derivative()
 #File(folder+'grad.pvd').write(grad)
 
-#h = Function(sal)
-#h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
-#taylor_test(rf, sal, h)
+#h = Function(mu)
+#h.dat.data[:] = 0.01*np.random.random(h.dat.data_ro.shape)
+#taylor_test(rf, mu, h)
