@@ -19,6 +19,7 @@ jobs:
     # The docker container to use.
     container:
       image: firedrakeproject/firedrake-vanilla:latest
+      options: --user root
     steps:
       - name: chown
         run: sudo chmod -R 777 $GITHUB_WORKSPACE /github /__w/_temp
