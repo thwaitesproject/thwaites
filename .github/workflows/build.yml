@@ -38,7 +38,6 @@ jobs:
           id -u
           id -g
           ls -l
-          gdal --version
           python -m pip install -r requirements.txt
           python -m pip install -e .
       - name: Test Thwaites
