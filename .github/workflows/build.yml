@@ -39,7 +39,6 @@ jobs:
           id -g
           ls -l
           docker pull osgeo/gdal:ubuntu-small-3.6.2
-          ls /usr/include/gdal
           gdal-config --version
           python -m pip install -r requirements.txt
           python -m pip install -e .
