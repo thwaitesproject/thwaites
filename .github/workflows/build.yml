@@ -39,7 +39,7 @@ jobs:
           id -g
           ls -l
           sudo apt-get update
-          sudo apt-get install python-numpy gdal-bin libgdal-dev
+          sudo apt-get install gdal-bin libgdal-dev
           python -m pip install -r requirements.txt
           python -m pip install -e .
       - name: Test Thwaites
