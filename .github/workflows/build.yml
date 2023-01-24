@@ -38,6 +38,7 @@ jobs:
           id -u
           id -g
           ls -l
+          sudo apt-get install libgdal-dev gdal-bin
           gdalinfo --version
           python -m pip install -r requirements.txt
           python -m pip install -e .
