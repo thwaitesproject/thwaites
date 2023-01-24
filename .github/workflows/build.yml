@@ -38,7 +38,6 @@ jobs:
           id -u
           id -g
           ls -l
-          sudo add-apt-repository ppa:ubuntugis/ppa
           sudo apt-get update
           sudo apt-get install python-numpy gdal-bin libgdal-dev
           python -m pip install -r requirements.txt
