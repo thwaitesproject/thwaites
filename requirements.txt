@@ -1,3 +1,4 @@
 pandas
 argparse
 rasterio 
+scipy == 1.9.1
