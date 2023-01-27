@@ -77,7 +77,7 @@ class ScalarDiffusionTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
 
         if 'background_diffusivity' in fields:
-            assert('grid_resolution' in fields)
+            assert 'grid_resolution' in fields
             u = fields['velocity']
             kappa_background = fields['background_diffusivity']
             grid_dx = fields['grid_resolution'][0]

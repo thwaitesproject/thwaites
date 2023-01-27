@@ -83,7 +83,7 @@ class ViscosityTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
 
         if 'background_viscosity' in fields:
-            assert('grid_resolution' in fields)
+            assert 'grid_resolution' in fields
             mu_background = fields['background_viscosity']
             grid_dx = fields['grid_resolution'][0]
             grid_dz = fields['grid_resolution'][1]
