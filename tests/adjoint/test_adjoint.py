@@ -118,8 +118,9 @@ def test_2d_isomip_cavity_salfunctional(T):
     #bathymetry.assign(-720)
     print("max bathy : ",bathymetry.dat.data[:].max())
 
-    ice_draft_filename = "tests/adjoint/Ocean1_input_geom_v1.01.nc"
-    ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
+    #ice_draft_filename = "tests/adjoint/Ocean1_input_geom_v1.01.nc"
+    #ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
+    ice_draft_file = rasterio.open('tests/adjoint/ocean1_lowersurface.tiff', 'r')
     ice_draft = Function(P1_extruded)
     #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3) - water_depth) 
     ice_draft_base = interpolate_data(ice_draft_file, P1, y_transect=41000)  # Get ice shelf draft along y=41km transect i.e the middle
@@ -904,7 +905,8 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
     print("max bathy : ",bathymetry.dat.data[:].max())
 
     ice_draft_filename = "tests/adjoint/Ocean1_input_geom_v1.01.nc"
-    ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
+    #ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
+    ice_draft_file = rasterio.open('tests/adjoint/ocean1_lowersurface.tiff', 'r')
     ice_draft = Function(P1_extruded)
     #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3) - water_depth) 
     ice_draft_base = interpolate_data(ice_draft_file, P1, y_transect=41000)  # Get ice shelf draft along y=41km transect i.e the middle
