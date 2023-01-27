@@ -40,6 +40,8 @@ jobs:
           ls -l
           python -m pip install -r requirements.txt
           python -m pip install -e .
+          pip freeze | grep scipy
+          pip freeze | grep rasterio          
       - name: Test Thwaites
         run: |
           . /home/firedrake/firedrake/bin/activate
