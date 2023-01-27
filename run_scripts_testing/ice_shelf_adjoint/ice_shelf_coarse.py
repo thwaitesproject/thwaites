@@ -122,7 +122,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 ##########
 
 # Define a dump file
-dump_file = "/data/2d_adjoint/16.02.22_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_closed_forward50days/dump.h5"
+dump_file = "50day_Kh0.25Kv1e-3_dx500m_dy2m_dump"
 
 DUMP = True
 if DUMP:
