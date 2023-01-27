@@ -172,7 +172,7 @@ bathymetry.interpolate(conditional(bathy_x + bathy_y < -water_depth,
 
 print("max bathy : ", bathymetry.dat.data[:].max())
 
-ice_draft_file = rasterio.open(f'netcdf:Ocean1_input_geom_v1.01.nc:lowerSurface', 'r')
+ice_draft_file = rasterio.open('ocean1_lowersurface.tiff', 'r')
 #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1,H3) - water_depth) 
 
 
@@ -362,8 +362,7 @@ if DUMP:
 
 else:
     # Assign Initial conditions
-    v_init = zero(mesh.geometric_dimension())
-    v_.assign(v_init)
+    v_.assign(0.0)
 
 
     # ISOMIP+ warm conditions .
