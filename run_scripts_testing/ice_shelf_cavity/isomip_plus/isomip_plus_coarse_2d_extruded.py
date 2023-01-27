@@ -173,7 +173,7 @@ if DUMP:
 else:
     # Assign Initial conditions
     v_init = zero(mesh.geometric_dimension())
-    v_.assign(v_init)
+    v_.assign(0.0)
 
     #vdg1.project(v_) # DQ1 velocity for 
     # ISOMIP+ warm conditions .

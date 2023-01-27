@@ -279,8 +279,12 @@ def test_2d_isomip_cavity_salfunctional(T):
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
-        v_.assign(v_init)
+        #v_init = zero(mesh.geometric_dimension())
+        v_init = as_vector((0., 0.))#zero(mesh.geometric_dimension())
+        print("v_init", v_init)
+        print(v_)
+
+        v_.assign(0)
 
 
         # ISOMIP+ warm conditions .
@@ -669,6 +673,11 @@ def test_2d_isomip_cavity_salfunctional(T):
         #adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
         #tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
+    # test stress open_boundary
+    #sop = Function(W)
+    #sop.interpolate(-g*(Temperature_term + Salinity_term))
+    vdg_file = File("vdgcheck.pvd")
+    vdg_file.write(vdg)
     ####################
 
     # Add limiter for DG functions
@@ -775,6 +784,9 @@ def test_2d_isomip_cavity_salfunctional(T):
     #    print("peturb rf", rf(sal+h))
         tt = taylor_test(rf, sal, h)
         assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-1)
+
+
+test_2d_isomip_cavity_salfunctional(1)
 
 def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=True, conditional_melt_flag=True, gammaT_control=False):
     # ISOMIP+ setup 2d slice with extuded mesh
@@ -1077,8 +1089,8 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
-        v_.assign(v_init)
+        v_init = as_vector((0., 0.))#zero(mesh.geometric_dimension())
+        v_.assign(0.0)
 
 
         # ISOMIP+ warm conditions .
@@ -1236,9 +1248,9 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
     kappa_tensor = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
     TP1 = TensorFunctionSpace(mesh, "CG", 1)
-    mu = Function(TP1, name='viscosity').assign(mu_tensor)
-    kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa_tensor)
-    kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa_tensor)
+    mu = Function(TP1, name='viscosity').interpolate(mu_tensor)
+    kappa_temp = Function(TP1, name='temperature diffusion').interpolate(kappa_tensor)
+    kappa_sal = Function(TP1, name='salinity diffusion').interpolate(kappa_tensor)
 
     # Equation fields
     vp_coupling = [{'pressure': 1}, {'velocity': 0}]

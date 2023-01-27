@@ -140,7 +140,7 @@ else:
 print("max bathy : ",bathymetry.dat.data[:].max())
 
 ice_draft_filename = "Ocean1_input_geom_v1.01.nc"
-ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
+ice_draft_file = rasterio.open("ocean1_lowersurface.tiff", 'r')
 ice_draft = Function(P1_extruded)
 #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3) - water_depth) 
 ice_draft_base = interpolate_data(ice_draft_file, P1, y_transect=41000)  # Get ice shelf draft along y=41km transect i.e the middle
@@ -250,7 +250,6 @@ print("ds_v",assemble(avg(dot(n,n))*dS_v(domain=mesh)))
 mesh_final = Function(P1_extruded).assign(0)
 mesh_f_file = File("mesh_final.pvd")
 mesh_f_file.write(mesh_final)
-exit()
 if True:
     # don't want to integrate over the entire top surface 
     # and conditional doesnt seem to work in adjoint when used in J...
@@ -349,8 +348,7 @@ if DUMP:
 
 else:
     # Assign Initial conditions
-    v_init = zero(mesh.geometric_dimension())
-    v_.assign(v_init)
+    v_.assign(0.0)
 
 
     # ISOMIP+ warm conditions .
@@ -508,9 +506,9 @@ mu_tensor = as_tensor([[mu_h, 0], [0, mu_v]])
 kappa_tensor = as_tensor([[kappa_h, 0], [0, kappa_v]])
 
 TP1 = TensorFunctionSpace(mesh, "CG", 1)
-mu = Function(TP1, name='viscosity').assign(mu_tensor)
-kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa_tensor)
-kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa_tensor)
+mu = Function(TP1, name='viscosity').interpolate(mu_tensor)
+kappa_temp = Function(TP1, name='temperature diffusion').interpolate(kappa_tensor)
+kappa_sal = Function(TP1, name='salinity diffusion').interpolate(kappa_tensor)
 
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
@@ -704,7 +702,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up Vectorfolder
-folder = "/data/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
+folder = "/data0/wis15/2d_isomip_plus/first_tests/extruded_meshes/"+str(args.date)+"_2d_isomip+_dt"+str(dt)+\
          "_dtOut"+str(output_dt)+"_T"+str(T)+"_ip3_StratLinTres"+str(restoring_time.values()[0])+\
          "_Muh"+str(mu_h.values()[0])+"_fixMuv"+str(mu_v.values()[0])+"_Kh"+str(kappa_h.values()[0])+"_fixKv"+str(kappa_v.values()[0])+\
          "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_icedraft_tracerlims_closed_refinedtop_a4b0depth10/"
