@@ -144,6 +144,12 @@ if DUMP:
 
         T_restore = Constant(T_200m_depth)
         S_restore = Constant(S_200m_depth) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
+        # make T/S restore fields to calculate adjoint sensitity
+        T_restorefield = Function(P1, name="Trestore field")
+        S_restorefield = Function(P1, name="Srestore field")
+
+        T_restorefield.assign(T_restore)
+        S_restorefield.assign(S_restore)
 
 
 else:
@@ -205,12 +211,12 @@ absorption_factor = Constant(1.0/restoring_time)
 sponge_fraction = 0.2  # fraction of domain where sponge
 # Temperature source term
 source_temp = conditional(y > (1.0-sponge_fraction) * L,
-                          absorption_factor * T_restore,
+                          absorption_factor * T_restorefield,
                           0.0)
 
 # Salinity source term
 source_sal = conditional(y > (1.0-sponge_fraction) * L,
-                         absorption_factor * S_restore,
+                         absorption_factor * S_restorefield,
                          0.0)
 
 # Temperature absorption term
@@ -249,7 +255,7 @@ kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa)
 mu = Function(TP1, name='viscosity').assign(kappa)
 
 
-c = Control(mu)
+c = Control(T_restorefield)
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
 
@@ -332,9 +338,9 @@ vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
-temp_bcs = {4: {'flux': -mp.T_flux_bc}}
+temp_bcs = {4: {'flux': -mp.T_flux_bc}, 2: {'q': T_restorefield}}
 
-sal_bcs = {4: {'flux': -mp.S_flux_bc}}
+sal_bcs = {4: {'flux': -mp.S_flux_bc}, 2: {'q': S_restorefield}}
 
 
 
@@ -442,7 +448,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy500_dz2_no_limiter_closed_from50days_adjoint/"
+         +"_structured_dy500_dz2_no_limiter_closed_from50days_adjoint_TSresbc/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -503,6 +509,10 @@ tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
 adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
 tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
+adj_diff_s_file = File(folder+"adj_Trestore.pvd")
+tape.add_block(DiagnosticBlock(adj_diff_s_file, T_restorefield))
+adj_diff_s_file = File(folder+"adj_Srestore.pvd")
+tape.add_block(DiagnosticBlock(adj_diff_s_file, S_restorefield))
 ########
 
 # Extra outputs for plotting
@@ -608,6 +618,6 @@ with timed_stage('adjoint'):
 #grad = rf.derivative()
 #File(folder+'grad.pvd').write(grad)
 
-#h = Function(mu)
-#h.dat.data[:] = 0.01*np.random.random(h.dat.data_ro.shape)
-#taylor_test(rf, mu, h)
+#h = Function(T_restorefield)
+#h.dat.data[:] = 2*np.random.random(h.dat.data_ro.shape)
+#taylor_test(rf, T_restorefield, h)
