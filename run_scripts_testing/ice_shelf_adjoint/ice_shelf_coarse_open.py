@@ -122,7 +122,7 @@ full_pressure = Function(M.sub(1), name="full pressure")
 ##########
 
 # Define a dump file
-dump_file = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn/dump.h5"
+dump_file = "./17.02.23_dump_50days_open_qadv_TSconst"
 
 DUMP = True
 if DUMP:
@@ -535,8 +535,8 @@ def adjoint_melt_to_csv(df, t_str):
 
 ##### 
 # read linear simulations
-target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-adjoint_profile7550m_target = pd.read_csv(target_folder+"TS_foradjoint_7550m_profile.csv")
+#target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
+adjoint_profile7550m_target = pd.read_csv("TS_foradjoint_7550m_profile.csv")
 
 temp_profile_target = adjoint_profile7550m_target['T_t_14400']
 sal_profile_target = adjoint_profile7550m_target['S_t_14400']
