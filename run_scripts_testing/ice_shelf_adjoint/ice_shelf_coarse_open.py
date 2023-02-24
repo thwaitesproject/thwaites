@@ -261,13 +261,13 @@ kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
 #kappa = Constant([[kappa_h, 0], [0, kappa_v]]) # for taylor test need to use Constant for some reason...
 
 TP1 = TensorFunctionSpace(mesh, "CG", 1)
-kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa)
-kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa)
-mu = Function(TP1, name='viscosity').assign(kappa)
+kappa_temp = Function(TP1, name='temperature diffusion').project(kappa)
+kappa_sal = Function(TP1, name='salinity diffusion').project(kappa)
+mu = Function(TP1, name='viscosity').project(kappa)
 
 
 c = Control(T_restorefield)
-c1 = Control(S_restorefield)
+#c1 = Control(S_restorefield)
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
 
@@ -574,10 +574,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "/data/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
+folder = "/data0/wis15/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_consTS_adjoint_objTSprofweightscale_opt_gradreg0.1_cb/"
+         +"_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_consTS_adjoint_objTSprofweightscale_opt_cb_noreg/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -638,8 +638,8 @@ tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
 adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
 tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
-adj_diff_s_file = File(folder+"adj_Trestore.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_s_file, T_restorefield))
+adj_diff_t_file = File(folder+"adj_Trestore.pvd")
+tape.add_block(DiagnosticBlock(adj_diff_t_file, T_restorefield))
 adj_diff_s_file = File(folder+"adj_Srestore.pvd")
 tape.add_block(DiagnosticBlock(adj_diff_s_file, S_restorefield))
 ########
@@ -754,7 +754,7 @@ sal_vom_profile.interpolate(sal)
 
 scale = Constant(1.0 / (0.5 * beta_sal)**2)
 alpha = 0.1
-J = assemble(scale*0.5/N * ((-beta_temp*(temp_vom_profile - temp_vom_profile_target))**2 + (beta_sal*(sal_vom_profile - sal_vom_profile_target))**2) * dx) + assemble(0.5*alpha*scale*((beta_sal**2)*inner(grad(S_restorefield), grad(S_restorefield))+ (beta_temp**2)*inner(grad(T_restorefield), grad(T_restorefield)) )*dx)
+J = assemble(scale*0.5/N * ((-beta_temp*(temp_vom_profile - temp_vom_profile_target))**2 + (beta_sal*(sal_vom_profile - sal_vom_profile_target))**2) * dx)  #+ assemble(0.5*alpha*scale*((beta_sal**2)*inner(grad(S_restorefield), grad(S_restorefield))+ (beta_temp**2)*inner(grad(T_restorefield), grad(T_restorefield)) )*dx)
 
 T_restorefield_vis = Function(P1, name="Trestore field vis")
 S_restorefield_vis = Function(P1, name="Srestore field vis")
@@ -785,22 +785,25 @@ def eval_cb(j, m):
         chk.store(T_restorefield_vis, name="temp restore")
         chk.store(S_restorefield_vis, name="sal restore")
 print(J)
-rf = ReducedFunctional(J, [c, c1], eval_cb_post=eval_cb)
 
+rf = ReducedFunctional(J, c) # [c, c1]) #, eval_cb_post=eval_cb)
 
-g_opt = minimize(rf, options={"disp": True})
+#g_opt = minimize(rf, options={"disp": True})
 
 #tape.reset_variables()
 #J.adj_value = 1.0
 
-#J.block_variable.adj_value = 1.0
+J.block_variable.adj_value = 1.0
 #tape.visualise()
 # evaluate all adjoint blocks to ensure we get complete adjoint solution
 # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
 #    meshtype derivative (line 204) is broken, so just return None instead
 #with timed_stage('adjoint'):
-#   tape.evaluate_adj()
-#grad = rf.derivative()
+ #  tape.evaluate_adj()
+
+print(len(T_restorefield.dat.data))
+
+grad = rf.derivative()
 #File(folder+'grad.pvd').write(grad)
 
 #h = Function(T_restorefield)
