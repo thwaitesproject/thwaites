@@ -145,7 +145,6 @@ class ScalarDiffusionTerm(BaseTerm):
             elif 'float' in bc:
                 F += -inner(phi*n, dot(diff_tensor, grad(q))) * self.ds(id)
 
-
             if 'drag' in bc:
                 # (bottom) drag of the form tau = -C_D u |u|
                 assert 'coriolis_frequency' in fields  # check 2.5d scalar advection diffusion equation for u.
