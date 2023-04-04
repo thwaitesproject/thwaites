@@ -45,7 +45,7 @@ restoring_time = 86400.
 ##########
 
 #  Generate mesh
-L = 2840
+L = 1000
 H1 = 2.
 H2 = 102.
 dy = 50.0
@@ -54,9 +54,9 @@ ny = round(L/dy)
 dz = 1.0
 
 # create mesh
-#mesh = PeriodicSquareMesh(20,20,100,direction='x')
-mesh = SquareMesh(20,20,100)
-
+#mesh = PeriodicSquareMesh(40,40,100,direction='x')
+#mesh = SquareMesh(40,40,100)
+mesh = Mesh("./2d_retro_slope_icefin_gz.msh")
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
@@ -75,7 +75,7 @@ print("You have Comm WORLD size = ", mesh.comm.size)
 print("You have Comm WORLD rank = ", mesh.comm.rank)
 
 water_depth = 600
-mesh.coordinates.dat.data[:, 1] -= water_depth
+#mesh.coordinates.dat.data[:, 1] -= water_depth
 y, z = SpatialCoordinate(mesh)
 ##########
 
@@ -91,6 +91,10 @@ Q = FunctionSpace(mesh, "DG", 1)  # melt function space
 K = FunctionSpace(mesh, "DG", 1)    # temperature space
 S = FunctionSpace(mesh, "DG", 1)    # salinity space
 
+PETSc.Sys.Print("vel dofs:", V.dim())
+PETSc.Sys.Print("pressure dofs:", W.dim())
+PETSc.Sys.Print("combined dofs:", M.dim())
+PETSc.Sys.Print("scalar dofs:", S.dim())
 ##########
 
 # Set up functions
@@ -158,8 +162,8 @@ else:
     S_surface = 33.725 # This gives S = 34.375 PSU at 520m depth
     S_bottom = 34.5
     
-    T_restore = -0.5 #T_surface + (T_bottom - T_surface) * (z / -water_depth)
-    S_restore = 34 #S_surface + (S_bottom - S_surface) * (z / -water_depth)
+    T_restore = -0.5 # T_surface + (T_bottom - T_surface) * (z / -water_depth)  # -0.5
+    S_restore = 34 # S_surface + (S_bottom - S_surface) * (z / -water_depth)  #34  #+ (y/100)*0.001
     # baseline T3
 
 
@@ -189,8 +193,8 @@ frazil_eq = FrazilAdvectionDiffusionEquation(Q,Q)
 # Terms for equation fields
 
 # momentum source: the buoyancy term Boussinesq approx. From Jordan etal 14
-T_ref = Constant(-2.0)
-S_ref = Constant(34.5)
+T_ref = Constant(-0.5)
+S_ref = Constant(34)
 beta_temp = Constant(3.87E-5)
 beta_sal = Constant(7.86E-4)
 g = Constant(9.81)
@@ -200,14 +204,16 @@ rho_ice = 920.
 rho_perb = -beta_temp*(temp - T_ref) + beta_sal * (sal - S_ref)  # Linear eos (already divided by rho0)
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
 f = Constant(-1.409E-4)
-mom_source = as_vector((0, -g)) * (rho_perb - frazil * (1 + rho_perb) + frazil * (rho_ice / rho0))
+#mom_source = as_vector((0, -g)) * (rho_perb - frazil * (1 + rho_perb) + frazil * (rho_ice / rho0))  # use this with frazil dynamics otherwise buoyancy term below
+mom_source = as_vector((0, -g)) * rho_perb
 rho.interpolate(rho0*((1-frazil) * (1 + rho_perb)) + frazil * rho_ice)
 
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
-sponge_fraction = 0.1429   # fraction of domain where sponge roughly 1/7 from 2400 to 2800 m
+sponge_fraction = 0.1   # fraction of domain where sponge roughly 100m so roughly 40 grid cells...
 
-horizontal_stress = f * 0.00001  # geostrophic stress ~ |f v| drives a flow of 0.01 m/s?  (+ve y flow since two -ves cancel should drive -ve x flow)
+horizontal_stress = f * 0.0001  # geostrophic stress ~ |f v| drives a flow of 0.01 m/s?  (+ve y flow since two -ves cancel should drive -ve x flow)
+v_ramp_force = (y/L)*f*0.01
 
 if DUMP:
     ramp = Constant(1)
@@ -218,9 +224,13 @@ else:
 #                           ramp * as_vector((horizontal_stress, 0.0)) *(y - (1.0-sponge_fraction) * L)/(L * sponge_fraction),
 #                          as_vector((0.0,0.0)))
 horizontal_source = as_vector((horizontal_stress,0.0)) * ramp
+#horizontal_source = as_vector((v_ramp_force,0.0)) * ramp
 
+kmu_ramp = conditional(y > (1.0-sponge_fraction) * L,
+                           1e-2 *((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
+                          0)
 mu = as_tensor([[1e-3, 0], [0, 1e-3]])
-kappa = as_tensor([[1e-3, 0], [0, 1e-4]])
+kappa = as_tensor([[1e-4, 0], [0, 1e-5]])
 
 kappa_temp = kappa
 kappa_sal = kappa
@@ -275,9 +285,9 @@ ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
 vp_fields = {'viscosity': mu, 'source': mom_source, 'coriolis_frequency': f, 'u_velocity': u} #, 'interior_penalty': ip_alpha}
-u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': temp_source+source_temp, 'absorption coefficient': temp_absorption+absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': sal_source+source_sal, 'absorption coefficient': sal_absorption+absorp_sal, }
+u_fields = {'diffusivity': mu, 'velocity': v, 'coriolis_frequency': f } #, 'source':horizontal_stress*ramp}
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v} #, 'source': temp_source+source_temp, 'absorption coefficient': temp_absorption+absorp_temp}
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v} #, 'source': sal_source+source_sal, 'absorption coefficient': sal_absorption+absorp_sal, }
 frazil_fields = {'diffusivity': kappa_frazil, 'velocity': v, 'w_i': Constant(w_i), 'source': frazil_source, 'absorption coefficient': frazil_absorption}
 
 ##########
@@ -319,7 +329,7 @@ def top_boundary_to_csv(boundary_points, df, t_str):
     df["integrated_melt_t_ " + t_str] = assemble(melt * ds(4))
 
     if mesh.comm.rank == 0:
-        top_boundary_mp.to_csv(folder+"top_boundary_data.csv")
+        top_boundary_mp.to_csv(nolder+"top_boundary_data.csv")
 
 
 ##########
@@ -332,35 +342,112 @@ def top_boundary_to_csv(boundary_points, df, t_str):
 
 # WEAKLY Enforced BCs
 n = FacetNormal(mesh)
-#Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
-#Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
+Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
+Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
 #stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
-Temperature_term = -beta_temp * (T_surface * z + 0.5 * (T_bottom - T_surface) * (pow(z,2) / -water_depth) - T_ref * z)
-Salinity_term = beta_sal *  (S_surface * z + 0.5 * (S_bottom - S_surface) * (pow(z,2) / -water_depth) - S_ref * z)
+#Temperature_term = -beta_temp * (T_surface * z + 0.5 * (T_bottom - T_surface) * (pow(z,2) / -water_depth) - T_ref * z)
+#Salinity_term = beta_sal *  (S_surface * z + 0.5 * (S_bottom - S_surface) * (pow(z,2) / -water_depth) - S_ref * z)
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
 ice_drag = 0.0097
 
 
+
+import scipy
+
+
+
+z_rhs = np.linspace(-500.01, -599.9, 400)
+rhs_nodes = []
+for z in z_rhs:
+    rhs_nodes.append([999.995, z])
+
+print(rhs_nodes)
+rhs_nodes = VertexOnlyMesh(mesh,rhs_nodes,missing_points_behaviour='warn')
+
+DG0_vom = FunctionSpace(rhs_nodes, "DG", 0)
+temp_vom = Function(DG0_vom)
+sal_vom = Function(DG0_vom)
+
+temp_vom.interpolate(temp)
+sal_vom.interpolate(sal)
+
+print(sal_vom.dat.data)
+
+p_rhs = []
+def dynamic_pressure(T, S):
+    for i in range(10):
+        S[i] -= 0.1*(10-i)*2e-4
+#    S[:10] -= 0.00016  # try making the top of the domain a bit fresher as a hack to get faster flow at the rhs...
+    for i in range(10, len(T)):
+        S[i] = 34
+        T[i] = -0.5
+   
+    density_rhs =  -g.values()[0] *(-beta_temp.values()[0] * (T-T_ref.values()[0]) +  beta_sal.values()[0] * (S - S_ref.values()[0]))
+  #  print(density_rhs)
+
+
+
+#    print("len z", len(z_rhs))
+#    print("len density", len(density_rhs))
+    pcumulative = scipy.integrate.cumulative_trapezoid(density_rhs, z_rhs, initial=0)
+ #   print("pcumulative", pcumulative)
+ #   print("len pcumulative", len(pcumulative))
+
+    return pcumulative
+
+p_dyn = dynamic_pressure(temp_vom.dat.data, sal_vom.dat.data)
+dynamic_pressure_interp = scipy.interpolate.interp1d(z_rhs, p_dyn, bounds_error=False,fill_value='extrapolate') 
+
+
+# Now make the VectorFunctionSpace corresponding to V.
+W_vector = VectorFunctionSpace(mesh, W.ufl_element())
+
+# Next, interpolate the coordinates onto the nodes of W.
+X = interpolate(mesh.coordinates, W_vector)
+print("X[:,1]", X.dat.data[:,1])
+# Make an output function.
+stress_open_boundary_dynamic = Function(W)
+
+# Use the external data function to interpolate the values of f.
+stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro[:,1])
+
+#try using sal an dtemp from inside domain to force the inflow?
+sal_interp = scipy.interpolate.interp1d(z_rhs, sal_vom.dat.data_ro, bounds_error=False,fill_value='extrapolate') 
+temp_interp = scipy.interpolate.interp1d(z_rhs, temp_vom.dat.data_ro, bounds_error=False,fill_value='extrapolate') 
+
+X_p1dg = interpolate(mesh.coordinates, V) 
+# set up function for Srestore / Trestore
+S_restorefield = Function(Q)
+T_restorefield = Function(Q)
+
+# interpolate rhs values to the field
+S_restorefield.dat.data[:] = sal_interp(X_p1dg.dat.data_ro[:,1])
+T_restorefield.dat.data[:] = temp_interp(X_p1dg.dat.data_ro[:,1])
+
 # test stress open_boundary
 #sop = Function(W)
 #sop.interpolate(-g*(Temperature_term + Salinity_term))
-#sop_file = File(folder+"boundary_stress.pvd")
+#sop_file = File(nolder+"boundary_stress.pvd")
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow}, 
-        1: {'un': no_normal_flow}, 3: {'un': no_normal_flow}} #, 'drag': ice_drag}}
+vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary_dynamic*-n}, #n*f*0.01}, #stress_open_boundary}, 
+        1: {'un': no_normal_flow, 'drag':ice_drag}, 3: {'un': no_normal_flow, 'drag':ice_drag}} #, 'drag': ice_drag}}
 #vp_bcs = {2: {'un': no_normal_flow, 'drag': ice_drag}, 1: {'un': no_normal_flow}} # periodic
-u_bcs = {2:{'q': 0.0}, 4:{'drag': ice_drag}} #,3:{'drag':ice_drag}} 
+u_bcs = {1:{'q': 0.0}, 2: {'flux': 1e-3*-0.01/L}, 3:{'drag':ice_drag},4:{'drag':ice_drag}} 
 #u_bcs = {2:{'drag': ice_drag}} #,3:{'drag':ice_drag}} # periodic
 
-#temp_bcs = {4: {'flux': -mp.T_flux_bc}, 2:{'q': T_restore}}
-temp_bcs = {2:{'q': T_restore}}
+temp_bcs = {4: {'flux':  -mp.T_flux_bc}, 2:{'qadv': T_restorefield}}
+#temp_bcs = {4: {'flux':  conditional(y > (1.0-sponge_fraction) * L, -mp.T_flux_bc*(1-((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction))), -mp.T_flux_bc)}, 
+ #       2:{'qadv': T_restore}}
+#temp_bcs = {2:{'qadv': T_restore}}
 #temp_bcs = {} # periodic
 
-#sal_bcs = {4: {'flux': -mp.S_flux_bc},  2:{'q': S_restore}}
-sal_bcs = { 2:{'q': S_restore}}
+sal_bcs = {4: {'flux':  -mp.S_flux_bc}, 2:{'qadv': S_restorefield}}
+#sal_bcs = {4: {'flux': conditional(y > (1.0-sponge_fraction) * L, -mp.S_flux_bc*(1-((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction))), -mp.S_flux_bc)},  
+#        2:{'qadv': S_restore}}
+#sal_bcs = { 2:{'qadv': S_restore}} # , 1:{'q': S_restore}, 3:{'q': S_restore}, 4:{'q': S_restore}}
 #sal_bcs = {}
 
 frazil_bcs = {}
@@ -423,8 +510,6 @@ u_solver_parameters = mumps_solver_parameters
 temp_solver_parameters = mumps_solver_parameters
 sal_solver_parameters = mumps_solver_parameters
 frazil_solver_parameters = mumps_solver_parameters
-
-##########
 
 # Plotting depth profiles.
 z500m = cavity_thickness(5E2, 0., H1, L, H2)
@@ -503,7 +588,7 @@ vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields
 # are meant to decouple from pressure projection, but won't if pressure is not initialised
 # do this here, so we can see the initial pressure in pressure_0.pvtu
 if not DUMP:
-    # should not be done when picking up
+#    # should not be done when picking up
     with timed_stage('initial_pressure'):
         vp_timestepper.initialize_pressure()
 #vp_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
@@ -518,7 +603,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/icefin_simulations/simple_forcing/"+str(args.date)+"_thwaites_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isotropicdx5_iterative_600mdepth_ulim_kappa1e-4vert_muv1e-3_L100m_initTSconstant_nomelt_draguvtop_uinit0_closedlhs/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isodx2.5m_iter_600m_ulim_initTmin0.5S34const_open_muh1e-3_muv1e-3_kh1e-4_kv1e-5_retro_topbotdag_uflux_melt_dynTSrestopmod2e-4/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -565,6 +650,9 @@ full_pressure_file.write(full_pressure)
 
 frazil_flux_file = File(folder+"frazil_flux.pvd")
 frazil_flux_file.write(frazil_flux)
+
+sop_file = File(folder+"boundary_stress.pvd")
+sop_file.write(stress_open_boundary_dynamic)
 ########
 
 # Extra outputs for plotting
@@ -748,6 +836,23 @@ while t < T - 0.5*dt:
     limiter.apply(temp)
     limiter.apply(frazil)
     frazil.interpolate(conditional(frazil < 5e-9, 5e-9, frazil))
+    
+    # dynamic pressure rhs
+    temp_vom.interpolate(temp)
+    sal_vom.interpolate(sal)
+    p_dyn = dynamic_pressure(temp_vom.dat.data, sal_vom.dat.data)
+    dynamic_pressure_interp = scipy.interpolate.interp1d(z_rhs, p_dyn, bounds_error=False,fill_value='extrapolate') 
+
+    stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro[:,1])
+    
+    #try using sal an dtemp from inside domain to force the inflow?
+    sal_interp = scipy.interpolate.interp1d(z_rhs, sal_vom.dat.data_ro, bounds_error=False,fill_value='extrapolate') 
+    temp_interp = scipy.interpolate.interp1d(z_rhs, temp_vom.dat.data_ro, bounds_error=False,fill_value='extrapolate') 
+
+    # interpolate rhs values to the field
+    S_restorefield.dat.data[:] = sal_interp(X_p1dg.dat.data_ro[:,1])
+    T_restorefield.dat.data[:] = temp_interp(X_p1dg.dat.data_ro[:,1])
+    
     with timed_stage('output'):
        if step % output_step == 0:
            # dumb checkpoint for starting from last timestep reached
@@ -799,6 +904,7 @@ while t < T - 0.5*dt:
                Qs_file.write(Q_s)
                Q_ice_file.write(Q_ice)
                frazil_flux_file.write(frazil_flux)
+               sop_file.write(stress_open_boundary_dynamic)
            time_str = str(step)
            #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
     
