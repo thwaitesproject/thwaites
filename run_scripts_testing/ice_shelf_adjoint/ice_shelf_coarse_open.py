@@ -188,7 +188,7 @@ else:
 #    sal_init = Constant(34.4)
     sal_init = S_restore
     sal.interpolate(sal_init)
-#c = Control(sal)
+#c = Control(temp)
 
 
 ##########
@@ -267,7 +267,7 @@ mu = Function(TP1, name='viscosity').project(kappa)
 
 
 c = Control(T_restorefield)
-#c1 = Control(S_restorefield)
+c1 = Control(S_restorefield)
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
 
@@ -786,9 +786,9 @@ def eval_cb(j, m):
         chk.store(S_restorefield_vis, name="sal restore")
 print(J)
 
-rf = ReducedFunctional(J, c) # [c, c1]) #, eval_cb_post=eval_cb)
+rf = ReducedFunctional(J, [c, c1]) #, eval_cb_post=eval_cb)
 
-#g_opt = minimize(rf, options={"disp": True})
+g_opt = minimize(rf, options={"disp": True})
 
 #tape.reset_variables()
 #J.adj_value = 1.0
@@ -803,9 +803,9 @@ J.block_variable.adj_value = 1.0
 
 print(len(T_restorefield.dat.data))
 
-grad = rf.derivative()
+#grad = rf.derivative()
 #File(folder+'grad.pvd').write(grad)
 
-#h = Function(T_restorefield)
+#h = Function(temp)#S_restorefield)
 #h.dat.data[:] = np.random.random(h.dat.data_ro.shape) # 2* for temp... 
-#taylor_test(rf, T_restorefield, h)
+#taylor_test(rf, temp, h)
