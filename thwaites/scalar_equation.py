@@ -36,9 +36,9 @@ class ScalarAdvectionTerm(BaseTerm):
 
         # which is replaced at incoming Dirichlet 'q' boundaries:
         for id, bc in bcs.items():
-            if 'q' in bc:
+            if 'qadv' in bc:
                 # on incoming boundaries, dot(u,n)<0, replace q with bc['q']
-                F += phi*min_value(dot(u, n), 0)*(bc['q']-q) * self.ds(id)
+                F += phi*min_value(dot(u, n), 0)*(bc['qadv']-q) * self.ds(id)
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u)):
             # s=0: u.n(-)<0  =>  flow goes from '+' to '-' => '+' is upwind
@@ -142,6 +142,9 @@ class ScalarDiffusionTerm(BaseTerm):
                 # here we need only the third term, because we assume jump_q=0 (q_ext=q)
                 # the provided flux = kappa dq/dn = dot(n, dot(diff_tensor, grad(q))
                 F += -phi*bc['flux']*self.ds(id)
+            elif 'float' in bc:
+                F += -inner(phi*n, dot(diff_tensor, grad(q))) * self.ds(id)
+
 
             if 'drag' in bc:
                 # (bottom) drag of the form tau = -C_D u |u|
