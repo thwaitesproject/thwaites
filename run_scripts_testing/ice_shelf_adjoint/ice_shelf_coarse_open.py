@@ -11,6 +11,7 @@ from pyop2.profiling import timed_stage
 
 from firedrake_adjoint import *
 from thwaites.diagnostic_block import DiagnosticBlock
+from thwaites.diagnostic_block import DiagnosticConstantBlock
 ##########
 
 
@@ -124,15 +125,15 @@ full_pressure = Function(M.sub(1), name="full pressure")
 # Define a dump file
 dump_file = "./17.02.23_dump_50days_open_qadv_TSconst"
 
-DUMP = True
+DUMP = False #True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
         chk.load(v_, name="v_velocity")
         chk.load(p_, name="perturbation_pressure")
         #chk.load(u, name="u_velocity")
-        chk.load(sal, name="salinity")
-        chk.load(temp, name="temperature")
+#        chk.load(sal, name="salinity")
+#        chk.load(temp, name="temperature")
 
         # from holland et al 2008b. constant T below 200m depth. varying sal.
         T_200m_depth = 1.0
@@ -144,6 +145,21 @@ if DUMP:
 
         T_restore = Constant(T_200m_depth)
         S_restore = Constant(S_200m_depth) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
+
+        #T slope: 0.00042646953633639534
+        #T intercept: 0.9797220017439936
+        #S slope: -0.0006793874278126845
+        #S intercept: 34.37197394968902
+        T_slope = Constant(0.000426)
+        T_intercept = Constant(0.9797)
+        S_slope = Constant(-0.000679)
+        S_intercept = Constant(34.37)
+        
+        temp.interpolate(T_intercept + T_slope * z)
+
+        sal.interpolate(S_intercept + S_slope * z)
+
+
         # make T/S restore fields to calculate adjoint sensitity
         T_restorefield = Function(P1, name="Trestore field")
         S_restorefield = Function(P1, name="Srestore field")
@@ -160,7 +176,7 @@ else:
     #u_init = Constant(0.0)
     #u.interpolate(u_init)
 
-    # from holland et al 2008b. constant T below 200m depth. varying sal.
+    # ignore below was used to get 50 day run...
     T_200m_depth = -0.5
     T_bottom = 1.0
     temp_gradient = (T_bottom - T_200m_depth) / -H2
@@ -173,7 +189,6 @@ else:
     S_bottom = 34.8
     salinity_gradient = (S_bottom - S_200m_depth) / -H2
     S_surface = S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
-
     S_restore = S_surface + (S_bottom - S_surface) * (z / -water_depth)
     
     T_restorefield = Function(P1, name="Trestore field")
@@ -182,12 +197,34 @@ else:
     T_restorefield.interpolate(T_restore)
     S_restorefield.interpolate(S_restore)
 
-    temp_init = T_restore
-    temp.interpolate(temp_init)
+    # below is code for initialising and rhs bc...
+
+    T_slope = Constant(0.0)
+    T_intercept = Constant(1.0)
+    S_slope = Constant(0.0)
+    S_intercept = Constant(34.4)
+        
+    c = Control(T_slope) 
+    c1 = Control(T_intercept) 
+    c2 = Control(S_slope) 
+    c3 = Control(S_intercept) 
+    
+    temp.interpolate(T_intercept + T_slope * z)
+    sal.interpolate(S_intercept + S_slope * z)
+#    temp_init = T_restore
+#    temp.interpolate(temp_init)
 
 #    sal_init = Constant(34.4)
-    sal_init = S_restore
-    sal.interpolate(sal_init)
+#    sal_init = S_restore
+#    sal.interpolate(sal_init)
+        #T_slope = Constant(0.0)
+        #T_intercept = Constant(1.0)
+        #S_slope = Constant(0.0)
+        #S_intercept = Constant(34.0)
+        
+        #temp.interpolate(T_intercept + T_slope * z)
+
+        #sal.interpolate(S_intercept + S_slope * z)
 #c = Control(temp)
 
 
@@ -266,8 +303,6 @@ kappa_sal = Function(TP1, name='salinity diffusion').project(kappa)
 mu = Function(TP1, name='viscosity').project(kappa)
 
 
-c = Control(T_restorefield)
-c1 = Control(S_restorefield)
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
 
@@ -332,8 +367,8 @@ def top_boundary_to_csv(boundary_points, df, t_str):
 
 # WEAKLY Enforced BCs
 n = FacetNormal(mesh)
-Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
-Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
+Temperature_term = -beta_temp * (0.5 * T_slope * pow(z, 2)  + (T_intercept-T_ref) * z)
+Salinity_term = beta_sal * (0.5 * S_slope * pow(z, 2)  + (S_intercept-S_ref) * z)
 stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
 ice_drag = 0.0097
@@ -407,13 +442,13 @@ stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary_dynamic*-n},
+vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary},
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
-temp_bcs = {4: {'flux': -mp.T_flux_bc}, 2: {'qadv': T_restorefield}}
+temp_bcs = {4: {'flux': -mp.T_flux_bc}, 2: {'qadv': T_intercept + T_slope * z}}
 
-sal_bcs = {4: {'flux': -mp.S_flux_bc}, 2: {'qadv': S_restorefield}}
+sal_bcs = {4: {'flux': -mp.S_flux_bc}, 2: {'qadv': S_intercept + S_slope * z}}
 
 
 
@@ -577,7 +612,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data0/wis15/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_consTS_adjoint_objTSprofweightscale_opt_cb_noreg/"
+         +"_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_invfromrest_controlbefore/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -625,23 +660,23 @@ full_pressure_file.write(full_pressure)
 # adjoint output
 tape = get_working_tape()
 
-adj_s_file = File(folder+"adj_salinity.pvd")
-tape.add_block(DiagnosticBlock(adj_s_file, sal))
+#adj_s_file = File(folder+"adj_salinity.pvd")
+#tape.add_block(DiagnosticBlock(adj_s_file, sal))
 
-adj_t_file = File(folder+"adj_temperature.pvd")
-tape.add_block(DiagnosticBlock(adj_t_file, temp))
+#adj_t_file = File(folder+"adj_temperature.pvd")
+#tape.add_block(DiagnosticBlock(adj_t_file, temp))
 
-adj_visc_file = File(folder+"adj_viscosity.pvd")
-tape.add_block(DiagnosticBlock(adj_visc_file, mu))
-adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
-adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
+#adj_visc_file = File(folder+"adj_viscosity.pvd")
+#tape.add_block(DiagnosticBlock(adj_visc_file, mu))
+#adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
+#tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
+#adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
+#tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
-adj_diff_t_file = File(folder+"adj_Trestore.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_t_file, T_restorefield))
-adj_diff_s_file = File(folder+"adj_Srestore.pvd")
-tape.add_block(DiagnosticBlock(adj_diff_s_file, S_restorefield))
+#adj_diff_t_file = File(folder+"adj_Trestore.pvd")
+#tape.add_block(DiagnosticBlock(adj_diff_t_file, T_restorefield))
+#adj_diff_s_file = File(folder+"adj_Srestore.pvd")
+#tape.add_block(DiagnosticBlock(adj_diff_s_file, S_restorefield))
 ########
 
 # Extra outputs for plotting
@@ -686,8 +721,8 @@ while t < T - 0.5*dt:
        if step % output_step == 0:
            # dumb checkpoint for starting from spin up
            
-           tape.add_block(DiagnosticBlock(adj_s_file, sal))
-           tape.add_block(DiagnosticBlock(adj_t_file, temp))
+ #          tape.add_block(DiagnosticBlock(adj_s_file, sal))
+ #          tape.add_block(DiagnosticBlock(adj_t_file, temp))
 
            with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
                # Checkpoint file open for reading and writing
@@ -767,13 +802,29 @@ Srestore_vis_optfile = File(folder+"Sres_optfile.pvd")
 S_restorefield_vis.interpolate(S_restorefield)
 Srestore_vis_optfile.write(S_restorefield_vis) 
 
-def eval_cb(j, m):
+def eval_cb_pre(m):
+    print("eval_cb_pre")
     print(len(m))
-    T_restorefield_vis.project(m[0])
-    S_restorefield_vis.project(m[1])
+    print("T slope:", m[0].values()[0])
+    print("T intercept:", m[1].values()[0])
+    print("S slope:", m[2].values()[0])
+    print("S intercept:", m[3].values()[0])
+    tape.add_block(DiagnosticConstantBlock(T_slope, "T slope :"))
+    tape.add_block(DiagnosticConstantBlock(T_intercept, "T intercept :"))
+    tape.add_block(DiagnosticConstantBlock(S_slope, "S slope :"))
+    tape.add_block(DiagnosticConstantBlock(S_intercept, "S intercept :"))
+    print("J = ", J)
 
-    Trestore_vis_optfile.write(T_restorefield_vis) 
-    Srestore_vis_optfile.write(S_restorefield_vis) 
+
+def eval_cb(j, m):
+    print("eval_cb")
+
+    print(len(m))
+    print("T slope:", m[0].values()[0])
+    print("T intercept:", m[1].values()[0])
+    print("S slope:", m[2].values()[0])
+    print("S intercept:", m[3].values()[0])
+
     print("J = ", J)
     with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
@@ -786,9 +837,16 @@ def eval_cb(j, m):
         chk.store(S_restorefield_vis, name="sal restore")
 print(J)
 
-rf = ReducedFunctional(J, [c, c1]) #, eval_cb_post=eval_cb)
+def derivative_cb_post(j, djdm, m):
+    print("------------")
+    print(" derivative cb post")
+    print("------------")
 
-g_opt = minimize(rf, options={"disp": True})
+rf = ReducedFunctional(J, [c, c1,c2,c3], eval_cb_post=eval_cb, eval_cb_pre=eval_cb_pre, derivative_cb_post=derivative_cb_post)
+
+bounds = [[-0.01, -10, -0.01, 30],[0.01, 10., 0., 40. ] ]
+
+g_opt = minimize(rf, bounds=bounds, options={"disp": True})
 
 #tape.reset_variables()
 #J.adj_value = 1.0
