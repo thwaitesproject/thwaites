@@ -3168,4 +3168,4 @@ def test_coarse_open_pdyn_Sbc():
     print(tt)
     assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-2)
 
-test_coarse_open_pdyn_Sbc()
+#test_coarse_open_pdyn_Sbc()
