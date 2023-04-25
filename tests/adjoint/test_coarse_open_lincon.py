@@ -550,7 +550,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("TS_foradjoint_7550m_profile_250423.csv")
+    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile_250423.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -1240,7 +1240,7 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("TS_foradjoint_7550m_profile_250423.csv")
+    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile_250423.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -1930,7 +1930,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("TS_foradjoint_7550m_profile_250423.csv")
+    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile_250423.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -2620,7 +2620,7 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("TS_foradjoint_7550m_profile_250423.csv")
+    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile_250423.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
