@@ -374,7 +374,7 @@ def test_coarse_open_pdyn_mu():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -1004,7 +1004,7 @@ def test_coarse_open_pdyn_sal():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -1635,7 +1635,7 @@ def test_coarse_open_pdyn_temp():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -2267,7 +2267,7 @@ def test_coarse_open_pdyn_Tbc():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -2898,7 +2898,7 @@ def test_coarse_open_pdyn_Sbc():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
