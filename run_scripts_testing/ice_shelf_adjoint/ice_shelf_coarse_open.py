@@ -379,8 +379,8 @@ import scipy
 
 z_rhs = np.linspace(-498.01, -599.99, 400)
 rhs_nodes = []
-for z in z_rhs:
-    rhs_nodes.append([9999.995, z])
+for zi in z_rhs:
+    rhs_nodes.append([9999.995, zi])
 
 print(rhs_nodes)
 rhs_nodes = VertexOnlyMesh(mesh,rhs_nodes,missing_points_behaviour='warn')
@@ -571,7 +571,7 @@ def adjoint_melt_to_csv(df, t_str):
 ##### 
 # read linear simulations
 #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-adjoint_profile7550m_target = pd.read_csv("TS_foradjoint_7550m_profile.csv")
+adjoint_profile7550m_target = pd.read_csv("TS_foradjoint_7550m_profile_250423.csv")
 
 temp_profile_target = adjoint_profile7550m_target['T_t_14400']
 sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -612,7 +612,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data0/wis15/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_invfromrest_controlbefore/"
+         +"_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_fromrest_inv/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -813,7 +813,6 @@ def eval_cb_pre(m):
     tape.add_block(DiagnosticConstantBlock(T_intercept, "T intercept :"))
     tape.add_block(DiagnosticConstantBlock(S_slope, "S slope :"))
     tape.add_block(DiagnosticConstantBlock(S_intercept, "S intercept :"))
-    print("J = ", J)
 
 
 def eval_cb(j, m):
@@ -825,7 +824,7 @@ def eval_cb(j, m):
     print("S slope:", m[2].values()[0])
     print("S intercept:", m[3].values()[0])
 
-    print("J = ", J)
+    print("J = ", j)
     with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
         # Checkpoint file open for reading and writing
         chk.store(v_, name="v_velocity")
@@ -844,9 +843,9 @@ def derivative_cb_post(j, djdm, m):
 
 rf = ReducedFunctional(J, [c, c1,c2,c3], eval_cb_post=eval_cb, eval_cb_pre=eval_cb_pre, derivative_cb_post=derivative_cb_post)
 
-bounds = [[-0.01, -10, -0.01, 30],[0.01, 10., 0., 40. ] ]
+bounds = [[-0.02, -10, -0.01, 30],[0.02, 10., 0., 40. ] ]
 
-g_opt = minimize(rf, bounds=bounds, options={"disp": True})
+#g_opt = minimize(rf, bounds=bounds, options={"disp": True})
 
 #tape.reset_variables()
 #J.adj_value = 1.0
@@ -864,6 +863,6 @@ print(len(T_restorefield.dat.data))
 #grad = rf.derivative()
 #File(folder+'grad.pvd').write(grad)
 
-#h = Function(temp)#S_restorefield)
+#h = Constant(S_intercept)#S_restorefield)
 #h.dat.data[:] = np.random.random(h.dat.data_ro.shape) # 2* for temp... 
-#taylor_test(rf, temp, h)
+#taylor_test(rf, S_intercept, h)
