@@ -36,6 +36,9 @@ class ScalarAdvectionTerm(BaseTerm):
 
         # which is replaced at incoming Dirichlet 'q' boundaries:
         for id, bc in bcs.items():
+            if 'q' in bc:
+                # on incoming boundaries, dot(u,n)<0, replace q with bc['q']
+                F += phi*min_value(dot(u, n), 0)*(bc['q']-q) * self.ds(id)
             if 'qadv' in bc:
                 # on incoming boundaries, dot(u,n)<0, replace q with bc['q']
                 F += phi*min_value(dot(u, n), 0)*(bc['qadv']-q) * self.ds(id)
