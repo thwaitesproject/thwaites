@@ -141,6 +141,12 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         self.Fstar = self.equations[0].mass_term(self.u_star_test, self.u_star-u_old)
         self.Fstar -= self.dt_const*self.equations[0].residual(self.u_star_test, u_star_theta, u_lag_theta, self.fields_star, bcs=self.bcs)
+
+        if 'balance_pressure' in fields:
+            balance_pg_term = [term for term in self.equations[0]._terms if isinstance(term, PressureGradientTerm)][0]
+            balance_pg_fields['pressure'] = fields['balance_pressure'] 
+            self.Fstar -= self.dt_const*balance_pg_term.residual(self.u_test, u_theta, u_lag_theta, balance_pg_fields, bcs=self.bcs)
+
         self.predictor_problem = firedrake.NonlinearVariationalProblem(self.Fstar, self.u_star)
         self.predictor_solver = firedrake.NonlinearVariationalSolver(self.predictor_problem,
                                                                      solver_parameters=self.predictor_solver_parameters,
