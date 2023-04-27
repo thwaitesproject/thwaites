@@ -20,10 +20,10 @@ class BalancePressurePoisson(BaseTerm):
     """
 
     def residual(self, test, trial, trial_lagged, fields, bcs):
-        psi = test # assume P2 field
+        xi = test # assume P2 field
         p_b = trial
 
-        F = dot(grad(psi), grad(p_b)) * self.dx
+        F = dot(grad(xi), grad(p_b)) * self.dx
         return F
 
 class DivergenceGeostrophicPoisson(BaseTerm):
@@ -32,19 +32,24 @@ class DivergenceGeostrophicPoisson(BaseTerm):
     """
 
     def residual(self, test, trial, trial_lagged, fields, bcs):
-        psi = test  # assume P2 field
-        b = fields['buoyancy']
-        u = fields['velocity']
-        f = fields['coriolis_frequency']
-        
-        # coriolis term vector f-plane on LHS
-        if self.dim == 3:
-            c = as_vector(-f*u[1], f*u[0], 0)
-        elif self.dim == 2:
-            c = as_vector(f*u, 0) # u is the scalar solution to the 2.5d evolution equations
+        xi = test  # assume P2 field
+        B = fields['buoyancy']
+         
+        if 'coriolis_frequency' in fields:
+            assert 'u' in fields
 
-        B = b - c # combined buoyancy and coriolis vector on the RHS
-        F = dot(grad(psi), B) * self.dx # Still on RHS
+            u = fields['velocity']
+            f = fields['coriolis_frequency']
+            
+            # coriolis term vector f-plane on LHS
+            if self.dim == 3:
+                c = as_vector(-f*u[1], f*u[0], 0)
+            elif self.dim == 2:
+                c = as_vector(f*u, 0) # u is the scalar solution to the 2.5d evolution equations
+
+            B = b - c # combined buoyancy and coriolis vector on the RHS
+        
+        F = dot(grad(xi), B) * self.dx # Still on RHS
         return -F   # move to LHS
     
 

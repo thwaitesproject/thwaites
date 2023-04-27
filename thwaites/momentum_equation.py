@@ -212,6 +212,18 @@ class PressureGradientTerm(BaseTerm):
 
         return -F
 
+class BalancePressureGradientTerm(BaseTerm):
+    def residual(self, test, trial, trial_lagged, fields, bcs):
+        phi = test
+        if 'balance_pressure' in fields:
+            p_b = fields['balance_pressure']
+            # NOTE: we assume p is continuous
+            F = dot(phi, grad(p_b))*self.dx
+            print("hello pb")
+            return -F
+        else:
+            return 0.0
+
 
 class DivergenceTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
@@ -275,7 +287,7 @@ class MomentumEquation(BaseEquation):
     Momentum equation with advection, viscosity, pressure gradient, source term, and coriolis.
     """
 
-    terms = [MomentumAdvectionTerm, ViscosityTerm, PressureGradientTerm, MomentumSourceTerm, CoriolisTerm]
+    terms = [MomentumAdvectionTerm, ViscosityTerm, PressureGradientTerm, MomentumSourceTerm, CoriolisTerm, BalancePressureGradientTerm]
 
 
 class ContinuityEquation(BaseEquation):
