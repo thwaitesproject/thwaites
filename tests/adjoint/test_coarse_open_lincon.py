@@ -34,7 +34,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("coarse.msh")
+    mesh = Mesh("tests/adjoint/coarse.msh")
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -406,7 +406,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -724,7 +724,7 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("coarse.msh")
+    mesh = Mesh("tests/adjoint/coarse.msh")
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -1096,7 +1096,7 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -1414,7 +1414,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("coarse.msh")
+    mesh = Mesh("tests/adjoint/coarse.msh")
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -1786,7 +1786,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -2104,7 +2104,7 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("coarse.msh")
+    mesh = Mesh("tests/adjoint/coarse.msh")
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -2476,7 +2476,7 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = interpolate(mesh.coordinates, W_vector)
+    X = firedrake.interpolate(mesh.coordinates, W_vector)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
