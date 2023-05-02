@@ -1,11 +1,11 @@
 from .time_stepper import TimeIntegrator
-from .momentum_equation import PressureGradientTerm, DivergenceTerm
 import firedrake
 from pyop2.profiling import timed_stage
 
+
 class BalancePressureSolver(TimeIntegrator):
     """
-    Solver for balance pressure equation, div grad p_b = div B 
+    Solver for balance pressure equation, div grad p_b = div B
 
     e.g. see J.R. Maddison, D.P. Marshall, C.C. Pain, M.D. Piggott, Accurate representation of geostrophic and hydrostatic balance in unstructured mesh finite element ocean modelling, Ocean Modelling, Volume   9, Issues 3–4, 2011,
     """
@@ -21,8 +21,7 @@ class BalancePressureSolver(TimeIntegrator):
 
         """
 
-        super().__init__(equation, solution, fields, 0, solver_parameters) # note dt set to zero as the balance pressure solve is time independent
-
+        super().__init__(equation, solution, fields, 0, solver_parameters)  # note dt set to zero as the balance pressure solve is time independent
 
         self.name = '-'.join([self.__class__.__name__])
         self.solution_old = firedrake.Function(self.solution)
@@ -34,7 +33,7 @@ class BalancePressureSolver(TimeIntegrator):
     def initialize(self, init_solution):
         self.solution_old.assign(init_solution)
 
-        self.F = self.equation.residual(self.test, self.solution, self.solution_old, self.fields, bcs=self.bcs)  
+        self.F = self.equation.residual(self.test, self.solution, self.solution_old, self.fields, bcs=self.bcs)
 
         self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution, self.strong_bcs)
         self.solver = firedrake.NonlinearVariationalSolver(self.problem,
@@ -47,6 +46,5 @@ class BalancePressureSolver(TimeIntegrator):
         if not self._initialized:
             self.initialize(self.solution)
         self.solution_old.assign(self.solution)
-        self.solver.solve()
-
-
+        with timed_stage("balance_pressure_solve"):
+            self.solver.solve()

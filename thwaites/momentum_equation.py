@@ -212,6 +212,7 @@ class PressureGradientTerm(BaseTerm):
 
         return -F
 
+
 class BalancePressureGradientTerm(BaseTerm):
     def residual(self, test, trial, trial_lagged, fields, bcs):
         phi = test
