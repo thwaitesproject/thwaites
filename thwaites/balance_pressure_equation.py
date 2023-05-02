@@ -36,7 +36,7 @@ class DivergenceGeostrophicPoisson(BaseTerm):
         B = fields['buoyancy']
          
         if 'coriolis_frequency' in fields:
-            assert 'u' in fields
+            assert 'velocity' in fields
 
             u = fields['velocity']
             f = fields['coriolis_frequency']
