@@ -18,6 +18,7 @@ class DiagnosticBlock(Block):
         self.f.write(out)
         return 0
 
+
 class DiagnosticConstantBlock(Block):
     def __init__(self, constant, name):
         super().__init__()
