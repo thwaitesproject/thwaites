@@ -55,7 +55,7 @@ dz = 1.0
 
 # create mesh
 #mesh = PeriodicSquareMesh(40,40,100,direction='x')
-mesh = SquareMesh(40,40,100)
+mesh = SquareMesh(40,100,100, quadrilateral=True)
 #mesh = Mesh("./2d_retro_slope_icefin_gz.msh")
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -77,19 +77,45 @@ print("You have Comm WORLD rank = ", mesh.comm.rank)
 water_depth = 600
 mesh.coordinates.dat.data[:, 1] -= water_depth
 y, z = SpatialCoordinate(mesh)
+
+
+#Vc = mesh.coordinates.function_space()
+#x, y = SpatialCoordinate(mesh)
+#f = Function(Vc).interpolate(as_vector([x, y+(100-x)*0.1]))
+#mesh.coordinates.assign(f)
+#y, z = SpatialCoordinate(mesh)
 ##########
 
 # Set up function spaces
-V = VectorFunctionSpace(mesh, "DG", 1)  # velocity space
-W = FunctionSpace(mesh, "CG", 2)  # pressure space
+#V = VectorFunctionSpace(mesh, "DG", 1)  # velocity space
+#W = FunctionSpace(mesh, "CG", 2)  # pressure space
+#M = MixedFunctionSpace([V, W])
+
+# u velocity function space.
+#U = FunctionSpace(mesh, "DG", 1)
+
+#Q = FunctionSpace(mesh, "DG", 1)  # melt function space
+#K = FunctionSpace(mesh, "DG", 1)    # temperature space
+#S = FunctionSpace(mesh, "DG", 1)    # salinity space
+# Set up function spaces
+v_ele = FiniteElement("RTCE", mesh.ufl_cell(), 2, variant="equispaced")
+#v_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
+V = FunctionSpace(mesh, v_ele) # Velocity space
+W = FunctionSpace(mesh, "Q", 2)  # pressure space
 M = MixedFunctionSpace([V, W])
 
 # u velocity function space.
-U = FunctionSpace(mesh, "DG", 1)
+ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
+U = FunctionSpace(mesh, ele)
+VDG = VectorFunctionSpace(mesh, "DQ", 1) # velocity for output
+vdg_ele = FiniteElement("DQ", mesh.ufl_cell(), 1, variant="equispaced")
+VDG1 = VectorFunctionSpace(mesh, vdg_ele) # velocity for output
 
-Q = FunctionSpace(mesh, "DG", 1)  # melt function space
-K = FunctionSpace(mesh, "DG", 1)    # temperature space
-S = FunctionSpace(mesh, "DG", 1)    # salinity space
+Q = FunctionSpace(mesh, ele)
+K = FunctionSpace(mesh, ele)
+S = FunctionSpace(mesh, ele)
+
+P1 = FunctionSpace(mesh, "CG", 1)
 
 PETSc.Sys.Print("vel dofs:", V.dim())
 PETSc.Sys.Print("pressure dofs:", W.dim())
@@ -233,7 +259,7 @@ kmu_ramp = conditional(y > (1.0-sponge_fraction) * L,
                            1e-2 *((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction)),
                           0)
 mu = as_tensor([[1e-3, 0], [0, 1e-3]])
-kappa = as_tensor([[1e-4, 0], [0, 1e-5]])
+kappa = as_tensor([[1e-3, 0], [0, 1e-3]])
 
 kappa_temp = kappa
 kappa_sal = kappa
@@ -533,8 +559,8 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 ##########
 
 # Set up folder
-folder = "/data0/wis15/balance_pressure/"+str(args.date)+"_thwaites_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isodx2.5m_iter_600m_box_TSref_nocor_noinitp_nobcsgradbp_melt_pb/"
+folder = "/data/balance_pressure/"+str(args.date)+"_thwaites_dt"+str(dt)+\
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isodx2.5m_iter_600m_box_TSref_nocor_noinitp_nobcsgradbp_melt_nolim_isokapnu_pb_quad_squash_dz1_equi/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -767,7 +793,7 @@ while t < T - 0.5*dt:
     limiter.apply(u)
     limiter.apply(sal)
     limiter.apply(temp)
-    limiter.apply(frazil)
+    #limiter.apply(frazil)
     frazil.interpolate(conditional(frazil < 5e-9, 5e-9, frazil))
     
     
