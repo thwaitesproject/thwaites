@@ -19,7 +19,7 @@ ADJOINT = False
 
 if ADJOINT:
     from firedrake_adjoint import *
-    from thwaites.diagnostic_block import DiagnosticBlock
+    from thwaites.adjoint_utility import DiagnosticBlock
 
 ##########
 PETSc.Sys.popErrorHandler()

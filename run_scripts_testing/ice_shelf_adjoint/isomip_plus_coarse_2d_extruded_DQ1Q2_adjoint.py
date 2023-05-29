@@ -12,7 +12,7 @@ from math import ceil
 from pyop2.profiling import timed_stage
 
 from firedrake_adjoint import *
-from diagnostic_block import DiagnosticBlock
+from adjoint_utility import DiagnosticBlock
 
 ##########
 
