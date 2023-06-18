@@ -1,4 +1,6 @@
 from pyadjoint import Block
+from firedrake import DirichletBC, TestFunction, TrialFunction, utils, assemble, solve, dot, ds, Function
+import numpy
 
 
 class DiagnosticBlock(Block):
@@ -33,3 +35,25 @@ class DiagnosticConstantBlock(Block):
         out = inputs[0]._ad_convert_type(adj_inputs[0])
         print("Adjoint ", self.name, out.values()[0])
         return 0
+
+
+class InteriorBC(DirichletBC):
+    """DirichletBC applied to anywhere that is *not* on the specified boundary"""
+    @utils.cached_property
+    def nodes(self):
+        return numpy.array(list(set(range(self._function_space.node_count)) - set(super().nodes)))
+
+
+class RieszL2BoundaryRepresentation:
+    """Callable that Converts l2-representatives to L2-boundary representatives"""
+    def __init__(self, Q, bids):
+        self.Q = Q
+        v = TestFunction(Q)
+        g = TrialFunction(Q)
+        bc = InteriorBC(Q, 0, bids)
+        self.M = assemble(dot(v, g)*ds(bids), bcs=bc)
+
+    def __call__(self, value):
+        ret = Function(self.Q)
+        solve(self.M, ret, value)
+        return ret

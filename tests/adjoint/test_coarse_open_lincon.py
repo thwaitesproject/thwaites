@@ -10,8 +10,8 @@ import numpy as np
 from pyop2.profiling import timed_stage
 
 from firedrake_adjoint import *
-from thwaites.diagnostic_block import DiagnosticBlock
-from thwaites.diagnostic_block import DiagnosticConstantBlock
+from thwaites.adjoint_utility import DiagnosticBlock
+from thwaites.adjoint_utility import DiagnosticConstantBlock
 ##########
 
 

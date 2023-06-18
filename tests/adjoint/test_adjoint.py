@@ -14,7 +14,7 @@ import rasterio
 from thwaites.interpolate import interpolate as interpolate_data
 
 from firedrake_adjoint import *
-from thwaites.diagnostic_block import DiagnosticBlock
+from thwaites.adjoint_utility import DiagnosticBlock
 
 
 # Run test 3 times for no timesteps, 1 timestep and 10 timesteps
