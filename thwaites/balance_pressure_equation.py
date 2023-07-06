@@ -21,11 +21,11 @@ class BalancePressurePoisson(BaseTerm):
         p_b = trial
 
         F = dot(grad(xi), grad(p_b)) * self.dx
-        
+
         for id, bc in bcs.items():
             # for vertical side walls with melting and slope add a pressure gradient
-            F -= xi * bc['gradpb'] * self.ds(id) 
-        
+            F -= xi * bc['gradpb'] * self.ds(id)
+
         return F
 
 
