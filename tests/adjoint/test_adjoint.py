@@ -2,7 +2,7 @@ import pytest
 
 from thwaites import *
 from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, ExtrudedFunction
-from thwaites.utility import offset_backward_step_approx
+from thwaites.utility import offset_backward_step_approx, extruded_cavity_mesh
 from firedrake.petsc import PETSc
 from firedrake import FacetNormal
 import pandas as pd
@@ -63,27 +63,7 @@ def test_2d_isomip_cavity_salfunctional(T):
 
     PETSc.Sys.Print(len(ocean_thickness.dat.data[:]))
 
-    def extruded_cavity_mesh(base_mesh, ocean_thickness):
-        P0dg = FunctionSpace(base_mesh, "DG", 0)
-        P0dg_cells = Function(P0dg)
-        tmp = ocean_thickness.copy(deepcopy=True)
-        P0dg_cells.assign(np.finfo(0.).min)
-        par_loop("""for (int i=0; i<bathy.dofs; i++) {
-                bathy_max[0] = fmax(bathy[i], bathy_max[0]);
-                }""",
-                dx, {'bathy_max': (P0dg_cells, RW), 'bathy': (tmp, READ)})
-
-        P0dg_cells /= dz
-
-        P0dg_cells_array = P0dg_cells.dat.data_ro_with_halos[:]
-
-        for i in P0dg_cells_array:
-            layers.append([0, i])
-
-        mesh = ExtrudedMesh(base_mesh, layers, layer_height=dz)
-        return mesh 
-
-    mesh = extruded_cavity_mesh(base_mesh, ocean_thickness)
+    mesh = extruded_cavity_mesh(base_mesh, ocean_thickness, dz, layers)
     x, z = SpatialCoordinate(mesh)
 
     P0_extruded = FunctionSpace(mesh, 'DG', 0)
@@ -855,27 +835,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
 
     PETSc.Sys.Print(len(ocean_thickness.dat.data[:]))
 
-    def extruded_cavity_mesh(base_mesh, ocean_thickness):
-        P0dg = FunctionSpace(base_mesh, "DG", 0)
-        P0dg_cells = Function(P0dg)
-        tmp = ocean_thickness.copy(deepcopy=True)
-        P0dg_cells.assign(np.finfo(0.).min)
-        par_loop("""for (int i=0; i<bathy.dofs; i++) {
-                bathy_max[0] = fmax(bathy[i], bathy_max[0]);
-                }""",
-                dx, {'bathy_max': (P0dg_cells, RW), 'bathy': (tmp, READ)})
-
-        P0dg_cells /= dz
-
-        P0dg_cells_array = P0dg_cells.dat.data_ro_with_halos[:]
-
-        for i in P0dg_cells_array:
-            layers.append([0, i])
-
-        mesh = ExtrudedMesh(base_mesh, layers, layer_height=dz)
-        return mesh 
-
-    mesh = extruded_cavity_mesh(base_mesh, ocean_thickness)
+    mesh = extruded_cavity_mesh(base_mesh, ocean_thickness, dz, layers)
     x, z = SpatialCoordinate(mesh)
 
     P0_extruded = FunctionSpace(mesh, 'DG', 0)

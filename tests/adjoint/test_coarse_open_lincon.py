@@ -169,7 +169,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
         salinity_gradient = (S_bottom - S_200m_depth) / -H2
         S_surface = S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
         S_restore = S_surface + (S_bottom - S_surface) * (z / -water_depth)
-        
+
         T_restorefield = Function(P1, name="Trestore field")
         S_restorefield = Function(P1, name="Srestore field")
 
@@ -178,16 +178,16 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
 
         # below is code for initialising and rhs bc...
 
-        T_slope = Constant(0)
-        T_intercept = Constant(1.0)
-        S_slope = Constant(0)
-        S_intercept = Constant(34.4)
-            
-        c = Control(T_slope) 
-        c1 = Control(T_intercept) 
-        c2 = Control(S_slope) 
-        c3 = Control(S_intercept) 
-        
+        T_slope = Constant(0, domain=mesh)
+        T_intercept = Constant(1.0, domain=mesh)
+        S_slope = Constant(0, domain=mesh)
+        S_intercept = Constant(34.4, domain=mesh)
+
+        c = Control(T_slope)
+        c1 = Control(T_intercept)
+        c2 = Control(S_slope)
+        c3 = Control(S_intercept)
+
         temp.interpolate(T_intercept + T_slope * z)
         sal.interpolate(S_intercept + S_slope * z)
     #    temp_init = T_restore
