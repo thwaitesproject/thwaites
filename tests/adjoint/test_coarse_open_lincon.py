@@ -868,10 +868,10 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
 
         # below is code for initialising and rhs bc...
 
-        T_slope = Constant(0)
-        T_intercept = Constant(1.0)
-        S_slope = Constant(0)
-        S_intercept = Constant(34.4)
+        T_slope = Constant(0, domain=mesh)
+        T_intercept = Constant(1.0, domain=mesh)
+        S_slope = Constant(0, domain=mesh)
+        S_intercept = Constant(34.4, domain=mesh)
             
         c = Control(T_slope) 
         c1 = Control(T_intercept) 
@@ -1558,10 +1558,10 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
 
         # below is code for initialising and rhs bc...
 
-        T_slope = Constant(0)
-        T_intercept = Constant(1.0)
-        S_slope = Constant(0)
-        S_intercept = Constant(34.4)
+        T_slope = Constant(0, domain=mesh)
+        T_intercept = Constant(1.0, domain=mesh)
+        S_slope = Constant(0, domain=mesh)
+        S_intercept = Constant(34.4, domain=mesh)
             
         c = Control(T_slope) 
         c1 = Control(T_intercept) 
@@ -2248,10 +2248,10 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
 
         # below is code for initialising and rhs bc...
 
-        T_slope = Constant(0)
-        T_intercept = Constant(1.0)
-        S_slope = Constant(0)
-        S_intercept = Constant(34.4)
+        T_slope = Constant(0, domain=mesh)
+        T_intercept = Constant(1.0, domain=mesh)
+        S_slope = Constant(0, domain=mesh)
+        S_intercept = Constant(34.4, domain=mesh)
             
         c = Control(T_slope) 
         c1 = Control(T_intercept) 
