@@ -3161,7 +3161,7 @@ def test_coarse_open_pdyn_Sbc():
     #File(folder+'grad.pvd').write(grad)
 
     h = Function(S_restorefield)
-    h.dat.data[:] = 5*np.random.random(h.dat.data_ro.shape) # h*5 seems to get rid of a machine precision problem? most of the time it is fine but random faiure with just magnitude of h = 1 (and I am pretty sure inside taylor test there is a divide by 100... 
+    h.dat.data[:] = 30*np.random.random(h.dat.data_ro.shape) # 14.07.23 now h*5 seems to also have a problem... try h*30 # h*5 seems to get rid of a machine precision problem? most of the time it is fine but random faiure with just magnitude of h = 1 (and I am pretty sure inside taylor test there is a divide by 100... 
     tt = taylor_test(rf, S_restorefield, h)
     print("Sbc TT ten steps")
 
