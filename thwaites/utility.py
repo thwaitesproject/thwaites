@@ -3,6 +3,7 @@ A module with utitity functions for Thwaites
 """
 from firedrake import outer, ds_v, ds_t, ds_b, CellDiameter, CellVolume
 from firedrake import sqrt, exp, Function, FiniteElement, TensorProductElement, FunctionSpace, VectorFunctionSpace
+from firedrake import RW, READ, dx, par_loop, ExtrudedMesh
 import ufl
 import numpy as np
 
@@ -295,3 +296,24 @@ class FrazilRisingVelocity:
             if step > self.picard_steps:
                 break
         return self.w_i
+
+
+def extruded_cavity_mesh(base_mesh, ocean_thickness, dz, layers):
+    P0dg = FunctionSpace(base_mesh, "DG", 0)
+    P0dg_cells = Function(P0dg)
+    tmp = ocean_thickness.copy(deepcopy=True)
+    P0dg_cells.assign(np.finfo(0.).min)
+    domain = "{[i]: 0 <= i < bathy.dofs}"
+    instructions = "bathy_max[0] = fmax(bathy[i], bathy_max[0])"
+    keys = {'bathy_max': (P0dg_cells, RW), 'bathy': (tmp, READ)}
+    par_loop((domain, instructions), dx, keys)
+
+    P0dg_cells /= dz
+
+    P0dg_cells_array = P0dg_cells.dat.data_ro_with_halos[:]
+
+    for i in P0dg_cells_array:
+        layers.append([0, i])
+
+    mesh = ExtrudedMesh(base_mesh, layers, layer_height=dz)
+    return mesh

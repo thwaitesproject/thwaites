@@ -11,6 +11,7 @@ from pyop2.profiling import timed_stage
 
 from firedrake_adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock, RieszL2BoundaryRepresentation
+from thwaites.adjoint_utility import DiagnosticConstantBlock
 ##########
 
 
@@ -119,11 +120,13 @@ Tb = Function(Q, name="boundary freezing temperature")
 Sb = Function(Q, name="boundary salinity")
 full_pressure = Function(M.sub(1), name="full pressure")
 
+p_b = Function(W, name="balance pressure")
+
 ##########
 
 # Define a dump file
-# dump_file = "50day_Kh0.25Kv1e-3_dx500m_dy2m_dump" # from paper Ocean Modelling Scott et al. 2023
-dump_file = "/data/2d_adjoint/18.06.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_closed_fromrest_TSresbc_gammaTfunc/dump.h5"
+dump_file = "./17.02.23_dump_50days_open_qadv_TSconst"
+
 DUMP = True
 if DUMP:
     with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
@@ -144,6 +147,21 @@ if DUMP:
 
         T_restore = Constant(T_200m_depth)
         S_restore = Constant(S_200m_depth) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
+
+        #T slope: 0.00042646953633639534
+        #T intercept: 0.9797220017439936
+        #S slope: -0.0006793874278126845
+        #S intercept: 34.37197394968902
+        T_slope = Constant(0.000426)
+        T_intercept = Constant(0.9797)
+        S_slope = Constant(-0.000679)
+        S_intercept = Constant(34.37)
+        
+#        temp.interpolate(T_intercept + T_slope * z)
+
+ #       sal.interpolate(S_intercept + S_slope * z)
+
+
         # make T/S restore fields to calculate adjoint sensitity
         T_restorefield = Function(P1, name="Trestore field")
         S_restorefield = Function(P1, name="Srestore field")
@@ -160,29 +178,54 @@ else:
     #u_init = Constant(0.0)
     #u.interpolate(u_init)
 
-    # from holland et al 2008b. constant T below 200m depth. varying sal.
-    T_200m_depth = 1.0
+    # ignore below was used to get 50 day run...
+    T_200m_depth = -0.5
+    T_bottom = 1.0
+    temp_gradient = (T_bottom - T_200m_depth) / -H2
+    T_surface = T_200m_depth - (temp_gradient * (H2 - water_depth))  # projected linear slope to surface.
+
+    T_restore = 1.0 # T_surface + (T_bottom - T_surface) * (z / -water_depth)
 
 
-    #S_bottom = 34.8
-    #salinity_gradient = (S_bottom - S_200m_depth) / -H2
-    S_surface = 34.4 #S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
-
-    T_restore = Constant(T_200m_depth)
-    S_restore = Constant(S_surface) #S_surface + (S_bottom - S_surface) * (z / -water_depth)
-
-    temp_init = T_restore
-    temp.assign(temp_init)
-
-    sal_init = Constant(34.4)
-    #sal_init = S_restore
-    sal.assign(sal_init)
+    S_200m_depth = 34.4
+    S_bottom = 34.8
+    salinity_gradient = (S_bottom - S_200m_depth) / -H2
+    S_surface = S_200m_depth - (salinity_gradient * (H2 - water_depth))  # projected linear slope to surface.
+    S_restore = 34.4 #S_surface + (S_bottom - S_surface) * (z / -water_depth)
     
     T_restorefield = Function(P1, name="Trestore field")
     S_restorefield = Function(P1, name="Srestore field")
 
     T_restorefield.assign(T_restore)
     S_restorefield.assign(S_restore)
+
+    # below is code for initialising and rhs bc...
+
+#    T_slope = Constant(0.0)
+#    T_intercept = Constant(1.0)
+#    S_slope = Constant(0.0)
+#    S_intercept = Constant(34.4)
+#        
+#    c = Control(T_slope) 
+#    c1 = Control(T_intercept) 
+#    c2 = Control(S_slope) 
+#    c3 = Control(S_intercept) 
+    
+#    temp.interpolate(T_intercept + T_slope * z)
+#    sal.interpolate(S_intercept + S_slope * z)
+    temp_init = T_restore
+    temp.assign(temp_init)
+
+    sal_init = S_restore
+    sal.assign(sal_init)
+        #T_slope = Constant(0.0)
+        #T_intercept = Constant(1.0)
+        #S_slope = Constant(0.0)
+        #S_intercept = Constant(34.0)
+        
+        #temp.interpolate(T_intercept + T_slope * z)
+
+        #sal.interpolate(S_intercept + S_slope * z)
 c = Control(sal)
 
 
@@ -194,6 +237,7 @@ cty_eq = ContinuityEquation(M.sub(1), M.sub(1))
 #u_eq = ScalarVelocity2halfDEquation(U, U)
 temp_eq = ScalarAdvectionDiffusionEquation(K, K)
 sal_eq = ScalarAdvectionDiffusionEquation(S, S)
+balance_pressure_eq = BalancePressureEquation(W,W)
 
 ##########
 
@@ -256,35 +300,29 @@ kappa = as_tensor([[kappa_h, 0], [0, kappa_v]])
 #kappa = Constant([[kappa_h, 0], [0, kappa_v]]) # for taylor test need to use Constant for some reason...
 
 TP1 = TensorFunctionSpace(mesh, "CG", 1)
-kappa_temp = Function(TP1, name='temperature diffusion').assign(kappa)
-kappa_sal = Function(TP1, name='salinity diffusion').assign(kappa)
-mu = Function(TP1, name='viscosity').assign(kappa)
+kappa_temp = Function(TP1, name='temperature diffusion').project(kappa)
+kappa_sal = Function(TP1, name='salinity diffusion').project(kappa)
+mu = Function(TP1, name='viscosity').project(kappa)
 
 
-#c = Control(T_restorefield)
 # Interior penalty term
 # 3*cot(min_angle)*(p+1)*p*nu_max/nu_min
 
 ip_alpha = Constant(3*dy/dz*2*ip_factor)
 # Equation fields
 vp_coupling = [{'pressure': 1}, {'velocity': 0}]
-vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha}
+vp_fields = {'viscosity': mu, 'source': mom_source, 'interior_penalty': ip_alpha} #, 'balance_pressure': p_b}
 #u_fields = {'diffusivity': mu, 'velocity': v, 'interior_penalty': ip_alpha, 'coriolis_frequency': f}
-temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_temp,
-               'absorption coefficient': absorp_temp}
-sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'interior_penalty': ip_alpha, 'source': source_sal,
-              'absorption coefficient': absorp_sal}
-
+temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'interior_penalty': ip_alpha }#, 'source': source_temp,
+#               'absorption coefficient': absorp_temp}
+sal_fields = {'diffusivity': kappa_sal, 'velocity': v , 'interior_penalty': ip_alpha}#, 'source': source_sal,
+ #             'absorption coefficient': absorp_sal}
+p_b_fields = {'buoyancy': mom_source} 
 ##########
 
 # Get expressions used in melt rate parameterisation
-#mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5), HJ99Gamma=True) # used in Ocean modelling paper scott et al. 2023
+mp = ThreeEqMeltRateParam(sal, temp, p, z, velocity=pow(dot(v, v), 0.5), HJ99Gamma=True)
 
-# Get expressions used in melt rate parameterisation
-GammaT = Function(P1)
-GammaT.assign(1.1e-2)# + 0.1 * 1.1e-2 * (1.0/cosh(1.25e-4 * (x - 500E3))))
-#c = Control(GammaT)
-mp = ThreeEqMeltRateParam(sal, temp, p, z, GammaTfunc=GammaT, velocity=pow(dot(v, v) + 1e-6, 0.5), ice_heat_flux=False)
 ##########
 
 # assign values of these expressions to functions.
@@ -331,12 +369,73 @@ def top_boundary_to_csv(boundary_points, df, t_str):
 
 # WEAKLY Enforced BCs
 n = FacetNormal(mesh)
-Temperature_term = -beta_temp * ((T_restore-T_ref) * z)
-Salinity_term = beta_sal * ((S_restore - S_ref) * z) # ((S_bottom - S_surface) * (pow(z, 2) / (-2.0*water_depth)) + (S_surface-S_ref) * z)
-stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
+#Temperature_term = -beta_temp * (0.5 * T_slope * pow(z, 2)  + (T_intercept-T_ref) * z)
+#Salinity_term = beta_sal * (0.5 * S_slope * pow(z, 2)  + (S_intercept-S_ref) * z)
+#stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
 no_normal_flow = 0.
 ice_drag = 0.0097
 
+import scipy
+
+
+
+z_rhs = np.linspace(-498.01, -599.99, 400)
+rhs_nodes = []
+for zi in z_rhs:
+    rhs_nodes.append([9999.995, zi])
+
+print(rhs_nodes)
+rhs_nodes = VertexOnlyMesh(mesh,rhs_nodes,missing_points_behaviour='warn')
+
+DG0_vom = FunctionSpace(rhs_nodes, "DG", 0)
+temp_vom = Function(DG0_vom)
+sal_vom = Function(DG0_vom)
+
+temp_vom.interpolate(temp)
+sal_vom.interpolate(sal)
+
+print(sal_vom.dat.data)
+
+p_rhs = []
+def dynamic_pressure(T, S):
+
+# because flow is out the domain with positive slope dont do any modification of sal/temp.
+
+ #   for i in range(10):
+#        S[i] -= 0.1*(10-i)*2e-4
+#    S[:10] -= 0.00016  # try making the top of the domain a bit fresher as a hack to get faster flow at the rhs...
+#    for i in range(10, len(T)):  
+#        S[i] = 34
+#        T[i] = -0.5
+   
+    density_rhs =  -g.values()[0] *(-beta_temp.values()[0] * (T-T_ref.values()[0]) +  beta_sal.values()[0] * (S - S_ref.values()[0]))
+  #  print(density_rhs)
+
+
+
+#    print("len z", len(z_rhs))
+#    print("len density", len(density_rhs))
+    pcumulative = scipy.integrate.cumulative_trapezoid(density_rhs, z_rhs, initial=0)
+ #   print("pcumulative", pcumulative)
+ #   print("len pcumulative", len(pcumulative))
+
+    return pcumulative
+
+p_dyn = dynamic_pressure(temp_vom.dat.data, sal_vom.dat.data)
+dynamic_pressure_interp = scipy.interpolate.interp1d(z_rhs, p_dyn, bounds_error=False,fill_value='extrapolate') 
+
+
+# Now make the VectorFunctionSpace corresponding to V.
+W_vector = VectorFunctionSpace(mesh, W.ufl_element())
+
+# Next, interpolate the coordinates onto the nodes of W.
+X = interpolate(mesh.coordinates, W_vector)
+print("X[:,1]", X.dat.data[:,1])
+# Make an output function.
+stress_open_boundary_dynamic = Function(W)
+
+# Use the external data function to interpolate the values of f.
+stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro[:,1])
 
 # test stress open_boundary
 #sop = Function(W)
@@ -345,15 +444,15 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow},
+vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2:{'stress':-stress_open_boundary_dynamic*n},
           3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
 #u_bcs = {2: {'q': Constant(0.0)}}
 
-temp_bcs = {4: {'flux': -mp.T_flux_bc}, 2: {'q': T_restorefield}}
+temp_bcs = {4: {'flux': -mp.T_flux_bc}, 2: {'qadv': T_restorefield}}
 
-sal_bcs = {4: {'flux': -mp.S_flux_bc}, 2: {'q': S_restorefield}}
+sal_bcs = {4: {'flux': -mp.S_flux_bc}, 2: {'qadv': S_restorefield}}
 
-
+p_b_bcs = {}
 
 # STRONGLY Enforced BCs
 # open ocean (RHS): no tangential flow because viscosity of outside ocean resists vertical flow.
@@ -378,6 +477,7 @@ vp_solver_parameters = mumps_solver_parameters
 u_solver_parameters = mumps_solver_parameters
 temp_solver_parameters = mumps_solver_parameters
 sal_solver_parameters = mumps_solver_parameters
+p_b_solver_parameters = mumps_solver_parameters
 
 ##########
 
@@ -432,8 +532,64 @@ def depth_profile_to_csv(profile, df, depth, t_str):
     if mesh.comm.rank == 0:
         df.to_csv(folder+depth+"_profile.csv")
 
+#### VOM for doing objective function...
+
+z_profile_adjoint = np.linspace(-525, -595, 15)
+z_profile_nodes = []
+for zi in z_profile_adjoint:
+    z_profile_nodes.append([7550, zi])
+
+print(z_profile_nodes)
+z_profile_nodes = VertexOnlyMesh(mesh,z_profile_nodes,missing_points_behaviour='warn')
+
+DG0_vom_profile = FunctionSpace(z_profile_nodes, "DG", 0)
+temp_vom_profile = Function(DG0_vom_profile)
+sal_vom_profile = Function(DG0_vom_profile)
+
+temp_vom_profile.interpolate(temp)
+sal_vom_profile.interpolate(sal)
 
 
+adjoint_profile7550m = pd.DataFrame()
+adjoint_profile7550m['Z_profile'] = z_profile_adjoint
+
+melt_node = VertexOnlyMesh(mesh, [[7550, -522.7]], missing_points_behaviour='warn')
+DG0_vom_meltnode = FunctionSpace(melt_node, "DG", 0)
+melt_vom_node = Function(DG0_vom_meltnode)
+
+melt_vom_node.interpolate(mp.wb)
+
+def adjoint_profile_to_csv(df, t_str):
+    df['T_t_' + t_str] = temp_vom_profile.dat.data_ro
+    df['S_t_' + t_str] = sal_vom_profile.dat.data_ro
+    if mesh.comm.rank == 0:
+        df.to_csv(folder+"TS_foradjoint_7550m_profile.csv")
+
+adjoint_melt7550m = pd.DataFrame()
+def adjoint_melt_to_csv(df, t_str):
+    df['Melt_t_' + t_str] = melt_vom_node.dat.data_ro
+    if mesh.comm.rank == 0:
+        df.to_csv(folder+"melt_foradjoint_7550m_profile.csv")
+
+##### 
+# read linear simulations
+#target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
+adjoint_profile7550m_target = pd.read_csv("TS_foradjoint_7550m_profile.csv")
+
+temp_profile_target = adjoint_profile7550m_target['T_t_14400']
+sal_profile_target = adjoint_profile7550m_target['S_t_14400']
+
+
+temp_vom_profile_target = Function(DG0_vom_profile)
+sal_vom_profile_target = Function(DG0_vom_profile)
+
+temp_vom_profile_target.dat.data[:] = temp_profile_target[:]
+sal_vom_profile_target.dat.data[:] = sal_profile_target[:]
+
+
+print("temp vom", temp_vom_profile.dat.data[:])
+
+print("temp vom target", temp_vom_profile_target.dat.data[:])
 
 ##########
 
@@ -447,11 +603,19 @@ output_step = output_dt/dt
 
 # Set up time stepping routines
 vp_timestepper = CrankNicolsonSaddlePointTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
-                                                        solver_parameters=vp_solver_parameters, strong_bcs=strong_bcs)
+                                                       solver_parameters=vp_solver_parameters, strong_bcs=strong_bcs)
+#vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
+#                                                          solver_parameters=mumps_solver_parameters,
+#                                                          predictor_solver_parameters=u_solver_parameters,
+#                                                          picard_iterations=1)
 
 #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
 temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
 sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
+
+p_b_solver = BalancePressureSolver(balance_pressure_eq, p_b, p_b_fields,p_b_bcs, solver_parameters=p_b_solver_parameters,
+                                    p_b_nullspace=VectorSpaceBasis(constant=True))
+#p_b_solver.advance(0)
 
 ##########
 
@@ -459,7 +623,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 folder = "/data/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
          "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
          "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-         +"_structured_dy500_dz2_no_limiter_closed_fromrest_TSresbc_gammaTfunc_adjoint/"
+         +"_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_from50days_minbalancepscipy_consTS_direct_ip_adjoint/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -502,6 +666,8 @@ m_file.write(melt)
 full_pressure_file = File(folder+"full_pressure.pvd")
 full_pressure_file.write(full_pressure)
 
+p_b_file = File(folder+"balance_pressure.pvd")
+p_b_file.write(p_b)
 ######
 
 # adjoint output
@@ -520,21 +686,16 @@ tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
 adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
 tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
-adj_diff_t_file = File(folder+"adj_Trestore.pvd")
+adj_diff_t_file = File(folder+"adj_Trestore_woutconversion.pvd")
 tape.add_block(DiagnosticBlock(adj_diff_t_file, T_restorefield))
-adj_diff_s_file = File(folder+"adj_Srestore.pvd")
+adj_diff_s_file = File(folder+"adj_Srestore_woutconversion.pvd")
 tape.add_block(DiagnosticBlock(adj_diff_s_file, S_restorefield))
 
-
-adj_GammaT_file = File(folder+"adj_GammaT_wout_boundconv.pvd")
-tape.add_block(DiagnosticBlock(adj_GammaT_file, GammaT))
-
-converter = RieszL2BoundaryRepresentation(P1, 4) # convert to surface L2 representation
-adj_GammaT_file_conv = File(folder+"adj_GammaT_with_boundconv.pvd")
-tape.add_block(DiagnosticBlock(adj_GammaT_file_conv, GammaT, riesz_options={'riesz_representation': converter}))
-
-
-
+converter = RieszL2BoundaryRepresentation(P1, 2) # convert to surface L2 representation
+adj_diff_t_file_conv = File(folder+"adj_Trestore_withconversion.pvd")
+tape.add_block(DiagnosticBlock(adj_diff_t_file_conv, T_restorefield, riesz_options={'riesz_representation': converter}))
+adj_diff_s_file_conv = File(folder+"adj_Srestore_withconversion.pvd")
+tape.add_block(DiagnosticBlock(adj_diff_s_file_conv, S_restorefield, riesz_options={'riesz_representation': converter}))
 ########
 
 # Extra outputs for plotting
@@ -558,12 +719,22 @@ step = 0
 
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
+#        p_b_solver.advance(t)
         vp_timestepper.advance(t)
         #u_timestepper.advance(t)
     with timed_stage('temperature'):
         temp_timestepper.advance(t)
     with timed_stage('salinity'):
         sal_timestepper.advance(t)
+    
+    # dynamic pressure rhs
+    temp_vom.interpolate(temp)
+    sal_vom.interpolate(sal)
+    p_dyn = dynamic_pressure(temp_vom.dat.data, sal_vom.dat.data)
+    dynamic_pressure_interp = scipy.interpolate.interp1d(z_rhs, p_dyn, bounds_error=False,fill_value='extrapolate') 
+
+    stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro[:,1])
+    
     step += 1
     t += dt
     with timed_stage('output'):
@@ -580,6 +751,8 @@ while t < T - 0.5*dt:
                #chk.store(u, name="u_velocity")
                chk.store(temp, name="temperature")
                chk.store(sal, name="salinity")
+               chk.store(T_restorefield, name="temp restore")
+               chk.store(S_restorefield, name="sal restore")
 
            # Update melt rate functions
            Q_ice.interpolate(mp.Q_ice)
@@ -600,6 +773,7 @@ while t < T - 0.5*dt:
            #u_file.write(u)
            t_file.write(temp)
            s_file.write(sal)
+           p_b_file.write(p_b)
            rho_file.write(rho)
 
            # Write melt rate functions
@@ -611,7 +785,13 @@ while t < T - 0.5*dt:
 
            time_str = str(step)
            top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
-
+           
+           # store values of temperature / salinity depth profile for adjoint
+           temp_vom_profile.interpolate(temp)
+           sal_vom_profile.interpolate(sal)
+           melt_vom_node.interpolate(mp.wb)
+           adjoint_profile_to_csv(adjoint_profile7550m, time_str)
+           adjoint_melt_to_csv(adjoint_melt7550m, time_str)
            #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", time_str)
            #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", time_str)
            #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", time_str)
@@ -623,9 +803,70 @@ while t < T - 0.5*dt:
            PETSc.Sys.Print("integrated melt =", assemble(melt * ds(4)))
 
 melt.project(mp.wb)
-J = assemble(mp.wb*ds(4))
+#J = assemble(mp.wb*ds(4))
+N = len(temp_vom_profile.dat.data_ro)
+temp_vom_profile.interpolate(temp)
+sal_vom_profile.interpolate(sal)
+
+scale = Constant(1.0 / (0.5 * beta_sal)**2)
+alpha = 0.1
+J = assemble(scale*0.5/N * ((-beta_temp*(temp_vom_profile - temp_vom_profile_target))**2 + (beta_sal*(sal_vom_profile - sal_vom_profile_target))**2) * dx)  #+ assemble(0.5*alpha*scale*((beta_sal**2)*inner(grad(S_restorefield), grad(S_restorefield))+ (beta_temp**2)*inner(grad(T_restorefield), grad(T_restorefield)) )*dx)
+
+T_restorefield_vis = Function(P1, name="Trestore field vis")
+S_restorefield_vis = Function(P1, name="Srestore field vis")
+
+Trestore_vis_optfile = File(folder+"Tres_optfile.pvd")
+T_restorefield_vis.interpolate(T_restorefield)
+Trestore_vis_optfile.write(T_restorefield_vis) 
+
+Srestore_vis_optfile = File(folder+"Sres_optfile.pvd")
+S_restorefield_vis.interpolate(S_restorefield)
+Srestore_vis_optfile.write(S_restorefield_vis) 
+
+def eval_cb_pre(m):
+    print("eval_cb_pre")
+    print(len(m))
+    print("T slope:", m[0].values()[0])
+    print("T intercept:", m[1].values()[0])
+    print("S slope:", m[2].values()[0])
+    print("S intercept:", m[3].values()[0])
+    tape.add_block(DiagnosticConstantBlock(T_slope, "T slope :"))
+    tape.add_block(DiagnosticConstantBlock(T_intercept, "T intercept :"))
+    tape.add_block(DiagnosticConstantBlock(S_slope, "S slope :"))
+    tape.add_block(DiagnosticConstantBlock(S_intercept, "S intercept :"))
+
+
+def eval_cb(j, m):
+    print("eval_cb")
+
+    print(len(m))
+    print("T slope:", m[0].values()[0])
+    print("T intercept:", m[1].values()[0])
+    print("S slope:", m[2].values()[0])
+    print("S intercept:", m[3].values()[0])
+
+    print("J = ", j)
+    with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
+        # Checkpoint file open for reading and writing
+        chk.store(v_, name="v_velocity")
+        chk.store(p_, name="perturbation_pressure")
+        #chk.store(u, name="u_velocity")
+        chk.store(temp, name="temperature")
+        chk.store(sal, name="salinity")
+        chk.store(T_restorefield_vis, name="temp restore")
+        chk.store(S_restorefield_vis, name="sal restore")
 print(J)
-rf = ReducedFunctional(J, c)
+
+def derivative_cb_post(j, djdm, m):
+    print("------------")
+    print(" derivative cb post")
+    print("------------")
+
+rf = ReducedFunctional(J, c) #[c, c1,c2,c3], eval_cb_post=eval_cb, eval_cb_pre=eval_cb_pre, derivative_cb_post=derivative_cb_post)
+
+bounds = [[-0.02, -10, -0.01, 30],[0.02, 10., 0., 40. ] ]
+
+#g_opt = minimize(rf, bounds=bounds, options={"disp": True})
 
 #tape.reset_variables()
 #J.adj_value = 1.0
@@ -636,10 +877,13 @@ J.block_variable.adj_value = 1.0
 # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
 #    meshtype derivative (line 204) is broken, so just return None instead
 with timed_stage('adjoint'):
-    tape.evaluate_adj()
+   tape.evaluate_adj()
+
+print(len(T_restorefield.dat.data))
+
 #grad = rf.derivative()
 #File(folder+'grad.pvd').write(grad)
 
-#h = Function(sal)
-#h.dat.data[:] = 1*np.random.random(h.dat.data_ro.shape)
+#h = Function(sal)#S_restorefield)
+#h.dat.data[:] = np.random.random(h.dat.data_ro.shape) # 2* for temp... 
 #taylor_test(rf, sal, h)
