@@ -44,7 +44,7 @@ def is_continuous(expr):
     family = elem.family()
     if family == 'Lagrange':
         return True
-    elif family == 'Discontinuous Lagrange' or family == 'DQ':
+    elif family == 'Discontinuous Lagrange' or family == 'DQ' or family == 'RTCE':
         return False
     elif isinstance(elem, ufl.HCurlElement) or isinstance(elem, ufl.HDivElement):
         return False
@@ -54,6 +54,7 @@ def is_continuous(expr):
     elif family == 'EnrichedElement':
         return all(is_continuous(e) for e in elem._elements)
     else:
+        print(family)
         raise NotImplementedError("Unknown finite element family")
 
 
@@ -63,7 +64,7 @@ def normal_is_continuous(expr):
     family = elem.family()
     if family == 'Lagrange':
         return True
-    elif family == 'Discontinuous Lagrange' or family == 'DQ':
+    elif family == 'Discontinuous Lagrange' or family == 'DQ' or family == 'RTCE':
         return False
     elif isinstance(elem, ufl.HCurlElement):
         return False
@@ -75,6 +76,7 @@ def normal_is_continuous(expr):
     elif family == 'EnrichedElement':
         return all(normal_is_continuous(e) for e in elem._elements)
     else:
+        print(family)
         raise NotImplementedError("Unknown finite element family")
 
 

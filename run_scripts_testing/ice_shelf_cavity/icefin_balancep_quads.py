@@ -57,7 +57,7 @@ dz = 1.0
 #mesh = PeriodicSquareMesh(40,40,100,direction='x')
 #mesh = RectangleMesh(400,40,L,1, quadrilateral=True)
 #mesh = Mesh("./2d_retro_slope_icefin_gz.msh")
-base_mesh = IntervalMesh(400, L)
+base_mesh = IntervalMesh(100, L)
 layers = 40
 mesh = ExtrudedMesh(base_mesh, layers)
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
@@ -457,13 +457,13 @@ slope = (ice_oo - ice_gl) / L
 
 slope_vector = as_vector([L,ice_oo-ice_gl])
 slope_vector_norm = slope_vector / pow(dot(slope_vector, slope_vector), 0.5)
-temp_bcs = {"top": {'flux': -mp.T_flux_bc}, 2:{'qadv': T_restore, 'flux': 0.001*slope * Dx(temp,1)*exp((z--520)/5)}}
+temp_bcs = {"top": {'flux': -mp.T_flux_bc}, 2: {'qadv': temp, 'flux': 0.001*dot(grad(temp),n)}} # -0.001*slope * Dx(temp,1)*exp((z--520)/5)}} # 2:{'qadv': (temp+0.0001*dot(grad(temp),n))*exp((z--520)/5)+ (1-exp((z--520)/5))*T_restore, 'flux': -0.001*slope * Dx(temp,1)*exp((z--520)/5)}}
 #temp_bcs = {4: {'flux':  conditional(y > (1.0-sponge_fraction) * L, -mp.T_flux_bc*(1-((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction))), -mp.T_flux_bc)}, 
  #       2:{'qadv': T_restore}}
 #temp_bcs = {2:{'qadv': T_restore}}
 #temp_bcs = {} # periodic
 
-sal_bcs = {"top": {'flux':  -mp.S_flux_bc}, 2:{'qadv': S_restore, 'flux': 0.001*slope * Dx(sal,1)*exp((z--520)/5)}}
+sal_bcs = {"top": {'flux':  -mp.S_flux_bc}, 2: {'qadv': sal, 'flux': 0.001*dot(grad(temp),n) }} #-0.001*slope * Dx(sal,1)*exp((z--520)/5)}}# 2:{'qadv': (sal+0.0001*dot(grad(sal),n))*exp((z--520)/5)+ (1-exp((z--520)/5))*S_restore, 'flux': -0.001*slope * Dx(sal,1)*exp((z--520)/5)}}
 #sal_bcs = {4: {'flux': conditional(y > (1.0-sponge_fraction) * L,} -mp.S_flux_bc*(1-((y - (1.0-sponge_fraction) * L)/(L * sponge_fraction))), -mp.S_flux_bc)},  
 #        2:{'qadv': S_restore}}
 #sal_bcs = { 2:{'qadv': S_restore}} # , 1:{'q': S_restore}, 3:{'q': S_restore}, 4:{'q': S_restore}}
@@ -665,7 +665,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/data/balance_pressure/"+str(args.date)+"_thwaites_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isodx2.5m_iter_TSref_nocor_melt_isokapnu1e-3_pb_quadequi_lapcext_mumps_pbc0.1_vertTSgradbckappa/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_isodx10m_nz40_iter_TSref_nocor_melt_isokapnu1e-3_pb_quadequi_lapcext_mumps_pbc0.1_TSbcflux/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
