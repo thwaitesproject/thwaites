@@ -50,16 +50,17 @@ restoring_time = 86400.
 L = 10E3
 H1 = 2.
 H2 = 102.
-dy = 50.0
+dy = 25.0
 ny = round(L/dy)
 #nz = 50
 dz = 1.0
 
 # create mesh
-mesh = Mesh("./5km_flume_crevasse_3d_5m.msh")
-
+#mesh = Mesh("./5km_flume_nocrevasse_refined.msh")
+#mesh = Mesh("./3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m.msh")
+mesh = Mesh("./3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_rotated_60degneg.msh")
+#mesh = BoxMesh(50,50,20, 5000,5000,100)
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
-
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
 #PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(3, domain=mesh)))
 
@@ -70,9 +71,7 @@ PETSc.Sys.Print("Length of bottom", assemble(Constant(1.0)*ds(1, domain=mesh)))
 PETSc.Sys.Print("Length of top", assemble(Constant(1.0)*ds(4, domain=mesh)))
 
 '''
-P1 = FunctionSpace(mesh, 'CG', 1)
-sop = Function(P1)
-sop_file = File("10kmflume_newmesh.pvd")
+P1 = FunctionSpace(mesh, 'CG', 13d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_rotated_60degneg.mshnewmesh.pvd")
 sop_file.write(sop)
 
 print(f"Old Mesh vertex count: {mesh.num_vertices()}")
@@ -125,8 +124,9 @@ sop_file.write(sop)
 exit()
 '''
 # do initialisation again.... 
-x, y, z = SpatialCoordinate(mesh)
 water_depth = 600
+mesh.coordinates.dat.data[:, 2] -= 500 #water_depth
+x, y, z = SpatialCoordinate(mesh)
 ##########
 
 # Set up function spaces
@@ -140,7 +140,8 @@ U = FunctionSpace(mesh, "DG", 1)
 Q = FunctionSpace(mesh, "DG", 1)  # melt function space
 K = FunctionSpace(mesh, "DG", 1)    # temperature space
 S = FunctionSpace(mesh, "DG", 1)    # salinity space
-
+P0 = FunctionSpace(mesh,"DG",0)
+P1 = FunctionSpace(mesh,"CG",1)
 print("velocity dofs:", V.dim())
 print("Pressure dofs:", W.dim())
 print("scalar dofs:", Q.dim())
@@ -171,7 +172,7 @@ frazil_flux = Function(Q, name="frazil ice flux")
 ##########
 
 # Define a dump file
-dump_file = "/rds/general/user/wis15/home/data/3d_crevasse/15.09.22_128cores_5kmflume_3_eq_param_ufricHJ99_dt60.0_dtOutput86400.0_T8640000.0_3d_isotropicdx5mto25m_openbox_bodyforceu_qice0_600mdepth_frazil_nodragside_nomelt/dump_step_8640.h5"
+dump_file = "/rds/general/user/wis15/home/data/3d_crevasse/31.01.23_128cores_5kmflume_3_eq_param_ufricHJ99_dt60.0_dtOutput86400.0_T8640000.0_3d_openbox_bodyforce_posv_qice0_600mdepth_frazil_nodragside_melt_crevasse_gmsh_extrudeddz5m_dx20mto250m_scalehorvisc_60degneg_from6days/dump_step_4320.h5"
 
 DUMP = True
 if DUMP:
@@ -248,25 +249,158 @@ mom_source = as_vector((0., 0, -g)) * (rho_perb - frazil * (1 + rho_perb) + fraz
 rho.interpolate(rho0*((1-frazil) * (1 + rho_perb)) + frazil * rho_ice)
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
 f = Constant(-1.409E-4)
-horizontal_stress = f * 0.01  # geostrophic stress ~ |f v| drives a flow of 0.01 m/s?
+horizontal_stress = -f * 0.01  # geostrophic stress ~ |f v| drives a flow of 0.01 m/s?
 
 ramp = Constant(0.0)
 if DUMP:
     ramp.assign(1)
-horizontal_source = as_vector((conditional(z<-500, horizontal_stress, 0.0),0.0,0.0)) * ramp
+horizontal_source = as_vector((0.0, conditional(z<-500, horizontal_stress, 0.0), 0.0)) * ramp 
+#horizontal_source = as_vector((conditional(z<-500, horizontal_stress, 0.0), conditional(z<-500, horizontal_stress, 0.0), 0.0)) * ramp * Constant(1./np.sqrt(2.)) 
 #horizontal_source = as_vector((0.0,horizontal_stress,0.0)) * ramp
 # Scalar source/sink terms at open boundary.
 absorption_factor = Constant(1.0/restoring_time)
 sponge_fraction = 0.06  # fraction of domain where sponge
 # Temperature source term
 
+class SmagorinskyViscosity(object):
+    r"""
+    Computes Smagorinsky subgrid scale horizontal viscosity
 
-kappa = as_tensor([[1e-3, 0, 0], [0, 1e-3, 0], [0, 0, 1e-3]])
+    This formulation is according to Ilicak et al. (2012) and
+    Griffies and Hallberg (2000).
+
+    .. math::
+        \nu = (C_s \Delta x)^2 |S|
+
+    with the deformation rate
+
+    .. math::
+        |S| &= \sqrt{D_T^2 + D_S^2} \\
+        D_T &= \frac{\partial u}{\partial x} - \frac{\partial v}{\partial y} \\
+        D_S &= \frac{\partial u}{\partial y} + \frac{\partial v}{\partial x}
+
+    :math:`\Delta x` is the horizontal element size and :math:`C_s` is the
+    Smagorinsky coefficient.
+
+    To match a certain mesh Reynolds number :math:`Re_h` set
+    :math:`C_s = 1/\sqrt{Re_h}`.
+
+    Ilicak et al. (2012). Spurious dianeutral mixing and the role of
+    momentum closure. Ocean Modelling, 45-46(0):37-58.
+    http://dx.doi.org/10.1016/j.ocemod.2011.10.003
+
+    Griffies and Hallberg (2000). Biharmonic friction with a
+    Smagorinsky-like viscosity for use in large-scale eddy-permitting
+    ocean models. Monthly Weather Review, 128(8):2935-2946.
+    http://dx.doi.org/10.1175/1520-0493(2000)128%3C2935:BFWASL%3E2.0.CO;2
+    """
+    def __init__(self, uv, output, c_s, h_elem_size, max_val, min_val=1e-10,
+                 weak_form=True, solver_parameters=None):
+        """
+        :arg uv_3d: horizontal velocity
+        :type uv_3d: 3D vector :class:`Function`
+        :arg output: Smagorinsky viscosity field
+        :type output: 3D scalar :class:`Function`
+        :arg c_s: Smagorinsky coefficient
+        :type c_s: float or :class:`Constant`
+        :arg h_elem_size: field that defines the horizontal element size
+        :type h_elem_size: 3D scalar :class:`Function` or :class:`Constant`
+        :arg float max_val: Maximum allowed viscosity. Viscosity will be clipped at
+            this value.
+        :kwarg float min_val: Minimum allowed viscosity. Viscosity will be clipped at
+            this value.
+        :kwarg bool weak_form: Compute velocity shear by integrating by parts.
+            Necessary for some function spaces (e.g. P0).
+        :kwarg dict solver_parameters: PETSc solver options
+        """
+        if solver_parameters is None:
+            solver_parameters = {}
+        solver_parameters.setdefault('ksp_atol', 1e-12)
+        solver_parameters.setdefault('ksp_rtol', 1e-16)
+#        assert max_val.function_space() == output.function_space(), \
+#            'max_val function must belong to the same space as output'
+        self.max_val = max_val
+        self.min_val = min_val
+        self.output = output
+        self.weak_form = weak_form
+
+
+        if self.weak_form:
+            # solve grad(u) weakly
+            mesh = output.function_space().mesh()
+            fs_grad = get_functionspace(mesh, 'DP', 1, 'DP', 1, vector=True, dim=4)
+            self.grad = Function(fs_grad, name='uv_grad')
+
+            tri_grad = TrialFunction(fs_grad)
+            test_grad = TestFunction(fs_grad)
+
+            normal = FacetNormal(mesh)
+            a = inner(tri_grad, test_grad)*dx
+
+            rhs_terms = []
+            for iuv in range(2):
+                for ix in range(2):
+                    i = 2*iuv + ix
+                    vol_term = -inner(Dx(test_grad[i], ix), uv[iuv])*dx
+                    int_term = inner(avg(uv[iuv]), jump(test_grad[i], normal[ix]))*dS_v
+                    ext_term = inner(uv[iuv], test_grad[i]*normal[ix])*ds_v
+                    rhs_terms.extend([vol_term, int_term, ext_term])
+            l = sum(rhs_terms)
+            prob = LinearVariationalProblem(a, l, self.grad)
+            self.weak_grad_solver = LinearVariationalSolver(prob, solver_parameters=solver_parameters)
+
+            # rate of strain tensor
+            d_t = self.grad[0] - self.grad[3]
+            d_s = self.grad[1] + self.grad[2]
+        else:
+            # rate of strain tensor
+            d_t = Dx(uv[0], 0) - Dx(uv[1], 1)
+            d_s = Dx(uv[0], 1) + Dx(uv[1], 0)
+
+        fs = output.function_space()
+        tri = TrialFunction(fs)
+        test = TestFunction(fs)
+
+        nu = c_s**2*h_elem_size**2 * sqrt(d_t**2 + d_s**2)
+
+        a = test*tri*dx
+        l = test*nu*dx
+        self.prob = LinearVariationalProblem(a, l, output)
+        self.solver = LinearVariationalSolver(self.prob, solver_parameters=solver_parameters)
+
+    def solve(self):
+        """Compute viscosity"""
+        if self.weak_form:
+            self.weak_grad_solver.solve()
+        self.solver.solve()
+        # remove negative values
+
+smag_solver_parameters = {
+        'snes_monitor': None,
+        'snes_type': 'ksponly',
+        'ksp_type': 'gmres',
+        'pc_type': 'sor',
+        'ksp_converged_reason': None,
+#        'ksp_monitor_true_residual': None,
+        'ksp_rtol': 1e-5,
+        'ksp_max_it': 300,
+        }
+
+smag_visc = Function(P0)
+c_s = Constant(1./np.sqrt(2.))  # Grid Re = 2
+max_nu = 10 * 1.0 * dy / 2.0  # 10x U dx / 2 to have grid reynolds 
+smag_visc_solver = SmagorinskyViscosity(v_, smag_visc, c_s, Constant(dy), max_nu, weak_form=False, solver_parameters=smag_solver_parameters)
+smag_visc_solver.solve()
+
+cell_size = Function(P1)
+cell_size.interpolate(CellDiameter(mesh)/5.0)
+
+kappa = as_tensor([[1e-3*cell_size, 0, 0], [0, 1e-3*cell_size, 0], [0, 0, 1e-3]])
+mu = as_tensor([[1e-3*cell_size, 0, 0], [0, 1e-3*cell_size, 0], [0, 0, 1e-3]])
 
 kappa_temp = kappa
 kappa_sal = kappa
 kappa_frazil = kappa
-mu = kappa
 
 FRV = FrazilRisingVelocity(0.1)  # initial velocity guess needs to be >0
 w_i = FRV.frazil_rising_velocity() # Picard iterations converge to value for w_i (which only depends on crystal size, here we assume r =7.5e-4m
@@ -359,16 +493,21 @@ ice_drag = 0.0097
 #sop_file.write(sop)
 
 
-vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary}, 
-        3: {'stress': stress_open_boundary}, 1: {'un': no_normal_flow, 'drag': 2.5e-3},
-        5: {'stress': stress_open_boundary}, 6: {'stress': stress_open_boundary}}
+vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 5: {'stress': stress_open_boundary}, 
+        6: {'stress': stress_open_boundary}, 1: {'un': no_normal_flow, 'drag': 2.5e-3},
+        2: {'stress': stress_open_boundary}, 3: {'stress': stress_open_boundary}} # gmsh bcs
+#vp_bcs = {1: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary}, # gmsh no crevasse extruded
+#        3: {'stress': stress_open_boundary}, 6: {'un': no_normal_flow, 'drag': 2.5e-3}, # gmsh no crevasse extruded
+#        5: {'stress': stress_open_boundary}, 4: {'stress': stress_open_boundary}} # gmsh no crevasse extruded
 #u_bcs = {2: {'q': Constant(0.0)}}
 
-#temp_bcs = {4: {'flux': -mp.T_flux_bc}, 3: {'q': T_restore}, 5: {'q': T_restore}, 6: {'q': T_restore}, 2: {'q': T_restore}}
-temp_bcs = {3: {'q': T_restore}, 5: {'q': T_restore}, 6: {'q': T_restore}, 2: {'q': T_restore}}
+temp_bcs = {4: {'flux': -mp.T_flux_bc}, 3: {'q': T_restore}, 5: {'q': T_restore}, 6: {'q': T_restore}, 2: {'q': T_restore}}
+#temp_bcs = {3: {'q': T_restore}, 5: {'q': T_restore}, 6: {'q': T_restore}, 2: {'q': T_restore}} # gmsh bcs
+#temp_bcs = {1: {'flux': -mp.T_flux_bc}, 5: {'q': T_restore}, 2: {'q': T_restore}, 3: {'q': T_restore}, 4: {'q': T_restore}} # gmsh no crevasse extruded
 
-#sal_bcs = {4: {'flux': -mp.S_flux_bc}, 3:{'q': S_restore}, 5:{'q': S_restore}, 6:{'q': S_restore}, 2:{'q': S_restore}}
-sal_bcs = {3:{'q': S_restore}, 5:{'q': S_restore}, 6:{'q': S_restore}, 2:{'q': S_restore}}
+sal_bcs = {4: {'flux': -mp.S_flux_bc}, 3:{'q': S_restore}, 5:{'q': S_restore}, 6:{'q': S_restore}, 2:{'q': S_restore}}
+#sal_bcs = {3:{'q': S_restore}, 5:{'q': S_restore}, 6:{'q': S_restore}, 2:{'q': S_restore}} # gmsh bcs
+#sal_bcs = {1: {'flux': -mp.T_flux_bc}, 5:{'q': S_restore}, 2:{'q': S_restore}, 3:{'q': S_restore}, 4:{'q': S_restore}} # gmsh no crevasse extruded
 
 frazil_bcs = {}
 
@@ -545,7 +684,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 
 # Set up folder
 folder = "/rds/general/user/wis15/home/data/3d_crevasse/"+str(args.date)+"_5kmflume_3_eq_param_ufricHJ99_dt"+str(dt)+\
-         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_3d_isotropicdx5mto25m_openbox_bodyforceu_qice0_600mdepth_frazil_nodragside_nomelt_from6days/"
+         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_3d_openbox_bodyforce_posv_qice0_600mdepth_frazil_nodragside_melt_crevasse_gmsh_extrudeddz5m_dx20mto250m_scalehorvisc_60degneg_from9days/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -592,6 +731,12 @@ full_pressure_file.write(full_pressure)
 
 frazil_flux_file = File(folder+"frazil_flux.pvd")
 frazil_flux_file.write(frazil_flux)
+
+
+smag_visc_file = File(folder+"smag_visc.pvd")
+smag_visc_file.write(smag_visc)
+cellsize_file = File(folder+"cell_size.pvd")
+cellsize_file.write(cell_size)
 ########
 
 # Extra outputs for plotting
@@ -682,7 +827,7 @@ t = 0.0
 step = 0
 
 if DUMP:
-    t+=6*86400
+    t+=8*86400
 
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
@@ -702,6 +847,7 @@ while t < T - 0.5*dt:
     limiter.apply(frazil)
     frazil.interpolate(conditional(frazil < 5e-9, 5e-9, frazil))
 
+    smag_visc_solver.solve()
     if not DUMP:
         if t <= 86400:
             ramp.assign(t/86400)
@@ -743,14 +889,15 @@ while t < T - 0.5*dt:
                t_file.write(temp)
                s_file.write(sal)
                rho_file.write(rho)
-               frazil_file.write(frazil)   
+             #  frazil_file.write(frazil)   
                # Write melt rate functions
                m_file.write(melt)
-               Q_mixed_file.write(Q_mixed)
-               full_pressure_file.write(full_pressure)
-               Qs_file.write(Q_s)
-               Q_ice_file.write(Q_ice)
-               frazil_flux_file.write(frazil_flux)
+            #   Q_mixed_file.write(Q_mixed)
+             #  full_pressure_file.write(full_pressure)
+             #  Qs_file.write(Q_s)
+             #  Q_ice_file.write(Q_ice)
+             #  frazil_flux_file.write(frazil_flux)
+               smag_visc_file.write(smag_visc)
            time_str = str(step)
            #top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, time_str)
     
