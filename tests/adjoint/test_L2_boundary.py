@@ -51,12 +51,19 @@ def test_L2_boundary():
     J = assemble(T*y**2*ds(2))
 
     rf = ReducedFunctional(J, Control(Tbc))
+
+    # by default derivative() return the l2 representation of the gradient
     grad_l2 = rf.derivative()
     grad_l2.rename("l2 derivative")
-    grad_L2 = grad_l2._ad_convert_type(grad_l2, options={'riesz_representation': 'L2'})
+    # the basis of the dual space is such that the coefficients of a cofunction
+    # match those of its l2 representation
+    grad_cof = Cofunction(Q.dual(), val=grad_l2.dat)
+    # note that when using the X._ad_convert_type() method it returns the representation
+    # in the space of X which should be a FunctionSpace, therefore we need: func._ad_convert_type(cofunc)
+    grad_L2 = grad_l2._ad_convert_type(grad_cof, options={'riesz_representation': 'L2'})
     grad_L2.rename("L2 derivative")
     converter = RieszL2BoundaryRepresentation(Q, 1)
-    grad_L2b = grad_l2._ad_convert_type(grad_l2, options={'riesz_representation': converter})
+    grad_L2b = grad_l2._ad_convert_type(grad_cof, options={'riesz_representation': converter})
     grad_L2b.rename("L2 boundary derivative")
     File('grad.pvd').write(grad_l2, grad_L2, grad_L2b)
 
