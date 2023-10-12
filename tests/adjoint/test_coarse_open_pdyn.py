@@ -329,7 +329,6 @@ def test_coarse_open_pdyn_mu():
     for z in z_rhs:
         rhs_nodes.append([9999.995, z])
 
-    print(rhs_nodes)
     rhs_nodes = VertexOnlyMesh(mesh,rhs_nodes,missing_points_behaviour='warn')
 
     DG0_vom = FunctionSpace(rhs_nodes, "DG", 0)
@@ -338,8 +337,6 @@ def test_coarse_open_pdyn_mu():
 
     temp_vom.interpolate(temp)
     sal_vom.interpolate(sal)
-
-    print(sal_vom.dat.data)
 
     p_rhs = []
     def dynamic_pressure(T, S):
@@ -354,15 +351,10 @@ def test_coarse_open_pdyn_mu():
     #        T[i] = -0.5
        
         density_rhs =  -g.values()[0] *(-beta_temp.values()[0] * (T-T_ref.values()[0]) +  beta_sal.values()[0] * (S - S_ref.values()[0]))
-      #  print(density_rhs)
 
 
 
-    #    print("len z", len(z_rhs))
-    #    print("len density", len(density_rhs))
         pcumulative = scipy.integrate.cumulative_trapezoid(density_rhs, z_rhs, initial=0)
-     #   print("pcumulative", pcumulative)
-     #   print("len pcumulative", len(pcumulative))
 
         return pcumulative
 
@@ -375,7 +367,6 @@ def test_coarse_open_pdyn_mu():
 
     # Next, interpolate the coordinates onto the nodes of W.
     X = firedrake.interpolate(mesh.coordinates, W_vector)
-    print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
 
@@ -483,7 +474,6 @@ def test_coarse_open_pdyn_mu():
     for zi in z_profile_adjoint:
         z_profile_nodes.append([7550, zi])
 
-    print(z_profile_nodes)
     z_profile_nodes = VertexOnlyMesh(mesh,z_profile_nodes,missing_points_behaviour='warn')
 
     DG0_vom_profile = FunctionSpace(z_profile_nodes, "DG", 0)
@@ -630,8 +620,6 @@ def test_coarse_open_pdyn_mu():
     #    meshtype derivative (line 204) is broken, so just return None instead
     #with timed_stage('adjoint'):
     #   tape.evaluate_adj()
-
-    print(len(T_restorefield.dat.data))
 
     #grad = rf.derivative()
     #File(folder+'grad.pvd').write(grad)
@@ -3161,7 +3149,10 @@ def test_coarse_open_pdyn_Sbc():
     #File(folder+'grad.pvd').write(grad)
 
     h = Function(S_restorefield)
-    h.dat.data[:] = 30*np.random.random(h.dat.data_ro.shape) # 14.07.23 now h*5 seems to also have a problem... try h*30 # h*5 seems to get rid of a machine precision problem? most of the time it is fine but random faiure with just magnitude of h = 1 (and I am pretty sure inside taylor test there is a divide by 100... 
+    # 14.07.23 now h*5 seems to also have a problem... try h*30 # h*5 seems to get rid of a machine precision problem? most of the time it is fine but random faiure with just magnitude of h = 1 (and I am pretty sure inside taylor test there is a divide by 100... 
+    # SCK: 12-10-23, let's try a smaller perturbation instead, as it seems to converge when using >3 halvings
+    # for even smaller perturbations, probably the residuals start getting too small so the convergence breaks down
+    h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
     tt = taylor_test(rf, S_restorefield, h)
     print("Sbc TT ten steps")
 
