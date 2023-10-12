@@ -3051,7 +3051,7 @@ def test_coarse_open_pdyn_Sbc():
 
     # define time steps
     dt = 300.0
-    T = 3000.0
+    T = 6000.0
     output_dt = 3000.0
     output_step = output_dt/dt
 
@@ -3154,7 +3154,7 @@ def test_coarse_open_pdyn_Sbc():
     # for even smaller perturbations, probably the residuals start getting too small so the convergence breaks down
     h.dat.data[:] = np.random.random(h.dat.data_ro.shape)
     tt = taylor_test(rf, S_restorefield, h)
-    print("Sbc TT ten steps")
+    print("Sbc TT twenty steps")
 
     print(tt)
     assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-2)
