@@ -6,6 +6,7 @@ from firedrake import sqrt, exp, Function, FiniteElement, TensorProductElement, 
 from firedrake import RW, READ, dx, par_loop, ExtrudedMesh
 import ufl
 import numpy as np
+from gadopt.utility import extend_function_to_3d, is_continuous, normal_is_continuous  # NOQA
 
 
 class CombinedSurfaceMeasure(ufl.Measure):
@@ -30,55 +31,6 @@ class CombinedSurfaceMeasure(ufl.Measure):
         """This is to handle terms to be integrated over all surfaces in the form of other*ds.
         Here the CombinedSurfaceMeasure ds is not called, instead we just split it up as below."""
         return other*self.ds_v + other*self.ds_t + other*self.ds_b
-
-
-def _get_element(ufl_or_element):
-    if isinstance(ufl_or_element, ufl.FiniteElementBase):
-        return ufl_or_element
-    else:
-        return ufl_or_element.ufl_element()
-
-
-def is_continuous(expr):
-    elem = _get_element(expr)
-
-    family = elem.family()
-    if family == 'Lagrange':
-        return True
-    elif family == 'Discontinuous Lagrange' or family == 'DQ' or family == 'RTCE':
-        return False
-    elif isinstance(elem, ufl.HCurlElement) or isinstance(elem, ufl.HDivElement):
-        return False
-    elif family == 'TensorProductElement':
-        elem_h, elem_v = elem.sub_elements()
-        return is_continuous(elem_h) and is_continuous(elem_v)
-    elif family == 'EnrichedElement':
-        return all(is_continuous(e) for e in elem._elements)
-    else:
-        print(family)
-        raise NotImplementedError("Unknown finite element family")
-
-
-def normal_is_continuous(expr):
-    elem = _get_element(expr)
-
-    family = elem.family()
-    if family == 'Lagrange':
-        return True
-    elif family == 'Discontinuous Lagrange' or family == 'DQ' or family == 'RTCE':
-        return False
-    elif isinstance(elem, ufl.HCurlElement):
-        return False
-    elif isinstance(elem, ufl.HDivElement):
-        return True
-    elif family == 'TensorProductElement':
-        elem_h, elem_v = elem.sub_elements()
-        return normal_is_continuous(elem_h) and normal_is_continuous(elem_v)
-    elif family == 'EnrichedElement':
-        return all(normal_is_continuous(e) for e in elem._elements)
-    else:
-        print(family)
-        raise NotImplementedError("Unknown finite element family")
 
 
 def cell_size(mesh):
@@ -166,29 +118,6 @@ def get_top_surface(cavity_xlength=5000., cavity_ylength=5000., cavity_height=10
 
 def offset_backward_step_approx(x, k=1.0, x0=0.0):
     return 1.0 / (1.0 + exp(2.0*k*(x-x0)))
-
-
-def extend_function_to_3d(func, mesh_extruded):
-    """
-    Returns a 3D view of a 2D :class:`Function` on the extruded domain.
-    The 3D function resides in V x R function space, where V is the function
-    space of the source function. The 3D function shares the data of the 2D
-    function.
-    """
-    fs = func.function_space()
-#    assert fs.mesh().geometric_dimension() == 2, 'Function must be in 2D space'
-    ufl_elem = fs.ufl_element()
-    family = ufl_elem.family()
-    degree = ufl_elem.degree()
-    name = func.name()
-    if isinstance(ufl_elem, ufl.VectorElement):
-        # vector function space
-        fs_extended = get_functionspace(mesh_extruded, family, degree, 'R', 0, dim=2, vector=True)
-    else:
-        fs_extended = get_functionspace(mesh_extruded, family, degree, 'R', 0)
-    func_extended = Function(fs_extended, name=name, val=func.dat._data)
-    func_extended.source = func
-    return func_extended
 
 
 class ExtrudedFunction(Function):

@@ -83,8 +83,8 @@ def interpolate(f, Q, method='linear', y_transect=None):
 
     mesh = Q.mesh()
     element = Q.ufl_element()
-    if len(element.sub_elements()) > 0:
-        element = element.sub_elements()[0]
+    if len(element.sub_elements) > 0:
+        element = element.sub_elements[0]
 
     V = firedrake.VectorFunctionSpace(mesh, element)
     X = firedrake.interpolate(mesh.coordinates, V).dat.data_ro

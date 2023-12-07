@@ -766,8 +766,6 @@ def test_2d_isomip_cavity_salfunctional(T):
         assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-1)
 
 
-test_2d_isomip_cavity_salfunctional(1)
-
 def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=True, conditional_melt_flag=True, gammaT_control=False):
     # ISOMIP+ setup 2d slice with extuded mesh
     #Buoyancy driven overturning circulation
