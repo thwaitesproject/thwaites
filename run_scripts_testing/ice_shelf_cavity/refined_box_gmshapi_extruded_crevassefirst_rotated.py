@@ -9,30 +9,33 @@ gmsh.model.add("2d_crevasse_flume")
 # Let's create a simple rectangular geometry:
 lc = 250
 L = 5000
+
+negative=False
 #add crevasse
-gmsh.model.geo.addPoint(3800, 0.0, 0, 5, 21)
-gmsh.model.geo.addPoint(3875, 0.0, 50, 5, 22)
-gmsh.model.geo.addPoint(3925, 0.0, 50, 5, 23)
-gmsh.model.geo.addPoint(4000, 0.0, 0, 5, 24)
+if negative:
+    # negative slant of 59 deg. i.e tan (5km/3km) = 59deg
+    gmsh.model.geo.addPoint(3800, 0.0, 0, 5, 21)
+    gmsh.model.geo.addPoint(3875, 0.0, 50, 5, 22)
+    gmsh.model.geo.addPoint(3925, 0.0, 50, 5, 23)
+    gmsh.model.geo.addPoint(4000, 0.0, 0, 5, 24)
 
 
-gmsh.model.geo.addPoint(1000, L, 0, 5, 25)
-gmsh.model.geo.addPoint(1075, L, 50, 5, 26)
-gmsh.model.geo.addPoint(1125, L, 50, 5, 27)
-gmsh.model.geo.addPoint(1200, L, 0, 5, 28)
-'''
-# positive slant of 59 deg. i.e tan (5km/3km) = 59deg
-gmsh.model.geo.addPoint(1000, 0.0, 0, 5, 21)
-gmsh.model.geo.addPoint(1075, 0.0, 50, 5, 22)
-gmsh.model.geo.addPoint(1125, 0.0, 50, 5, 23)
-gmsh.model.geo.addPoint(1200, 0.0, 0, 5, 24)
+    gmsh.model.geo.addPoint(1000, L, 0, 5, 25)
+    gmsh.model.geo.addPoint(1075, L, 50, 5, 26)
+    gmsh.model.geo.addPoint(1125, L, 50, 5, 27)
+    gmsh.model.geo.addPoint(1200, L, 0, 5, 28)
+else:
+    # positive slant of 59 deg. i.e tan (5km/3km) = 59deg
+    gmsh.model.geo.addPoint(1000, 0.0, 0, 5, 21)
+    gmsh.model.geo.addPoint(1075, 0.0, 50, 5, 22)
+    gmsh.model.geo.addPoint(1125, 0.0, 50, 5, 23)
+    gmsh.model.geo.addPoint(1200, 0.0, 0, 5, 24)
 
 
-gmsh.model.geo.addPoint(3800, L, 0, 5, 25)
-gmsh.model.geo.addPoint(3875, L, 50, 5, 26)
-gmsh.model.geo.addPoint(3925, L, 50, 5, 27)
-gmsh.model.geo.addPoint(4000, L, 0, 5, 28)
-'''
+    gmsh.model.geo.addPoint(3800, L, 0, 5, 25)
+    gmsh.model.geo.addPoint(3875, L, 50, 5, 26)
+    gmsh.model.geo.addPoint(3925, L, 50, 5, 27)
+    gmsh.model.geo.addPoint(4000, L, 0, 5, 28)
 
 
 
@@ -182,5 +185,9 @@ gmsh.model.addPhysicalGroup(3, [ov[1][1],ov[7][1],ov[13][1]], 101)
 gmsh.model.geo.synchronize()
 #gmsh.write("3d_crevasse_flume_test_extrapoints.geo_unrolled")
 gmsh.model.mesh.generate(3)
-gmsh.write("3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_rotated_60degneg.msh")
+if negative:
+    angle = "neg"
+else:
+    angle = "pos"
+gmsh.write(f"3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_rotated_60deg{angle}.msh")
 gmsh.finalize()
