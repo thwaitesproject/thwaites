@@ -6,6 +6,7 @@ on:
     branches:
       - master
   pull_request:
+  workflow_dispatch:
   schedule:
     # * is a special character in YAML so you have to quote this string
     # Scheduled build at 0230 UTC on Monday mornings to detect bitrot.
