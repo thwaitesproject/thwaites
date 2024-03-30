@@ -186,8 +186,8 @@ gmsh.model.geo.synchronize()
 #gmsh.write("3d_crevasse_flume_test_extrapoints.geo_unrolled")
 gmsh.model.mesh.generate(3)
 if negative:
-    angle = "neg"
+    angle = "negative"
 else:
-    angle = "pos"
-gmsh.write(f"3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_rotated_60deg{angle}.msh")
+    angle = "positive"
+gmsh.write(f"3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_{angle}.msh")
 gmsh.finalize()
