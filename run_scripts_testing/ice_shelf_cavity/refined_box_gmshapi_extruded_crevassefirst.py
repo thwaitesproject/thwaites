@@ -7,32 +7,35 @@ gmsh.initialize(sys.argv)
 gmsh.model.add("2d_crevasse_flume")
 
 # Let's create a simple rectangular geometry:
-lc = 250
 L = 5000
+lc_crevasse = 50
+lc = 250
+dx_crevasse_scaling = 5
+nz_outsidecrevasse = 5
 #add crevasse
 across=False
 if across:
-    gmsh.model.geo.addPoint(2400, 0.0, 0, 5, 21)
-    gmsh.model.geo.addPoint(2475, 0.0, 50, 5, 22)
-    gmsh.model.geo.addPoint(2525, 0.0, 50, 5, 23)
-    gmsh.model.geo.addPoint(2600, 0.0, 0, 5, 24)
+    gmsh.model.geo.addPoint(2400, 0.0, 0, lc_crevasse, 21)
+    gmsh.model.geo.addPoint(2475, 0.0, 50, lc_crevasse, 22)
+    gmsh.model.geo.addPoint(2525, 0.0, 50, lc_crevasse, 23)
+    gmsh.model.geo.addPoint(2600, 0.0, 0, lc_crevasse, 24)
 
 
-    gmsh.model.geo.addPoint(2400, L, 0, 5, 25)
-    gmsh.model.geo.addPoint(2475, L, 50, 5, 26)
-    gmsh.model.geo.addPoint(2525, L, 50, 5, 27)
-    gmsh.model.geo.addPoint(2600, L, 0, 5, 28)
+    gmsh.model.geo.addPoint(2400, L, 0, lc_crevasse, 25)
+    gmsh.model.geo.addPoint(2475, L, 50, lc_crevasse, 26)
+    gmsh.model.geo.addPoint(2525, L, 50, lc_crevasse, 27)
+    gmsh.model.geo.addPoint(2600, L, 0, lc_crevasse, 28)
 else:
-    gmsh.model.geo.addPoint(0.0, 2400, 0, 5, 21)
-    gmsh.model.geo.addPoint(0.0, 2475, 50, 5, 22)
-    gmsh.model.geo.addPoint(0.0, 2525, 50, 5, 23)
-    gmsh.model.geo.addPoint(0.0, 2600, 0, 5, 24)
+    gmsh.model.geo.addPoint(0.0, 2400, 0, lc_crevasse, 21)
+    gmsh.model.geo.addPoint(0.0, 2475, 50, lc_crevasse, 22)
+    gmsh.model.geo.addPoint(0.0, 2525, 50, lc_crevasse, 23)
+    gmsh.model.geo.addPoint(0.0, 2600, 0, lc_crevasse, 24)
 
 
-    gmsh.model.geo.addPoint(L, 2400, 0, 5, 25)
-    gmsh.model.geo.addPoint(L, 2475, 50, 5, 26)
-    gmsh.model.geo.addPoint(L, 2525, 50, 5, 27)
-    gmsh.model.geo.addPoint(L, 2600, 0, 5, 28)
+    gmsh.model.geo.addPoint(L, 2400, 0, lc_crevasse, 25)
+    gmsh.model.geo.addPoint(L, 2475, 50, lc_crevasse, 26)
+    gmsh.model.geo.addPoint(L, 2525, 50, lc_crevasse, 27)
+    gmsh.model.geo.addPoint(L, 2600, 0, lc_crevasse, 28)
 
 
 
@@ -116,7 +119,7 @@ gmsh.model.geo.addPlaneSurface([2], 2)
 # try 20m horizontal but keep 5m vertical.
 # Let's use the minimum of all the fields as the background mesh field:
 gmsh.model.mesh.field.add("Box", 1)
-gmsh.model.mesh.field.setNumber(1, "VIn", lc / 12.5)
+gmsh.model.mesh.field.setNumber(1, "VIn", lc / dx_crevasse_scaling)
 gmsh.model.mesh.field.setNumber(1, "VOut", lc)
 if across:
     gmsh.model.mesh.field.setNumber(1, "XMin", 2400)
@@ -132,7 +135,7 @@ else:
 gmsh.model.mesh.field.setNumber(1, "Thickness", 1000)
 
 gmsh.model.mesh.field.add("Box", 2)
-gmsh.model.mesh.field.setNumber(2, "VIn", 5)
+gmsh.model.mesh.field.setNumber(2, "VIn", lc_crevasse)
 gmsh.model.mesh.field.setNumber(2, "VOut", lc)
 gmsh.model.mesh.field.setNumber(2, "XMin", 0)
 gmsh.model.mesh.field.setNumber(2, "XMax", 5000)
@@ -154,7 +157,7 @@ gmsh.model.mesh.generate(2)
 
 
 h = -100
-ov = gmsh.model.geo.extrude([(2, 1), (2,56), (2,2)], 0, 0, h, [20])
+ov = gmsh.model.geo.extrude([(2, 1), (2,56), (2,2)], 0, 0, h, [nz_outsidecrevasse])
 print(ov)
 
 x0 = 6
@@ -187,6 +190,7 @@ gmsh.model.mesh.generate(3)
 if across:
     gmsh.write("3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_across.msh")
 else:
-    gmsh.write("3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_along.msh")
+#    gmsh.write("3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_along.msh")
+    gmsh.write("3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_along_coarse.msh")
 
 gmsh.finalize()
