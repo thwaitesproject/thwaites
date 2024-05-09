@@ -8,9 +8,9 @@ gmsh.model.add("2d_crevasse_flume")
 
 # Let's create a simple rectangular geometry:
 L = 5000
-lc_crevasse = 50
+lc_crevasse = 5
 lc = 250
-dx_crevasse_scaling = 5
+dx_crevasse_scaling = 12.5
 nz_outsidecrevasse = 5
 #add crevasse
 across=False
@@ -156,8 +156,11 @@ gmsh.option.setNumber("Mesh.Algorithm", 5)
 gmsh.model.mesh.generate(2)
 
 
+top_layer_nz = 5
+middle_layer_nz = 4
+bottom_layer_nz = 7
 h = -100
-ov = gmsh.model.geo.extrude([(2, 1), (2,56), (2,2)], 0, 0, h, [nz_outsidecrevasse])
+ov = gmsh.model.geo.extrude([(2, 1), (2,56), (2,2)], 0, 0, h, [top_layer_nz, middle_layer_nz, bottom_layer_nz], [0.1, 0.3, 1])
 print(ov)
 
 x0 = 6
@@ -188,9 +191,8 @@ gmsh.model.geo.synchronize()
 #gmsh.write("3d_crevasse_flume_test_extrapoints.geo_unrolled")
 gmsh.model.mesh.generate(3)
 if across:
-    gmsh.write("3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_across.msh")
+    gmsh.write("3d_crevasse_flume_dx250mto20m_dz2to5to10m_crevdxz5m_across.msh")
 else:
-#    gmsh.write("3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_along.msh")
-    gmsh.write("3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_along_coarse.msh")
+    gmsh.write("3d_crevasse_flume_dx250mto20m_dz2to5to10m_crevdxz5m_along.msh")
 
 gmsh.finalize()

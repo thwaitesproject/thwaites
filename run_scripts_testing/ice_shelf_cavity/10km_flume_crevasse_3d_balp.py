@@ -31,11 +31,11 @@ parser.add_argument("date", help="date format: dd.mm.yy")
 #parser.add_argument("ip_factor", help="dimensionless constant multiplying interior penalty alpha factor",
                   #  type=float)
 parser.add_argument("dt", help="time step in seconds",
-                    type=float)
+        type=float)
 parser.add_argument("output_dt", help="output time step in seconds",
-                    type=float)
+        type=float)
 parser.add_argument("T", help="final simulation time in seconds",
-                    type=float)
+        type=float)
 parser.add_argument("angle", help="angle of the crevasse wrt flow direction (along/across/negative/positive)")
 args = parser.parse_args()
 
@@ -57,7 +57,7 @@ ny = round(L/dy)
 dz = 1.0
 
 # Define a dump file
-dump_file = "/g/data/vo05/ws9229/ice_ocean/3d_crevasse/22.09.23_5kmflume_3_eq_param_ufricHJ99_dt60.0_dtOutput60.0_T120.0_3d_openbox_bodyforce_posv_qice0_600mdepth_frazil_nodragside_melt_crevasse_gmsh_extrudeddz5m_dx20mto250m_scalehorvisc_60degneg_savedump/dump.h5"
+dump_file = "/g/data/xd2/ws9229/ice_ocean/3d_crevasse/07.05.24_5kmflume_3_eq_param_ufricHJ99_dt60.0_dtOutput86400.0_T8640000.0_3d_along_openbox_bodyforce_posv_qice0_dz5m_dx20mto250m_scalehorvis_consTS_qadv_balp_nocutoff/dump.h5"
 
 DUMP = False
 
@@ -65,12 +65,17 @@ DUMP = False
 #mesh = Mesh("./5km_flume_nocrevasse_refined.msh")
 #mesh = Mesh("./3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m.msh")
 
+# do initialisation again.... 
+water_depth = 600
 if not DUMP:
-    mesh = Mesh(f"./3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_{args.angle}.msh", name=f"3dcrevasse_{args.angle}")
+   # mesh = Mesh(f"./3d_crevasse_flume_dx250mto20m_dz5m_crevdxz5m_{args.angle}.msh", name=f"3dcrevasse_{args.angle}")
+    mesh = Mesh(f"./3d_crevasse_flume_dx250mto20m_dz2to5to10m_crevdxz5m_along.msh", name=f"3dcrevasse_{args.angle}")
+    mesh.coordinates.dat.data[:, 2] -= 500 #water_depth
 else:
     with CheckpointFile(dump_file, 'r') as chk:
         mesh = chk.load_mesh(f"3dcrevasse_{args.angle}") 
 
+x, y, z = SpatialCoordinate(mesh)
 #mesh = BoxMesh(50,50,20, 5000,5000,100)
 PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
@@ -82,10 +87,6 @@ PETSc.Sys.Print("Length of bottom", assemble(Constant(1.0)*ds(1, domain=mesh)))
 
 PETSc.Sys.Print("Length of top", assemble(Constant(1.0)*ds(4, domain=mesh)))
 
-# do initialisation again.... 
-water_depth = 600
-mesh.coordinates.dat.data[:, 2] -= 500 #water_depth
-x, y, z = SpatialCoordinate(mesh)
 ##########
 
 # Set up function spaces
@@ -148,8 +149,8 @@ if DUMP:
         S_surface = 33.725 # This gives S = 34.375 PSU at 520m depth
         S_bottom = 34.5
         
-        T_restore = T_surface + (T_bottom - T_surface) * (z / -water_depth)
-        S_restore = S_surface + (S_bottom - S_surface) * (z / -water_depth)
+        T_restore = T_bottom #T_surface + (T_bottom - T_surface) * (z / -water_depth)
+        S_restore = S_bottom # S_surface + (S_bottom - S_surface) * (z / -water_depth)
 
 
 else:
@@ -211,7 +212,8 @@ horizontal_stress = -f * 0.01  # geostrophic stress ~ |f v| drives a flow of 0.0
 ramp = Constant(0.0)
 if DUMP:
     ramp.assign(1)
-horizontal_source = as_vector((0.0, conditional(z<-500, horizontal_stress, 0.0), 0.0)) * ramp 
+#horizontal_source = as_vector((0.0, conditional(z<-500, horizontal_stress, 0.0), 0.0)) * ramp 
+horizontal_source = as_vector((0.0, horizontal_stress, 0.0)) * ramp 
 #horizontal_source = as_vector((conditional(z<-500, horizontal_stress, 0.0), conditional(z<-500, horizontal_stress, 0.0), 0.0)) * ramp * Constant(1./np.sqrt(2.)) 
 #horizontal_source = as_vector((0.0,horizontal_stress,0.0)) * ramp
 # Scalar source/sink terms at open boundary.
@@ -381,7 +383,7 @@ vp_fields = {'viscosity': mu, 'source': mom_source+horizontal_source, 'coriolis_
 temp_fields = {'diffusivity': kappa_temp, 'velocity': v, 'source': temp_source, 'absorption coefficient': temp_absorption}
 sal_fields = {'diffusivity': kappa_sal, 'velocity': v, 'source': sal_source, 'absorption coefficient': sal_absorption, }
 frazil_fields = {'diffusivity': kappa_frazil, 'velocity': v, 'w_i': Constant(w_i), 'source': frazil_source, 'absorption coefficient': frazil_absorption}
-p_b_fields = {'buoyancy': mom_source} #, 'velocity': u}
+p_b_fields = {'buoyancy': mom_source} #, 'velocity': v}
 
 ##########
 
@@ -646,7 +648,7 @@ frazil_timestepper = DIRK33(frazil_eq, frazil, frazil_fields, dt, frazil_bcs, so
 ##########
 
 # Set up folder
-folder = f"/g/data/vo05/ws9229/ice_ocean/3d_crevasse/{args.date}_5kmflume_3_eq_param_ufricHJ99_dt{dt}_dtOutput{output_dt}_T{T}_3d_{args.angle}_openbox_bodyforce_posv_qice0_dz5m_dx20mto250m_scalehorvis_consTS_qadv_balp/"
+folder = f"/g/data/xd2/ws9229/ice_ocean/3d_crevasse/{args.date}_5kmflume_3_eq_param_ufricHJ99_dt{dt}_dtOutput{output_dt}_T{T}_3d_{args.angle}_openbox_bodyforce_posv_qice0_dz5m_dx20mto250m_scalehorvis_consTS_qadv_balp_nocutoff_refdz2out/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 
 
@@ -792,7 +794,7 @@ t = 0.0
 step = 0
 
 if DUMP:
-    t+=0 #8*86400
+    t+=7*86400
 
 while t < T - 0.5*dt:
     with timed_stage('velocity-pressure'):
