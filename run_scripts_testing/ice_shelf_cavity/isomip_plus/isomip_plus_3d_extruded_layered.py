@@ -3,7 +3,7 @@
 # beneath ice shelf.
 from thwaites import *
 from thwaites.utility import get_top_surface, cavity_thickness, CombinedSurfaceMeasure, ExtrudedFunction, get_functionspace
-from thwaites.utility import offset_backward_step_approx
+from thwaites.utility import offset_backward_step_approx, extruded_cavity_mesh
 from firedrake.petsc import PETSc
 from firedrake import FacetNormal, derivative
 import pandas as pd
@@ -85,31 +85,8 @@ P1 = FunctionSpace(base_mesh, "CG", 1)
 ocean_thickness = Function(P1)
 ocean_thickness.interpolate(conditional(x_base[0] + 0.5*dy < shelf_length, H2, H3))
 rank = base_mesh.comm.rank
-def extruded_cavity_mesh(base_mesh, ocean_thickness):
-    P0dg = FunctionSpace(base_mesh, "DG", 0)
-    P0dg_cells = Function(P0dg)
-    tmp = ocean_thickness.copy(deepcopy=True)
-    P0dg_cells.assign(-1.0)#np.finfo(0.).min)
-    par_loop("""for (int i=0; i<bathy.dofs; i++) {
-            bathy_max[0] = fmax(bathy[i], bathy_max[0]);
-            }""",
-            dx, {'bathy_max': (P0dg_cells, RW), 'bathy': (tmp, READ)})
 
-    P0dg_cells /= dz
-
-    P0dg_cells_array = P0dg_cells.dat.data_ro_with_halos[:]
-
-
-
-    for i in P0dg_cells_array:
-        if rank == 41:
-            print(i)
-        layers.append([0, i])
-    print("rank =",rank, " len(layers) = ", len(layers))
-    mesh = ExtrudedMesh(base_mesh, layers, layer_height=dz)
-    return mesh 
-
-mesh = extruded_cavity_mesh(base_mesh, ocean_thickness)
+mesh = extruded_cavity_mesh(base_mesh, ocean_thickness, dz, layers)
 x, y, z = SpatialCoordinate(mesh)
 
 
