@@ -33,7 +33,7 @@ class VerticallyLumpedPC(PCBase):
         # create vertically constant version of functionspace
         mesh = V.mesh()
         hcell, vcell = mesh.ufl_cell().sub_cells()
-        hele, _ = V.ufl_element().sub_elements()
+        hele, _ = V.ufl_element().sub_elements
         vele = FiniteElement("R", vcell, 0)
         ele = TensorProductElement(hele, vele)
         V_1layer = FunctionSpace(mesh, ele)
