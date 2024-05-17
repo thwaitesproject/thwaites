@@ -47,10 +47,8 @@ jobs:
         run: |
           . /home/firedrake/firedrake/bin/activate
           python $(which firedrake-clean)
-          cd run_scripts_testing/ice_shelf_cavity/isomip_plus/
           # Run 3d isomip plus for 5 time steps
-          make
-          cd ../../..
+          make -C run_scripts_testing/ice_shelf_cavity/isomip_plus/
           python -m pytest -n 2 -v tests/regression
       - name: Test Thwaites adjoint
         run: |
