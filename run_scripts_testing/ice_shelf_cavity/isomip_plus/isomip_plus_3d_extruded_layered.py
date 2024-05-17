@@ -40,6 +40,8 @@ parser.add_argument("output_dt", help="output time step in seconds",
                     type=float)
 parser.add_argument("T", help="final simulation time in seconds",
                     type=float)
+parser.add_argument("--testing", help="write out melt file for test",
+                    action="store_true")
 args = parser.parse_args()
 
 
@@ -809,10 +811,10 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up Vectorfolder
-folder = "/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
-         "_dtOut"+str(output_dt)+"_T"+str(T)+"_StratLinTres"+str(restoring_time.values()[0])+\
-         "_Muh"+str(mu_h.values()[0])+"_switchMuv"+"_Kh"+str(kappa_h.values()[0])+"_switchKv"+\
-         "_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul_fromrest_switchP0dg/" #_smagviscmax"+str(max_nu)+"_officeshelf/"
+folder = '.' #"/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
+         #"_dtOut"+str(output_dt)+"_T"+str(T)+"_StratLinTres"+str(restoring_time.values()[0])+\
+         #"_Muh"+str(mu_h.values()[0])+"_switchMuv"+"_Kh"+str(kappa_h.values()[0])+"_switchKv"+\
+         #"_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul_fromrest_switchP0dg/" #_smagviscmax"+str(max_nu)+"_officeshelf/"
          #+"_extended_domain_with_coriolis_stratified/"  # output folder.
 #folder = 'tmp/'
 
@@ -894,6 +896,10 @@ v_comp = Function(S)
 w_comp = Function(S)
 ########
 
+# Write out melt rate for regression testing
+if args.testing:
+    melt_test = [] 
+
 # Begin time stepping
 t = 0.0
 step = 0
@@ -926,6 +932,11 @@ while t < T - 0.5*dt:
     smag_visc_solver.solve()
     step += 1
     t += dt
+    
+    # Write out melt rate for regression testing
+    if args.testing:
+        melt.interpolate(mp.wb)
+        melt_test.append(assemble(conditional(x < shelf_length, melt, 0.0) * ds("top")))
 
     with timed_stage('output'):
        if step % output_step == 0:
@@ -991,3 +1002,9 @@ while t < T - 0.5*dt:
             chk.store(p_, name="perturbation_pressure")
             chk.store(temp, name="temperature")
             chk.store(sal, name="salinity")
+
+# Write out melt rate for regression testing
+if args.testing:
+    with open('isomip_3d_melt_test.log', 'w') as f:
+        for line in melt_test:
+            f.write(f"{line}\n")
