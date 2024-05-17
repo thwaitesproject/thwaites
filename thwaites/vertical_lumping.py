@@ -1,5 +1,6 @@
 from firedrake import *
 from petsc4py import PETSc
+from firedrake.dmhooks import get_function_space
 
 
 class VerticallyLumpedPC(PCBase):
@@ -25,10 +26,11 @@ class VerticallyLumpedPC(PCBase):
     def initialize(self, pc):
         options_prefix = pc.getOptionsPrefix()
         A, P = pc.getOperators()
-        dm = pc.getDM()
-        appctx = dm.getAppCtx()
-        F = appctx[0].F
-        V = F.arguments()[0].function_space()
+        V = get_function_space(pc.getDM())
+        if len(V) == 1:
+            V = FunctionSpace(V.mesh(), V.ufl_element())
+        else:
+            V = MixedFunctionSpace([V_ for V_ in V])
 
         # create vertically constant version of functionspace
         mesh = V.mesh()
