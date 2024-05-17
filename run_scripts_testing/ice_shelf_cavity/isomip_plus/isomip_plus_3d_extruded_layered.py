@@ -811,12 +811,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up Vectorfolder
-folder = '.' #"/rds/general/user/wis15/home/data/3d_isomip_plus/extruded_meshes/"+str(args.date)+"_3d_isomip+_dt"+str(dt)+\
-         #"_dtOut"+str(output_dt)+"_T"+str(T)+"_StratLinTres"+str(restoring_time.values()[0])+\
-         #"_Muh"+str(mu_h.values()[0])+"_switchMuv"+"_Kh"+str(kappa_h.values()[0])+"_switchKv"+\
-         #"_dx"+str(round(1e-3*dy))+"km_lay"+str(args.nz)+"_closed_coriolis_tracerlims_ip3_alignicefront_backeul_fromrest_switchP0dg/" #_smagviscmax"+str(max_nu)+"_officeshelf/"
-         #+"_extended_domain_with_coriolis_stratified/"  # output folder.
-#folder = 'tmp/'
+folder = './'
 
 
 ###########

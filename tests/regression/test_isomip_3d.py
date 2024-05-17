@@ -8,7 +8,6 @@ def test_isomip_3d():
     '''Checks that integrated melt within cavity is consistent for first 5 timesteps'''
 
     expected_melt = np.loadtxt(base / "expected_isomip_3d_melt_test.log")
-    print(expected_melt)
     melt = np.loadtxt(base / "isomip_3d_melt_test.log")
 
     # check that norm(q) is the same as previously run
