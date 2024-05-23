@@ -88,7 +88,7 @@ class LaplacePC(AuxiliaryOperatorPC):
     _prefix = "laplace_"  # prefix for solver parameters
 
     def form(self, pc, test, trial):
-        # returns the form from which the operator is assembled, and any bcs (None here)
+        # returns the form from which the operator is assembled, and any strong bcs (defaults to None here)
         _, P = pc.getOperators()
         ctx = P.getPythonContext()
         dt = ctx.appctx['dt']
@@ -96,6 +96,16 @@ class LaplacePC(AuxiliaryOperatorPC):
         ds = ctx.appctx['ds']
         bcs = ctx.appctx['bcs']
         n = ctx.appctx['n']
+        strong_bcs = ctx.appctx['strong_bcs']
+
+        laplace_strong_bcs = [DirichletBC(test.function_space(), 0, bci.sub_domain) for bci in strong_bcs]
+        for bci in strong_bcs:
+            print("bci.sub_domain", bci.sub_domain)
+
+        print('laplace pc')
+        print('test fs', test.function_space())
+        print('strong bcs fs', strong_bcs[0].function_space())
+        print('strong bcs fs', laplace_strong_bcs[0].function_space())
 
         F = dt * dt * dot(grad(test), grad(trial)) * dx
         F -= dt * dt * trial * dot(grad(test), n) * ds   # dirichlet pressure - default remove this term because open boundary.
@@ -112,4 +122,4 @@ class LaplacePC(AuxiliaryOperatorPC):
                 F += dt * dt * trial * dot(grad(test), n) * ds(id)
                 F += dt * dt * test * dot(grad(trial), n) * ds(id)
 
-        return F, None
+        return F, laplace_strong_bcs

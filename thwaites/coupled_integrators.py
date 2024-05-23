@@ -104,13 +104,14 @@ class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
 
 class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
     def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}, theta=1.0,
-                 predictor_solver_parameters={}, picard_iterations=1, pressure_nullspace=None):
+                 predictor_solver_parameters={}, picard_iterations=1, pressure_nullspace=None, strong_bcs=None):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         self.theta = firedrake.Constant(theta)
         self.theta_p = 1  # should not be used for now - maybe revisit with free surface terms
         self.predictor_solver_parameters = predictor_solver_parameters
         self.picard_iterations = picard_iterations
         self.pressure_nullspace = pressure_nullspace
+        self.strong_bcs = strong_bcs
 
         self.solution_old = firedrake.Function(self.solution)
         self.solution_lag = firedrake.Function(self.solution)
@@ -175,7 +176,8 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
                                                            appctx={'a': firedrake.derivative(self.F, self.solution),
                                                                    'schur_nullspace': self.pressure_nullspace,
                                                                    'dt': self.dt_const, 'dx': self.equations[1].dx,
-                                                                   'ds': self.equations[1].ds, 'bcs': self.bcs, 'n': div_term.n},
+                                                                   'ds': self.equations[1].ds, 'bcs': self.bcs, 'n': div_term.n,
+                                                                   'strong_bcs': self.strong_bcs},
                                                            nullspace=mixed_nullspace, transpose_nullspace=mixed_nullspace,
                                                            options_prefix=self.name)
 
@@ -198,6 +200,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         # system but with all momentum terms handled explicitly on the rhs
         self.solver.solve()
         # reset velocity to its initial value:
+
         u.assign(u_old)
         self.u_star.assign(u_old)
 
