@@ -170,7 +170,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         else:
             mixed_nullspace = firedrake.MixedVectorSpaceBasis(W, [W.sub(0), self.pressure_nullspace])
 
-        self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution)
+        self.problem = firedrake.NonlinearVariationalProblem(self.F, self.solution, bcs=self.strong_bcs)
         self.solver = firedrake.NonlinearVariationalSolver(self.problem,
                                                            solver_parameters=self.solver_parameters,
                                                            appctx={'a': firedrake.derivative(self.F, self.solution),
