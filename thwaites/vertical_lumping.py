@@ -98,14 +98,10 @@ class LaplacePC(AuxiliaryOperatorPC):
         n = ctx.appctx['n']
         strong_bcs = ctx.appctx['strong_bcs']
 
-        laplace_strong_bcs = [DirichletBC(test.function_space(), 0, bci.sub_domain) for bci in strong_bcs]
-        for bci in strong_bcs:
-            print("bci.sub_domain", bci.sub_domain)
-
-        print('laplace pc')
-        print('test fs', test.function_space())
-        print('strong bcs fs', strong_bcs[0].function_space())
-        print('strong bcs fs', laplace_strong_bcs[0].function_space())
+        if strong_bcs:
+            laplace_strong_bcs = [DirichletBC(test.function_space(), 0, bci.sub_domain) for bci in strong_bcs]
+        else:
+            laplace_strong_bcs = None
 
         F = dt * dt * dot(grad(test), grad(trial)) * dx
         F -= dt * dt * trial * dot(grad(test), n) * ds   # dirichlet pressure - default remove this term because open boundary.
@@ -113,9 +109,7 @@ class LaplacePC(AuxiliaryOperatorPC):
 
         # For boundaries where u is specified we need to take the neumann pressure boundary back out.
         for id, bc in bcs.items():
-            print(id)
             if 'un' in bc:
-                print(id, "has u")
                 F += dt * dt * trial * dot(grad(test), n) * ds(id)
                 F += dt * dt * test * dot(grad(trial), n) * ds(id)
             elif 'u' in bc:
