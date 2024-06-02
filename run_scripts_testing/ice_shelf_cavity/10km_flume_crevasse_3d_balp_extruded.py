@@ -590,8 +590,9 @@ frazil_bcs = {}
 p_b_bcs = {}
 
 # STRONGLY Enforced BCs
-# open ocean (RHS): no tangential flow because viscosity of outside ocean resists vertical flow.
-strong_bcs = []#DirichletBC(M.sub(0).sub(1), 0, 2)]
+strong_bcs = [DirichletBC(M.sub(1), 0, [1,2,3,4])]
+
+#print('strongbc_functionspace', strong_bcs[0].function_space())
 
 ##########
 
@@ -612,16 +613,18 @@ pressure_projection_solver_parameters = {
         'snes_monitor': None,
         'snes_type': 'ksponly',
         'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
-#        'ksp_monitor_true_residual': None,
+        'ksp_monitor_true_residual': None,
         'mat_type': 'matfree',
         'pc_type': 'fieldsplit',
         'pc_fieldsplit_type': 'schur',
         'pc_fieldsplit_schur_fact_type': 'full',
         # velocity mass block:
         'fieldsplit_0': {
-            'ksp_converged_reason': None,
-#            'ksp_monitor_true_residual': None,
             'ksp_type': 'cg',
+            'ksp_rtol': 1e-5,
+            'ksp_atol': 1e-7,
+            'ksp_converged_reason': None,
+            'ksp_monitor_true_residual': None,
             'pc_type': 'python',
             'pc_python_type': 'firedrake.AssembledPC',
             'assembled_pc_type': 'bjacobi',
@@ -632,6 +635,10 @@ pressure_projection_solver_parameters = {
         # and if the velocity is DG so that this mass matrix can be inverted explicitly
         'fieldsplit_1': {
             'ksp_type': 'preonly',
+            'ksp_rtol': 1e-7,
+            'ksp_atol': 1e-9,
+            'ksp_converged_reason':None,
+            'ksp_monitor_true_residual': None,
             'pc_type': 'python',
             'pc_python_type': 'thwaites.LaplacePC',
             'laplace_pc_type': 'ksp',
@@ -639,7 +646,7 @@ pressure_projection_solver_parameters = {
             'laplace_ksp_ksp_rtol': 1e-7,
             'laplace_ksp_ksp_atol': 1e-9,
             'laplace_ksp_ksp_converged_reason': None,
-#            'laplace_ksp_ksp_monitor_true_residual': None,
+            'laplace_ksp_ksp_monitor_true_residual': None,
             'laplace_ksp_pc_type': 'python',
             'laplace_ksp_pc_python_type': 'thwaites.VerticallyLumpedPC',
         }
@@ -660,7 +667,7 @@ predictor_solver_parameters = {
         'pc_type': 'hypre',
         'pc_hypre_boomeramg_strong_threshold': 0.6,
         'ksp_converged_reason': None,
-#        'ksp_monitor_true_residual': None,
+        'ksp_monitor_true_residual': None,
         'ksp_rtol': 1e-5,
         'ksp_max_it': 300,
         }
@@ -753,11 +760,13 @@ output_step = output_dt/dt
 vp_timestepper = PressureProjectionTimeIntegrator([mom_eq, cty_eq], m, vp_fields, vp_coupling, dt, vp_bcs,
                                                           solver_parameters=vp_solver_parameters,
                                                           predictor_solver_parameters=predictor_solver_parameters,
-                                                          picard_iterations=1)
+                                                          picard_iterations=1, strong_bcs=strong_bcs)
 
 p_b_solver = BalancePressureSolver(balance_pressure_eq, p_b, p_b_fields,p_b_bcs, solver_parameters=p_b_solver_parameters,
                                     p_b_nullspace=VectorSpaceBasis(constant=True))
 p_b_solver.advance(0)
+p_b_file = File("balance_pressure.pvd")
+p_b_file.write(p_b)
 # performs pseudo timestep to get good initial pressure
 # this is to avoid inconsistencies in terms (viscosity and advection) that
 # are meant to decouple from pressure projection, but won't if pressure is not initialised
@@ -830,8 +839,8 @@ frazil_flux_file.write(frazil_flux)
 
 smag_visc_file = File(folder+"smag_visc.pvd")
 smag_visc_file.write(smag_visc)
-cellsize_file = File(folder+"cell_size.pvd")
-cellsize_file.write(cell_size)
+#cellsize_file = File(folder+"cell_size.pvd")
+#cellsize_file.write(cell_size)
 
 p_b_file = File(folder+"balance_pressure.pvd")
 p_b_file.write(p_b)
