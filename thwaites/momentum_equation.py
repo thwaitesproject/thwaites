@@ -1,6 +1,6 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor, sign
-from firedrake import avg, Identity, zero
+from firedrake import avg, Identity
 from .utility import is_continuous, normal_is_continuous, tensor_jump, cell_edge_integral_ratio
 from firedrake import FacetArea, CellVolume
 r"""
@@ -31,15 +31,19 @@ class MomentumAdvectionTerm(BaseTerm):
 
         F = -dot(u, div(outer(phi, u_adv)))*self.dx
 
+        # integration by parts leads to boundary term
+        F += dot(phi, u) * dot(u_adv, n)*self.ds
+
+        # which is replaced at incoming Dirichlet 'u' or 'un' boundaries:
         for id, bc in bcs.items():
             if 'u' in bc:
                 u_in = bc['u']
             elif 'un' in bc:
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
-                u_in = zero(self.dim)
+                u_in = u
             F += conditional(dot(u_adv, n) < 0,
-                             dot(phi, u_in)*dot(u_adv, n),
+                             dot(phi, u_in-u)*dot(u_adv, n),
                              dot(phi, u)*dot(u_adv, n)) * self.ds(id)
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u_adv)):
