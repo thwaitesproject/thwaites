@@ -41,10 +41,10 @@ class MomentumAdvectionTerm(BaseTerm):
             elif 'un' in bc:
                 u_in = bc['un'] * n  # this implies u_t=0 on the inflow
             else:
-                u_in = u
+                continue
             F += conditional(dot(u_adv, n) < 0,
                              dot(phi, u_in-u)*dot(u_adv, n),
-                             dot(phi, u)*dot(u_adv, n)) * self.ds(id)
+                             0) * self.ds(id)
 
         if not (is_continuous(self.trial_space) and normal_is_continuous(u_adv)):
             # s=0: u.n(-)<0  =>  flow goes from '+' to '-' => '+' is upwind
