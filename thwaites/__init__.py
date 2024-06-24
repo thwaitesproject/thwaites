@@ -11,6 +11,5 @@ from .assembledschur import AssembledSchurPC
 from .vertical_lumping import VerticallyLumpedPC, LaplacePC
 from .meltrate_param import MeltRateParam, ThreeEqMeltRateParam, FrazilMeltParam
 from thwaites.limiter import VertexBasedP1DGLimiter
-from .free_surface_equation import FreeSurfaceEquation
 from . import _version
 __version__ = _version.get_versions()['version']
