@@ -9,9 +9,16 @@ from firedrake.petsc import PETSc
 from firedrake import FacetNormal
 import numpy as np
 from pyop2.profiling import timed_stage
+import argparse
 ##########
 
-mesh = BoxMesh(10, 10, 10, 5e3, 5e3, 100)
+parser = argparse.ArgumentParser()
+parser.add_argument("--nx", default=10, type=int, help="Number of horizontal cells", required=False)
+parser.add_argument("--nz", default=10, type=int, help="Number of vertical layers", required=False)
+parser.add_argument("--friction", action='store_true', help="Apply friction drag at ice base")
+args = parser.parse_args()
+
+mesh = BoxMesh(args.nx, args.nx, args.nz, 5e3, 5e3, 100)
 mesh.coordinates.dat.data[:, 2] -= 500
 
 x, y, z = SpatialCoordinate(mesh)
@@ -22,9 +29,9 @@ W = FunctionSpace(mesh, "CG", 2)  # pressure space
 M = MixedFunctionSpace([V, W])
 
 K = FunctionSpace(mesh, "DG", 1)    # temperature space
-print("velocity dofs:", V.dim())
-print("Pressure dofs:", W.dim())
-print("scalar dofs:", K.dim())
+PETSc.Sys.Print("velocity dofs:", V.dim())
+PETSc.Sys.Print("Pressure dofs:", W.dim())
+PETSc.Sys.Print("scalar dofs:", K.dim())
 ##########
 
 # Set up functions
@@ -96,6 +103,9 @@ no_normal_flow = 0.
 
 vp_bcs = {5: {'un': no_normal_flow},
           6: {'un': no_normal_flow}}
+
+if args.friction:
+    vp_bcs[6].update({'drag': 2.5e-3})
 
 temp_bcs = {1: {'qadv': T_restore}, 2: {'qadv': T_restore}, 3: {'qadv': T_restore}, 4: {'qadv': T_restore}}
 sal_bcs = {1:{'qadv': S_restore}, 2:{'qadv': S_restore}, 3:{'qadv': S_restore}, 4:{'qadv': S_restore}}
@@ -209,8 +219,7 @@ sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters
 ##########
 
 # Set up folder
-folder = "geostrophic_balance/"
-
+folder = f"geostrophic_balance_friction{args.friction}/"
 
 ###########
 
