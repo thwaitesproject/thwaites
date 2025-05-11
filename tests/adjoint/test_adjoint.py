@@ -211,7 +211,7 @@ def test_2d_isomip_cavity_salfunctional(T):
     ##########
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: velocity, pressure
+    v_, p_ = m.subfunctions  # function: velocity, pressure
     v, p = split(m)  # expression: velocity, pressure
     v_._name = "velocity"
     p_._name = "perturbation pressure"
@@ -300,7 +300,7 @@ def test_2d_isomip_cavity_salfunctional(T):
 
 
     #    m = Function(M)
-    #    v_, p_ = m.split()  # function: velocity, pressure
+    #    v_, p_ = m.subfunctions  # function: velocity, pressure
     #    v, p = split(m)  # expression: velocity, pressure
     #    v_._name = "velocity"
     #    p_._name = "perturbation pressure"
@@ -996,7 +996,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
     ##########
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: velocity, pressure
+    v_, p_ = m.subfunctions  # function: velocity, pressure
     v, p = split(m)  # expression: velocity, pressure
     v_._name = "velocity"
     p_._name = "perturbation pressure"
@@ -1084,7 +1084,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
 
 
     #    m = Function(M)
-    #    v_, p_ = m.split()  # function: velocity, pressure
+    #    v_, p_ = m.subfunctions  # function: velocity, pressure
     #    v, p = split(m)  # expression: velocity, pressure
     #    v_._name = "velocity"
     #    p_._name = "perturbation pressure"

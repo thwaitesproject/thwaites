@@ -81,7 +81,7 @@ def test_coarse_open_pdyn_mu():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -699,7 +699,7 @@ def test_coarse_open_pdyn_sal():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -1330,7 +1330,7 @@ def test_coarse_open_pdyn_temp():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -1962,7 +1962,7 @@ def test_coarse_open_pdyn_Tbc():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -2593,7 +2593,7 @@ def test_coarse_open_pdyn_Sbc():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"

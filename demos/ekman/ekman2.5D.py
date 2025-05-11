@@ -40,7 +40,7 @@ U = FunctionSpace(mesh, "DG", 1)
 
 # Set up functions
 m = Function(M)
-v_, p_ = m.split()
+v_, p_ = m.subfunctions
 v, p = split(m)
 
 u = Function(U)

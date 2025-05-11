@@ -56,7 +56,7 @@ class SaddlePointTimeIntegrator(CoupledTimeIntegrator):
     def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         assert len(equations) == 2
-        assert len(solution.function_space().split()) == 2
+        assert len(solution.function_space().subfunctions) == 2
 
 
 class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
@@ -72,7 +72,7 @@ class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
     def initialize(self, init_solution):
         self.solution_old.assign(init_solution)
         u, p = firedrake.split(self.solution)
-        u_old, p_old = self.solution_old.split()
+        u_old, p_old = self.solution_old.subfunctions
         u_theta = (1-self.theta)*u_old + self.theta*u
         p_theta = (1-self.theta)*p_old + self.theta*p
         z_theta = [u_theta, p_theta]
@@ -118,7 +118,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         # the predictor space is the same as the first sub-space of the solution space, but indexed independently
         mesh = self.solution.function_space().mesh()
-        self.u_space = firedrake.FunctionSpace(mesh, self.solution.split()[0].ufl_element())
+        self.u_space = firedrake.FunctionSpace(mesh, self.solution.subfunctions[0].ufl_element())
         self.u_star_test = firedrake.TestFunction(self.u_space)
         self.u_star = firedrake.Function(self.u_space)
 
@@ -127,11 +127,11 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
     def initialize(self, init_solution):
         self.solution_old.assign(init_solution)
         u, p = firedrake.split(self.solution)
-        u_old, p_old = self.solution_old.split()
+        u_old, p_old = self.solution_old.subfunctions
         u_star_theta = (1-self.theta)*u_old + self.theta*self.u_star
         u_theta = (1-self.theta)*u_old + self.theta*u
         p_theta = (1-self.theta_p)*p_old + self.theta_p*p
-        u_lag, p_lag = self.solution_lag.split()
+        u_lag, p_lag = self.solution_lag.subfunctions
         u_lag_theta = (1-self.theta)*u_old + self.theta*u_lag
         p_lag_theta = (1-self.theta_p)*p_old + self.theta_p*p_lag
 
@@ -185,8 +185,8 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         """Perform pseudo timestep to establish good initial pressure."""
         if not self._initialized:
             self.initialize(self.solution)
-        u, p = self.solution.split()
-        u_old, p_old = self.solution_old.split()
+        u, p = self.solution.subfunctions
+        u_old, p_old = self.solution_old.subfunctions
         # solve predictor step, but now fully explicit
         Fstar = self.equations[0].mass_term(self.u_star_test, self.u_star-u_old)
         Fstar -= self.dt_const*self.equations[0].residual(self.u_star_test, u_old, u_old, self.fields_star, bcs=self.bcs)
