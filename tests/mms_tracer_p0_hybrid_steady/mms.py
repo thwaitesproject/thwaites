@@ -42,7 +42,7 @@ def error(nx):
     source = adv*((25*y*cos(25*x*y) + y/x1p5)*sin(5*(y2 + x2)) + beta*(sin(25*x*y) - 2*y/xp5)*(10*x*cos(5*(y2 + x2)) + 6*y*sin(3*(x2 - y2))) + (25*x*cos(25*x*y) - 2/xp5)*cos(3*(x2 - y2))) - nu*(-625*y2*sin(25*x*y) - 625*x2*sin(25*x*y) - 3*y/(2*x2p5))
 
     z = Function(Z)
-    q, p = z.split()
+    q, p = z.subfunctions
 
     # We declare the output filename, and write out the initial condition. ::
     outfile = File("advdif.pvd")
@@ -72,7 +72,7 @@ def error(nx):
 
     timestepper = BackwardEuler(eq, z, fields, dt, bcs)
 
-    q_old, p_old = timestepper.solution_old.split()
+    q_old, p_old = timestepper.solution_old.subfunctions
     q_prev = Function(V, name='q_old')
 
     t = 0.0

@@ -36,7 +36,7 @@ S = FunctionSpace(mesh,"DG",1)    # salinity space
 
 
 m = Function(M)
-u_, p_ = m.split()
+u_, p_ = m.subfunctions
 
 
 temp = Function(K, name="Temperature")

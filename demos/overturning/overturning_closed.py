@@ -14,7 +14,7 @@ Z = MixedFunctionSpace([V,W])
 Q = FunctionSpace(mesh, "DG", 1)  # density space
 
 z = Function(Z)
-u_, p_ = z.split()
+u_, p_ = z.subfunctions
 rho = Function(Q)
 
 

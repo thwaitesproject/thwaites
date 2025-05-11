@@ -55,7 +55,7 @@ def error(mesh_name, nx):
     # set up prescribed velocity and diffusivity
     x, y = SpatialCoordinate(mesh)
     m = Function(M)
-    vel_, p_ = m.split()  # function: y component of velocity, pressure
+    vel_, p_ = m.subfunctions  # function: y component of velocity, pressure
     vel, p = split(m)  # expression: y component of velocity, pressure
     vel_._name = "velocity"
     p_._name = "perturbation pressure"
@@ -132,7 +132,7 @@ def error(mesh_name, nx):
    # vp_timestepper.initialize_pressure()
     
 
-    v_old, p_old = vp_timestepper.solution_old.split()
+    v_old, p_old = vp_timestepper.solution_old.subfunctions
     vel_prev = Function(U, name='vel_old')
     p_prev = Function(W, name='p_old')
 
