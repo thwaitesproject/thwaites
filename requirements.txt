@@ -2,3 +2,4 @@ pandas
 argparse
 rasterio 
 git+https://github.com/g-adopt/g-adopt#egg=gadopt
+flake8
