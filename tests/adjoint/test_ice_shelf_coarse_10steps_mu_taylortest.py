@@ -8,10 +8,10 @@ import pandas as pd
 import argparse
 import numpy as np
 from pyop2.profiling import timed_stage
+from adjoint_test_data import get_coarse_mesh, data_dir, tmp_dir
 
 from firedrake_adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
-##########
 
 def test_ice_shelf_coarse_adjoint():
     Kh = 0.25
@@ -36,7 +36,7 @@ def test_ice_shelf_coarse_adjoint():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -104,11 +104,11 @@ def test_ice_shelf_coarse_adjoint():
     ##########
 
     # Define a dump file
-    dump_file = "tests/adjoint/50day_Kh0.25Kv1e-3_dx500m_dy2m_dump"
+    dump_file = str(data_dir / "50day_Kh0.25Kv1e-3_dx500m_dy2m_dump")
 
     DUMP = True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -270,23 +270,6 @@ def test_ice_shelf_coarse_adjoint():
     top_boundary_mp = pd.DataFrame()
 
 
-    def top_boundary_to_csv(boundary_points, df, t_str):
-        df['Qice_t_' + t_str] = Q_ice.at(boundary_points)
-        df['Qmixed_t_' + t_str] = Q_mixed.at(boundary_points)
-        df['Qlat_t_' + t_str] = Q_latent.at(boundary_points)
-        df['Qsalt_t_' + t_str] = Q_s.at(boundary_points)
-        df['Melt_t' + t_str] = melt.at(boundary_points)
-        df['Tb_t_' + t_str] = Tb.at(boundary_points)
-        df['P_t_' + t_str] = full_pressure.at(boundary_points)
-        df['Sal_t_' + t_str] = sal.at(boundary_points)
-        df['Temp_t_' + t_str] = temp.at(boundary_points)
-        df["integrated_melt_t_ " + t_str] = assemble(melt * ds(4))
-
-        if mesh.comm.rank == 0:
-            top_boundary_mp.to_csv(folder+"top_boundary_data.csv")
-
-
-    ##########
 
     # Boundary conditions
     # top boundary: no normal flow, drag flowing over ice
@@ -301,13 +284,6 @@ def test_ice_shelf_coarse_adjoint():
     stress_open_boundary = -n*-g*(Temperature_term + Salinity_term)
     no_normal_flow = 0.
     ice_drag = 0.0097
-
-
-    # test stress open_boundary
-    #sop = Function(W)
-    #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
-    #sop_file.write(sop)
 
 
     vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'un': no_normal_flow},
@@ -387,19 +363,6 @@ def test_ice_shelf_coarse_adjoint():
     velocity_depth_profile6km['Z_profile'] = z_profile6km
 
 
-    def depth_profile_to_csv(profile, df, depth, t_str):
-        #df['U_t_' + t_str] = u.at(profile)
-        vw = np.array(v_.at(profile))
-        vv = vw[:, 0]
-        ww = vw[:, 1]
-        df['V_t_' + t_str] = vv
-        df['W_t_' + t_str] = ww
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+depth+"_profile.csv")
-
-
-
-
     ##########
 
     # define time steps
@@ -415,85 +378,47 @@ def test_ice_shelf_coarse_adjoint():
     temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
     sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
 
-    ##########
-
-    # Set up folder
-    #folder = "/data/2d_adjoint/"+str(args.date)+"_3_eq_param_ufric_dt"+str(dt)+\
-    #         "_dtOutput"+str(output_dt)+"_T"+str(T)+"_ip"+str(ip_factor.values()[0])+\
-    #         "_tres"+str(restoring_time)+"constant_Kh"+str(kappa_h.values()[0])+"_Kv"+str(kappa_v.values()[0])\
-    #         +"_structured_dy500_dz2_no_limiter_closed_from50days_adjoint/"
-             #+"_extended_domain_with_coriolis_stratified/"  # output folder.
-    folder ="tmp"
-
-    ###########
-
     # Output files for velocity, pressure, temperature and salinity
-    v_file = File(folder+"vw_velocity.pvd")
-    #v_file.write(v_)
+    v_file = File(str(tmp_dir / "vw_velocity.pvd"))
 
-    p_file = File(folder+"pressure.pvd")
-    #p_file.write(p_)
+    p_file = File(str(tmp_dir / "pressure.pvd"))
 
-    #u_file = File(folder+"u_velocity.pvd")
-    #u_file.write(u)
 
-    t_file = File(folder+"temperature.pvd")
-    #t_file.write(temp)
+    t_file = File(str(tmp_dir / "temperature.pvd"))
 
-    s_file = File(folder+"salinity.pvd")
-    #s_file.write(sal)
+    s_file = File(str(tmp_dir / "salinity.pvd"))
 
-    rho_file = File(folder+"density.pvd")
-    #rho_file.write(rho)
+    rho_file = File(str(tmp_dir / "density.pvd"))
 
     ##########
 
     # Output files for melt functions
-    Q_ice_file = File(folder+"Q_ice.pvd")
-    #Q_ice_file.write(Q_ice)
+    Q_ice_file = File(str(tmp_dir / "Q_ice.pvd"))
 
-    Q_mixed_file = File(folder+"Q_mixed.pvd")
-    #Q_mixed_file.write(Q_mixed)
+    Q_mixed_file = File(str(tmp_dir / "Q_mixed.pvd"))
 
-    Qs_file = File(folder+"Q_s.pvd")
-    #Qs_file.write(Q_s)
+    Qs_file = File(str(tmp_dir / "Q_s.pvd"))
 
-    m_file = File(folder+"melt.pvd")
-    #m_file.write(melt)
+    m_file = File(str(tmp_dir / "melt.pvd"))
 
-    full_pressure_file = File(folder+"full_pressure.pvd")
-    #full_pressure_file.write(full_pressure)
+    full_pressure_file = File(str(tmp_dir / "full_pressure.pvd"))
 
     ######
 
     # adjoint output
     tape = get_working_tape()
 
-    adj_s_file = File(folder+"adj_salinity.pvd")
-    #tape.add_block(DiagnosticBlock(adj_s_file, sal))
-
-    adj_t_file = File(folder+"adj_temperature.pvd")
-    #tape.add_block(DiagnosticBlock(adj_t_file, temp))
-
-    adj_visc_file = File(folder+"adj_viscosity.pvd")
-    #tape.add_block(DiagnosticBlock(adj_visc_file, mu))
-    adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
-    #tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
-    adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
-    #tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
+    adj_s_file = File(str(tmp_dir / "adj_salinity.pvd"))
+    adj_t_file = File(str(tmp_dir / "adj_temperature.pvd"))
+    adj_visc_file = File(str(tmp_dir / "adj_viscosity.pvd"))
+    adj_diff_t_file = File(str(tmp_dir / "adj_diffusion_T.pvd"))
+    adj_diff_s_file = File(str(tmp_dir / "adj_diffusion_S.pvd"))
 
     ########
 
     # Extra outputs for plotting
     # Melt rate functions along ice-ocean boundary
     top_boundary_to_csv(shelf_boundary_points, top_boundary_mp, '0.0')
-
-    # Depth profiles
-    #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-    #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-    #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-    #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-    #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
 
     ########
 
@@ -516,17 +441,8 @@ def test_ice_shelf_coarse_adjoint():
         with timed_stage('output'):
            if step % output_step == 0:
                # dumb checkpoint for starting from spin up
-               
                tape.add_block(DiagnosticBlock(adj_s_file, sal))
                tape.add_block(DiagnosticBlock(adj_t_file, temp))
-
-               with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
-                   # Checkpoint file open for reading and writing
-                   chk.store(v_, name="v_velocity")
-                   chk.store(p_, name="perturbation_pressure")
-                   #chk.store(u, name="u_velocity")
-                   chk.store(temp, name="temperature")
-                   chk.store(sal, name="salinity")
 
                # Update melt rate functions
                Q_ice.interpolate(mp.Q_ice)
@@ -578,14 +494,6 @@ def test_ice_shelf_coarse_adjoint():
     #J.adj_value = 1.0
 
     J.block_variable.adj_value = 1.0
-    #tape.visualise()
-    # evaluate all adjoint blocks to ensure we get complete adjoint solution
-    # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
-    #    meshtype derivative (line 204) is broken, so just return None instead
-    #with timed_stage('adjoint'):
-    #    tape.evaluate_adj()
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
 
     h = Function(mu)
     h.dat.data[:] = 0.01*np.random.random(h.dat.data_ro.shape)
