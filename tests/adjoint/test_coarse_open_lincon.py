@@ -1299,7 +1299,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     ##########
 
     # Define a dump file
-    dump_file = str(data_file + "17.02.23_dump_50days_open_qadv_TSconst")
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = False #True
     if DUMP:

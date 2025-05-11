@@ -269,7 +269,23 @@ def test_ice_shelf_coarse_adjoint():
     shelf_boundary_points = get_top_boundary(cavity_length=L, cavity_height=H2, water_depth=water_depth)
     top_boundary_mp = pd.DataFrame()
 
+    def top_boundary_to_csv(boundary_points, df, t_str):
+        df['Qice_t_' + t_str] = Q_ice.at(boundary_points)
+        df['Qmixed_t_' + t_str] = Q_mixed.at(boundary_points)
+        df['Qlat_t_' + t_str] = Q_latent.at(boundary_points)
+        df['Qsalt_t_' + t_str] = Q_s.at(boundary_points)
+        df['Melt_t' + t_str] = melt.at(boundary_points)
+        df['Tb_t_' + t_str] = Tb.at(boundary_points)
+        df['P_t_' + t_str] = full_pressure.at(boundary_points)
+        df['Sal_t_' + t_str] = sal.at(boundary_points)
+        df['Temp_t_' + t_str] = temp.at(boundary_points)
+        df["integrated_melt_t_ " + t_str] = assemble(melt * ds(4))
 
+        if mesh.comm.rank == 0:
+            top_boundary_mp.to_csv(tmp_dir / "top_boundary_data.csv")
+
+
+    ##########
 
     # Boundary conditions
     # top boundary: no normal flow, drag flowing over ice
