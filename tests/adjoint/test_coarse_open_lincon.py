@@ -12,6 +12,7 @@ from pyop2.profiling import timed_stage
 from firedrake_adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
 from thwaites.adjoint_utility import DiagnosticConstantBlock
+from adjoint_test_data import get_coarse_mesh, data_dir
 ##########
 
 
@@ -34,7 +35,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -102,11 +103,11 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     ##########
 
     # Define a dump file
-    dump_file = "./17.02.23_dump_50days_open_qadv_TSconst"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = False #True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -320,22 +321,6 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     top_boundary_mp = pd.DataFrame()
 
 
-    def top_boundary_to_csv(boundary_points, df, t_str):
-        df['Qice_t_' + t_str] = Q_ice.at(boundary_points)
-        df['Qmixed_t_' + t_str] = Q_mixed.at(boundary_points)
-        df['Qlat_t_' + t_str] = Q_latent.at(boundary_points)
-        df['Qsalt_t_' + t_str] = Q_s.at(boundary_points)
-        df['Melt_t' + t_str] = melt.at(boundary_points)
-        df['Tb_t_' + t_str] = Tb.at(boundary_points)
-        df['P_t_' + t_str] = full_pressure.at(boundary_points)
-        df['Sal_t_' + t_str] = sal.at(boundary_points)
-        df['Temp_t_' + t_str] = temp.at(boundary_points)
-        df["integrated_melt_t_ " + t_str] = assemble(melt * ds(4))
-
-        if mesh.comm.rank == 0:
-            top_boundary_mp.to_csv(folder+"top_boundary_data.csv")
-
-
     ##########
 
     # Boundary conditions
@@ -413,12 +398,6 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
 
     # Use the external data function to interpolate the values of f.
     stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro[:,1])
-
-    # test stress open_boundary
-    #sop = Function(W)
-    #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
-    #sop_file.write(sop)
 
 
     vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary},
@@ -498,16 +477,6 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     velocity_depth_profile6km['Z_profile'] = z_profile6km
 
 
-    def depth_profile_to_csv(profile, df, depth, t_str):
-        #df['U_t_' + t_str] = u.at(profile)
-        vw = np.array(v_.at(profile))
-        vv = vw[:, 0]
-        ww = vw[:, 1]
-        df['V_t_' + t_str] = vv
-        df['W_t_' + t_str] = ww
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+depth+"_profile.csv")
-
     #### VOM for doing objective function...
 
     z_profile_adjoint = np.linspace(-525, -595, 15)
@@ -535,22 +504,11 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
 
     melt_vom_node.interpolate(mp.wb)
 
-    def adjoint_profile_to_csv(df, t_str):
-        df['T_t_' + t_str] = temp_vom_profile.dat.data_ro
-        df['S_t_' + t_str] = sal_vom_profile.dat.data_ro
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+"TS_foradjoint_7550m_profile.csv")
-
     adjoint_melt7550m = pd.DataFrame()
-    def adjoint_melt_to_csv(df, t_str):
-        df['Melt_t_' + t_str] = melt_vom_node.dat.data_ro
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+"melt_foradjoint_7550m_profile.csv")
 
     ##### 
     # read linear simulations
-    #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile_250423.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile_250423.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -582,22 +540,6 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
     temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
     sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
-
-    ##########
-
-    # Set up folder
-
-
-
-    # Depth profiles
-    #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-    #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-    #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-    #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-    #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
-
-    ########
-
 
     # Begin time stepping
     t = 0.0
@@ -648,25 +590,6 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
         tape.add_block(DiagnosticConstantBlock(S_intercept, "S intercept :"))
 
 
-    def eval_cb(j, m):
-        print("eval_cb")
-
-        print(len(m))
-        print("T slope:", m[0].values()[0])
-        print("T intercept:", m[1].values()[0])
-        print("S slope:", m[2].values()[0])
-        print("S intercept:", m[3].values()[0])
-
-        print("J = ", j)
-        with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
-            # Checkpoint file open for reading and writing
-            chk.store(v_, name="v_velocity")
-            chk.store(p_, name="perturbation_pressure")
-            #chk.store(u, name="u_velocity")
-            chk.store(temp, name="temperature")
-            chk.store(sal, name="salinity")
-            chk.store(T_restorefield_vis, name="temp restore")
-            chk.store(S_restorefield_vis, name="sal restore")
     print(J)
 
     def derivative_cb_post(j, djdm, m):
@@ -674,7 +597,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
         print(" derivative cb post")
         print("------------")
 
-    rf = ReducedFunctional(J, [c]) #, c1,c2,c3], eval_cb_post=eval_cb, eval_cb_pre=eval_cb_pre, derivative_cb_post=derivative_cb_post)
+    rf = ReducedFunctional(J, [c])
 
     bounds = [[-0.02, -10, -0.01, 30],[0.02, 10., 0., 40. ] ]
 
@@ -684,17 +607,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     #J.adj_value = 1.0
 
     J.block_variable.adj_value = 1.0
-    #tape.visualise()
-    # evaluate all adjoint blocks to ensure we get complete adjoint solution
-    # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
-    #    meshtype derivative (line 204) is broken, so just return None instead
-    #with timed_stage('adjoint'):
-     #  tape.evaluate_adj()
-
     print(len(T_restorefield.dat.data))
-
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
 
     h = Constant(T_slope)#S_restorefield)
     h.dat.data[:] = np.random.random(h.dat.data_ro.shape) # 2* for temp... 
@@ -724,7 +637,7 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -792,11 +705,11 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     ##########
 
     # Define a dump file
-    dump_file = "./17.02.23_dump_50days_open_qadv_TSconst"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = False #True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -1010,22 +923,6 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     top_boundary_mp = pd.DataFrame()
 
 
-    def top_boundary_to_csv(boundary_points, df, t_str):
-        df['Qice_t_' + t_str] = Q_ice.at(boundary_points)
-        df['Qmixed_t_' + t_str] = Q_mixed.at(boundary_points)
-        df['Qlat_t_' + t_str] = Q_latent.at(boundary_points)
-        df['Qsalt_t_' + t_str] = Q_s.at(boundary_points)
-        df['Melt_t' + t_str] = melt.at(boundary_points)
-        df['Tb_t_' + t_str] = Tb.at(boundary_points)
-        df['P_t_' + t_str] = full_pressure.at(boundary_points)
-        df['Sal_t_' + t_str] = sal.at(boundary_points)
-        df['Temp_t_' + t_str] = temp.at(boundary_points)
-        df["integrated_melt_t_ " + t_str] = assemble(melt * ds(4))
-
-        if mesh.comm.rank == 0:
-            top_boundary_mp.to_csv(folder+"top_boundary_data.csv")
-
-
     ##########
 
     # Boundary conditions
@@ -1104,13 +1001,6 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     # Use the external data function to interpolate the values of f.
     stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro[:,1])
 
-    # test stress open_boundary
-    #sop = Function(W)
-    #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
-    #sop_file.write(sop)
-
-
     vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary},
               3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
     #u_bcs = {2: {'q': Constant(0.0)}}
@@ -1188,16 +1078,6 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     velocity_depth_profile6km['Z_profile'] = z_profile6km
 
 
-    def depth_profile_to_csv(profile, df, depth, t_str):
-        #df['U_t_' + t_str] = u.at(profile)
-        vw = np.array(v_.at(profile))
-        vv = vw[:, 0]
-        ww = vw[:, 1]
-        df['V_t_' + t_str] = vv
-        df['W_t_' + t_str] = ww
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+depth+"_profile.csv")
-
     #### VOM for doing objective function...
 
     z_profile_adjoint = np.linspace(-525, -595, 15)
@@ -1225,22 +1105,9 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
 
     melt_vom_node.interpolate(mp.wb)
 
-    def adjoint_profile_to_csv(df, t_str):
-        df['T_t_' + t_str] = temp_vom_profile.dat.data_ro
-        df['S_t_' + t_str] = sal_vom_profile.dat.data_ro
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+"TS_foradjoint_7550m_profile.csv")
-
     adjoint_melt7550m = pd.DataFrame()
-    def adjoint_melt_to_csv(df, t_str):
-        df['Melt_t_' + t_str] = melt_vom_node.dat.data_ro
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+"melt_foradjoint_7550m_profile.csv")
 
-    ##### 
-    # read linear simulations
-    #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile_250423.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile_250423.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -1272,22 +1139,6 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
     temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
     sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
-
-    ##########
-
-    # Set up folder
-
-
-
-    # Depth profiles
-    #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-    #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-    #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-    #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-    #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
-
-    ########
-
 
     # Begin time stepping
     t = 0.0
@@ -1338,25 +1189,6 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
         tape.add_block(DiagnosticConstantBlock(S_intercept, "S intercept :"))
 
 
-    def eval_cb(j, m):
-        print("eval_cb")
-
-        print(len(m))
-        print("T slope:", m[0].values()[0])
-        print("T intercept:", m[1].values()[0])
-        print("S slope:", m[2].values()[0])
-        print("S intercept:", m[3].values()[0])
-
-        print("J = ", j)
-        with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
-            # Checkpoint file open for reading and writing
-            chk.store(v_, name="v_velocity")
-            chk.store(p_, name="perturbation_pressure")
-            #chk.store(u, name="u_velocity")
-            chk.store(temp, name="temperature")
-            chk.store(sal, name="salinity")
-            chk.store(T_restorefield_vis, name="temp restore")
-            chk.store(S_restorefield_vis, name="sal restore")
     print(J)
 
     def derivative_cb_post(j, djdm, m):
@@ -1368,25 +1200,10 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
 
     bounds = [[-0.02, -10, -0.01, 30],[0.02, 10., 0., 40. ] ]
 
-    #g_opt = minimize(rf, bounds=bounds, options={"disp": True})
-
-    #tape.reset_variables()
-    #J.adj_value = 1.0
-
     J.block_variable.adj_value = 1.0
-    #tape.visualise()
-    # evaluate all adjoint blocks to ensure we get complete adjoint solution
-    # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
-    #    meshtype derivative (line 204) is broken, so just return None instead
-    #with timed_stage('adjoint'):
-     #  tape.evaluate_adj()
-
     print(len(T_restorefield.dat.data))
 
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
-
-    h = Constant(T_intercept)#S_restorefield)
+    h = Constant(T_intercept)
     h.dat.data[:] = np.random.random(h.dat.data_ro.shape) # 2* for temp... 
     tt = taylor_test(rf, T_intercept, h)
     print("Tintercept TT ten steps")
@@ -1414,7 +1231,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -1482,11 +1299,11 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     ##########
 
     # Define a dump file
-    dump_file = "./17.02.23_dump_50days_open_qadv_TSconst"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = False #True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -1700,22 +1517,6 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     top_boundary_mp = pd.DataFrame()
 
 
-    def top_boundary_to_csv(boundary_points, df, t_str):
-        df['Qice_t_' + t_str] = Q_ice.at(boundary_points)
-        df['Qmixed_t_' + t_str] = Q_mixed.at(boundary_points)
-        df['Qlat_t_' + t_str] = Q_latent.at(boundary_points)
-        df['Qsalt_t_' + t_str] = Q_s.at(boundary_points)
-        df['Melt_t' + t_str] = melt.at(boundary_points)
-        df['Tb_t_' + t_str] = Tb.at(boundary_points)
-        df['P_t_' + t_str] = full_pressure.at(boundary_points)
-        df['Sal_t_' + t_str] = sal.at(boundary_points)
-        df['Temp_t_' + t_str] = temp.at(boundary_points)
-        df["integrated_melt_t_ " + t_str] = assemble(melt * ds(4))
-
-        if mesh.comm.rank == 0:
-            top_boundary_mp.to_csv(folder+"top_boundary_data.csv")
-
-
     ##########
 
     # Boundary conditions
@@ -1794,13 +1595,6 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     # Use the external data function to interpolate the values of f.
     stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro[:,1])
 
-    # test stress open_boundary
-    #sop = Function(W)
-    #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
-    #sop_file.write(sop)
-
-
     vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary},
               3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
     #u_bcs = {2: {'q': Constant(0.0)}}
@@ -1878,16 +1672,6 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     velocity_depth_profile6km['Z_profile'] = z_profile6km
 
 
-    def depth_profile_to_csv(profile, df, depth, t_str):
-        #df['U_t_' + t_str] = u.at(profile)
-        vw = np.array(v_.at(profile))
-        vv = vw[:, 0]
-        ww = vw[:, 1]
-        df['V_t_' + t_str] = vv
-        df['W_t_' + t_str] = ww
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+depth+"_profile.csv")
-
     #### VOM for doing objective function...
 
     z_profile_adjoint = np.linspace(-525, -595, 15)
@@ -1915,22 +1699,11 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
 
     melt_vom_node.interpolate(mp.wb)
 
-    def adjoint_profile_to_csv(df, t_str):
-        df['T_t_' + t_str] = temp_vom_profile.dat.data_ro
-        df['S_t_' + t_str] = sal_vom_profile.dat.data_ro
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+"TS_foradjoint_7550m_profile.csv")
-
     adjoint_melt7550m = pd.DataFrame()
-    def adjoint_melt_to_csv(df, t_str):
-        df['Melt_t_' + t_str] = melt_vom_node.dat.data_ro
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+"melt_foradjoint_7550m_profile.csv")
 
     ##### 
     # read linear simulations
-    #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile_250423.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile_250423.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -1962,22 +1735,6 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
     temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
     sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
-
-    ##########
-
-    # Set up folder
-
-
-
-    # Depth profiles
-    #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-    #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-    #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-    #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-    #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
-
-    ########
-
 
     # Begin time stepping
     t = 0.0
@@ -2028,25 +1785,6 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
         tape.add_block(DiagnosticConstantBlock(S_intercept, "S intercept :"))
 
 
-    def eval_cb(j, m):
-        print("eval_cb")
-
-        print(len(m))
-        print("T slope:", m[0].values()[0])
-        print("T intercept:", m[1].values()[0])
-        print("S slope:", m[2].values()[0])
-        print("S intercept:", m[3].values()[0])
-
-        print("J = ", j)
-        with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
-            # Checkpoint file open for reading and writing
-            chk.store(v_, name="v_velocity")
-            chk.store(p_, name="perturbation_pressure")
-            #chk.store(u, name="u_velocity")
-            chk.store(temp, name="temperature")
-            chk.store(sal, name="salinity")
-            chk.store(T_restorefield_vis, name="temp restore")
-            chk.store(S_restorefield_vis, name="sal restore")
     print(J)
 
     def derivative_cb_post(j, djdm, m):
@@ -2054,7 +1792,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
         print(" derivative cb post")
         print("------------")
 
-    rf = ReducedFunctional(J, [c2]) #, c1,c2,c3], eval_cb_post=eval_cb, eval_cb_pre=eval_cb_pre, derivative_cb_post=derivative_cb_post)
+    rf = ReducedFunctional(J, [c2])
 
     bounds = [[-0.02, -10, -0.01, 30],[0.02, 10., 0., 40. ] ]
 
@@ -2064,17 +1802,8 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     #J.adj_value = 1.0
 
     J.block_variable.adj_value = 1.0
-    #tape.visualise()
-    # evaluate all adjoint blocks to ensure we get complete adjoint solution
-    # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
-    #    meshtype derivative (line 204) is broken, so just return None instead
-    #with timed_stage('adjoint'):
-     #  tape.evaluate_adj()
 
     print(len(T_restorefield.dat.data))
-
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
 
     h = Constant(S_slope)#S_restorefield)
     h.dat.data[:] = np.random.random(h.dat.data_ro.shape) # 2* for temp... 
@@ -2104,7 +1833,7 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -2172,11 +1901,11 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     ##########
 
     # Define a dump file
-    dump_file = "./17.02.23_dump_50days_open_qadv_TSconst"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = False #True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -2390,22 +2119,6 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     top_boundary_mp = pd.DataFrame()
 
 
-    def top_boundary_to_csv(boundary_points, df, t_str):
-        df['Qice_t_' + t_str] = Q_ice.at(boundary_points)
-        df['Qmixed_t_' + t_str] = Q_mixed.at(boundary_points)
-        df['Qlat_t_' + t_str] = Q_latent.at(boundary_points)
-        df['Qsalt_t_' + t_str] = Q_s.at(boundary_points)
-        df['Melt_t' + t_str] = melt.at(boundary_points)
-        df['Tb_t_' + t_str] = Tb.at(boundary_points)
-        df['P_t_' + t_str] = full_pressure.at(boundary_points)
-        df['Sal_t_' + t_str] = sal.at(boundary_points)
-        df['Temp_t_' + t_str] = temp.at(boundary_points)
-        df["integrated_melt_t_ " + t_str] = assemble(melt * ds(4))
-
-        if mesh.comm.rank == 0:
-            top_boundary_mp.to_csv(folder+"top_boundary_data.csv")
-
-
     ##########
 
     # Boundary conditions
@@ -2484,13 +2197,6 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     # Use the external data function to interpolate the values of f.
     stress_open_boundary_dynamic.dat.data[:] = dynamic_pressure_interp(X.dat.data_ro[:,1])
 
-    # test stress open_boundary
-    #sop = Function(W)
-    #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
-    #sop_file.write(sop)
-
-
     vp_bcs = {4: {'un': no_normal_flow, 'drag': ice_drag}, 2: {'stress': stress_open_boundary},
               3: {'un': no_normal_flow, 'drag': 0.0025}, 1: {'un': no_normal_flow}}
     #u_bcs = {2: {'q': Constant(0.0)}}
@@ -2568,16 +2274,6 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     velocity_depth_profile6km['Z_profile'] = z_profile6km
 
 
-    def depth_profile_to_csv(profile, df, depth, t_str):
-        #df['U_t_' + t_str] = u.at(profile)
-        vw = np.array(v_.at(profile))
-        vv = vw[:, 0]
-        ww = vw[:, 1]
-        df['V_t_' + t_str] = vv
-        df['W_t_' + t_str] = ww
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+depth+"_profile.csv")
-
     #### VOM for doing objective function...
 
     z_profile_adjoint = np.linspace(-525, -595, 15)
@@ -2605,22 +2301,11 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
 
     melt_vom_node.interpolate(mp.wb)
 
-    def adjoint_profile_to_csv(df, t_str):
-        df['T_t_' + t_str] = temp_vom_profile.dat.data_ro
-        df['S_t_' + t_str] = sal_vom_profile.dat.data_ro
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+"TS_foradjoint_7550m_profile.csv")
-
     adjoint_melt7550m = pd.DataFrame()
-    def adjoint_melt_to_csv(df, t_str):
-        df['Melt_t_' + t_str] = melt_vom_node.dat.data_ro
-        if mesh.comm.rank == 0:
-            df.to_csv(folder+"melt_foradjoint_7550m_profile.csv")
 
     ##### 
     # read linear simulations
-    #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile_250423.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile_250423.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -2652,22 +2337,6 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     #u_timestepper = DIRK33(u_eq, u, u_fields, dt, u_bcs, solver_parameters=u_solver_parameters)
     temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
     sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
-
-    ##########
-
-    # Set up folder
-
-
-
-    # Depth profiles
-    #depth_profile_to_csv(depth_profile500m, velocity_depth_profile500m, "500m", '0.0')
-    #depth_profile_to_csv(depth_profile1km, velocity_depth_profile1km, "1km", '0.0')
-    #depth_profile_to_csv(depth_profile2km, velocity_depth_profile2km, "2km", '0.0')
-    #depth_profile_to_csv(depth_profile4km, velocity_depth_profile4km, "4km", '0.0')
-    #depth_profile_to_csv(depth_profile6km, velocity_depth_profile6km, "6km", '0.0')
-
-    ########
-
 
     # Begin time stepping
     t = 0.0
@@ -2718,25 +2387,6 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
         tape.add_block(DiagnosticConstantBlock(S_intercept, "S intercept :"))
 
 
-    def eval_cb(j, m):
-        print("eval_cb")
-
-        print(len(m))
-        print("T slope:", m[0].values()[0])
-        print("T intercept:", m[1].values()[0])
-        print("S slope:", m[2].values()[0])
-        print("S intercept:", m[3].values()[0])
-
-        print("J = ", j)
-        with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
-            # Checkpoint file open for reading and writing
-            chk.store(v_, name="v_velocity")
-            chk.store(p_, name="perturbation_pressure")
-            #chk.store(u, name="u_velocity")
-            chk.store(temp, name="temperature")
-            chk.store(sal, name="salinity")
-            chk.store(T_restorefield_vis, name="temp restore")
-            chk.store(S_restorefield_vis, name="sal restore")
     print(J)
 
     def derivative_cb_post(j, djdm, m):
@@ -2744,29 +2394,15 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
         print(" derivative cb post")
         print("------------")
 
-    rf = ReducedFunctional(J, [c3]) #, c1,c2,c3], eval_cb_post=eval_cb, eval_cb_pre=eval_cb_pre, derivative_cb_post=derivative_cb_post)
+    rf = ReducedFunctional(J, [c3])
 
     bounds = [[-0.02, -10, -0.01, 30],[0.02, 10., 0., 40. ] ]
 
-    #g_opt = minimize(rf, bounds=bounds, options={"disp": True})
-
-    #tape.reset_variables()
-    #J.adj_value = 1.0
-
     J.block_variable.adj_value = 1.0
-    #tape.visualise()
-    # evaluate all adjoint blocks to ensure we get complete adjoint solution
-    # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
-    #    meshtype derivative (line 204) is broken, so just return None instead
-    #with timed_stage('adjoint'):
-     #  tape.evaluate_adj()
 
     print(len(T_restorefield.dat.data))
 
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
-
-    h = Constant(S_intercept)#S_restorefield)
+    h = Constant(S_intercept)
     h.dat.data[:] = np.random.random(h.dat.data_ro.shape) # 2* for temp... 
     tt = taylor_test(rf, S_intercept, h)
     print("Sintercept TT ten steps")

@@ -12,6 +12,7 @@ from math import ceil
 from pyop2.profiling import timed_stage
 import rasterio
 from thwaites.interpolate import interpolate as interpolate_data
+from adjoint_test_data import data_dir
 
 from firedrake_adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
@@ -98,9 +99,7 @@ def test_2d_isomip_cavity_salfunctional(T):
     #bathymetry.assign(-720)
     print("max bathy : ",bathymetry.dat.data[:].max())
 
-    #ice_draft_filename = "tests/adjoint/Ocean1_input_geom_v1.01.nc"
-    #ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
-    ice_draft_file = rasterio.open('tests/adjoint/ocean1_lowersurface.tiff', 'r')
+    ice_draft_file = rasterio.open(str(data_dir / 'ocean1_lowersurface.tiff'), 'r')
     ice_draft = Function(P1_extruded)
     #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3) - water_depth) 
     ice_draft_base = interpolate_data(ice_draft_file, P1, y_transect=41000)  # Get ice shelf draft along y=41km transect i.e the middle
@@ -236,7 +235,7 @@ def test_2d_isomip_cavity_salfunctional(T):
 
     # Define a dump file
 
-    dump_file = "./isomip_2d_dx4km_nz15_closed_dump_step_9600" 
+    dump_file = str(data_dir / "isomip_2d_dx4km_nz15_closed_dump_step_9600")
     DUMP = False
     if DUMP:
         with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
@@ -471,13 +470,6 @@ def test_2d_isomip_cavity_salfunctional(T):
     PETSc.Sys.Print(Tinflow.values()[0])
     Sinflow = Constant(20.0) 
 
-    # test stress open_boundary
-    #sop = Function(W)
-    #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
-    #sop_file.write(sop)
-
-
     vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.5E-3, 0.0)}, 
             1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
             "bottom": {'un': no_normal_flow, 'drag': 2.5E-3}} 
@@ -608,50 +600,15 @@ def test_2d_isomip_cavity_salfunctional(T):
     temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=mumps_solver_parameters)
     sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=mumps_solver_parameters)
 
-    ##########
-
-    # Set up Vectorfolder
-
-    #folder = 'tmp/'
-
-
-    ###########
-
     # Output files for velocity, pressure, temperature and salinity
     vdg.project(v_) # DQ2 velocity for output
 
     vdg1.project(v_) # DQ1 velocity 
 
-
-
-
-    ##########
-
-    #with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
-    #    # Checkpoint file open for reading and writing
-    #    chk.store(v_, name="velocity")
-    #    chk.store(p_, name="perturbation_pressure")
-    #    chk.store(temp, name="temperature")
-    #    chk.store(sal, name="salinity")
-
-    ############
-
     if ADJOINT:
         # adjoint output
         tape = get_working_tape()
 
-#        adj_s_file = File(folder+"adj_salinity.pvd")
-#        tape.add_block(DiagnosticBlock(adj_s_file, sal))
-
-#        adj_t_file = File(folder+"adj_temperature.pvd")
-#        tape.add_block(DiagnosticBlock(adj_t_file, temp))
-
-        #adj_visc_file = File(folder+"adj_viscosity.pvd")
-        #tape.add_block(DiagnosticBlock(adj_visc_file, mu))
-        #adj_diff_t_file = File(folder+"adj_diffusion_T.pvd")
-        #tape.add_block(DiagnosticBlock(adj_diff_t_file, kappa_temp))
-        #adj_diff_s_file = File(folder+"adj_diffusion_S.pvd")
-        #tape.add_block(DiagnosticBlock(adj_diff_s_file, kappa_sal))
 
     # test stress open_boundary
     #sop = Function(W)
@@ -712,25 +669,17 @@ def test_2d_isomip_cavity_salfunctional(T):
                Tb.interpolate(mp.Tb)
                Sb.interpolate(mp.Sb)
                full_pressure.interpolate(mp.P_full)
-        
 
-               
-               
+
+
+
                time_str = str(step)
-        
+
                PETSc.Sys.Print("t=", t)
-        
+
                PETSc.Sys.Print("integrated melt =", assemble(conditional(x < shelf_length, melt, 0.0) * ds("top")))
                if ADJOINT:
                    PETSc.Sys.Print("alternatively integrated melt =", assemble(melt * offset_backward_step_approx(x,k,x0) * ds("top")))
-
-        if t % (3600 * 24) == 0:
-            with DumbCheckpoint(folder+"dump_step_{}.h5".format(step), mode=FILE_CREATE) as chk:
-                # Checkpoint file open for reading and writing at regular interval
-                chk.store(v_, name="velocity")
-                chk.store(p_, name="perturbation_pressure")
-                chk.store(temp, name="temperature")
-                chk.store(sal, name="salinity")
 
     if ADJOINT:
         melt.project(mp.wb)
@@ -739,16 +688,7 @@ def test_2d_isomip_cavity_salfunctional(T):
         print(J)
         rf = ReducedFunctional(J, c)
 
-        #tape.reset_variables()
         J.block_variable.adj_value = 1.0
-        #tape.visualise()
-        # evaluate all adjoint blocks to ensure we get complete adjoint solution
-        # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
-        #    meshtype derivative (line 204) is broken, so just return None instead
-        #with timed_stage('adjoint'):
-        #    tape.evaluate_adj()
-    #    grad = rf.derivative()
-        #File(folder+'grad.pvd').write(grad)
         
         h = Function(sal)
         
@@ -759,9 +699,6 @@ def test_2d_isomip_cavity_salfunctional(T):
         print("sal min", sal.dat.data_ro.min())
         
         print("J", J)
-    #    print("rf(sal)", rf(sal))
-    #    print("rf(salinit)", rf(sal_init_func))
-    #    print("peturb rf", rf(sal+h))
         tt = taylor_test(rf, sal, h)
         assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-1)
 
@@ -874,9 +811,9 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
     #bathymetry.assign(-720)
     print("max bathy : ",bathymetry.dat.data[:].max())
 
-    ice_draft_filename = "tests/adjoint/Ocean1_input_geom_v1.01.nc"
+    ice_draft_filename = str(data_dir / "Ocean1_input_geom_v1.01.nc")
     #ice_draft_file = rasterio.open(f'netcdf:{ice_draft_filename}:lowerSurface', 'r')
-    ice_draft_file = rasterio.open('tests/adjoint/ocean1_lowersurface.tiff', 'r')
+    ice_draft_file = rasterio.open(data_dir / 'ocean1_lowersurface.tiff', 'r')
     ice_draft = Function(P1_extruded)
     #ice_draft.interpolate(conditional(x - 0.5*dy < shelf_length, (x/shelf_length)*(H2-H1) + H1, H3) - water_depth) 
     ice_draft_base = interpolate_data(ice_draft_file, P1, y_transect=41000)  # Get ice shelf draft along y=41km transect i.e the middle
@@ -1023,8 +960,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
 
     # Define a dump file
 
-    dump_file = "tests/adjoint/dump_100day_2d_ISOMIPplus" 
-    melt_dump_file = "/data/2d_isomip_plus/first_tests/extruded_meshes/08.11.21adjget1stepoutput_2d_isomip+_dt900.0_dtOut900.0_T900.0_ip3_StratLinTres8640.0_Muh6.0_fixMuv0.001_Kh1.0_fixKv5e-05_dx4km_lay30_icedraft_closed_tracerlims_adj_GammaTfunc1.1e-2bump/Melt_dump" 
+    dump_file = str(data_dir / "dump_100day_2d_ISOMIPplus")
     DUMP = dump_flag
     if DUMP:
         with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
@@ -1261,12 +1197,6 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
     PETSc.Sys.Print(Tinflow.values()[0])
     Sinflow = Constant(20.0) 
 
-    # test stress open_boundary
-    #sop = Function(W)
-    #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
-    #sop_file.write(sop)
-
 
     vp_bcs = {"top": {'un': no_normal_flow, 'drag': conditional(x < shelf_length, 2.5E-3, 0.0)}, 
             1: {'un': no_normal_flow}, 2: {'un': no_normal_flow}, 
@@ -1403,21 +1333,6 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
     temp_timestepper = DIRK33(temp_eq, temp, temp_fields, dt, temp_bcs, solver_parameters=temp_solver_parameters)
     sal_timestepper = DIRK33(sal_eq, sal, sal_fields, dt, sal_bcs, solver_parameters=sal_solver_parameters)
 
-    ##########
-
-
-
-    ###########
-
-
-    #with DumbCheckpoint(folder+"initial_pressure_dump", mode=FILE_UPDATE) as chk:
-    #    # Checkpoint file open for reading and writing
-    #    chk.store(v_, name="velocity")
-    #    chk.store(p_, name="perturbation_pressure")
-    #    chk.store(temp, name="temperature")
-    #    chk.store(sal, name="salinity")
-
-    ############
 
     if ADJOINT:
         # adjoint output
@@ -1465,13 +1380,6 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
         
         with timed_stage('output'):
            if step % output_step == 0:
-               # dumb checkpoint for starting from last timestep reached
-               with DumbCheckpoint(folder+"dump.h5", mode=FILE_UPDATE) as chk:
-                   # Checkpoint file open for reading and writing
-                   chk.store(v_, name="velocity")
-                   chk.store(p_, name="perturbation_pressure")
-                   chk.store(temp, name="temperature")
-                   chk.store(sal, name="salinity")
 
                # Update melt rate functions
                rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref)))

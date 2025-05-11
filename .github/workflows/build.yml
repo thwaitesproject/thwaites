@@ -6,7 +6,6 @@ on:
     branches:
       - master
   pull_request:
-  workflow_dispatch:
   schedule:
     # * is a special character in YAML so you have to quote this string
     # Scheduled build at 0230 UTC on Monday mornings to detect bitrot.
@@ -19,44 +18,50 @@ jobs:
     runs-on: ubuntu-latest
     # The docker container to use.
     container:
-      image: firedrakeproject/firedrake-vanilla:latest
-      options: --user root
+      image: firedrakeproject/firedrake-vanilla-default:latest
     steps:
-      - name: chown
-        run: sudo chmod -R 777 $GITHUB_WORKSPACE /github /__w/_temp
-      - uses: actions/checkout@v2
-      - name: Cleanup
-        if: ${{ always() }}
+      - name: Fix HOME
+        # For unknown reasons GitHub actions overwrite HOME to /github/home
+        # which will break everything unless fixed
+        # (https://github.com/actions/runner/issues/863)
+        run: echo "HOME=/root" >> "$GITHUB_ENV"
+
+      - name: Pre-cleanup
         run: |
-          cd ..
-          rm -rf build
-      - name: ls
-        run: ls -ld  /__w/_temp/_runner_file_commands/*
+          : # Wipe everything away in the current directory
+          find . -delete
+          firedrake-clean
+
+      - uses: actions/checkout@v4
+        with:
+          # Download Thwaites into a subdirectory not called 'thwaites' to make sure
+          # that the package installs correctly. Otherwise 'import thwaites' may
+          # work even if the installation failed because it is a subdirectory.
+          path: thwaites-repo
+
       - name: Install Thwaites
+        id: install
         run: |
-          . /home/firedrake/firedrake/bin/activate
-          whoami
-          id -u
-          id -g
-          ls -l
-          python -m pip install -r requirements.txt
-          python -m pip install -e .
-          pip freeze | grep scipy
-          pip freeze | grep rasterio          
+          : # Pass '--system-site-packages' so Firedrake can be found
+          python3 -m venv --system-site-packages venv-thwaites
+          . venv-thwaites/bin/activate
+          python -m pip install -r thwaites-repo/requirements.txt
+          python -m pip install -e ./thwaites-repo
+
       - name: Test Thwaites
         run: |
-          . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
-          # Run 3d isomip plus for 5 time steps
-          make -C run_scripts_testing/ice_shelf_cavity/isomip_plus/
-          python -m pytest -n 2 -v tests/regression
+          . venv-thwaites/bin/activate
+          : # Run 3d isomip plus for 5 time steps
+          make -C thwaites-repo/run_scripts_testing/ice_shelf_cavity/isomip_plus/
+          python -m pytest -n 2 -v thwaites-repo/tests/regression
+
       - name: Test Thwaites adjoint
         run: |
-          . /home/firedrake/firedrake/bin/activate
-          python $(which firedrake-clean)
-          python -m pytest -n 1 -v tests/adjoint/
+          . venv-thwaites/bin/activate
+          python -m pytest -n 1 -v thwaites-repo/tests/adjoint/
+
       - name: Lint
         if: ${{ always() }}
         run: |
-          . /home/firedrake/firedrake/bin/activate
-          make lint
+          . venv-thwaites/bin/activate
+          make -C thwaites-repo lint
