@@ -65,10 +65,9 @@ class AssembledSchurPC(PCBase):
         self.schur = self.A10_A00_inv.matMult(A01, self.schur, 2.0)
         if self.schur_plus is None:
             self.schur_plus = self.schur.duplicate(copy=True)
-            self.schur_plus.aypx(-1.0, A11, PETSc.Mat.Structure.DIFFERENT_NONZERO_PATTERN)
         else:
             self.schur_plus = self.schur.copy(self.schur_plus, PETSc.Mat.Structure.DIFFERENT_NONZERO_PATTERN)
-            self.schur_plus.aypx(-1.0, A11, PETSc.Mat.Structure.SAME_NONZERO_PATTERN)
+        self.schur_plus.aypx(-1.0, A11, PETSc.Mat.Structure.DIFFERENT_NONZERO_PATTERN)
 
         if self.schur_nullspace is not None:
             self.schur_plus.setNullSpace(self.schur_nullspace.nullspace())
