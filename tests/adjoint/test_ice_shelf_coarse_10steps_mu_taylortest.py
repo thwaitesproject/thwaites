@@ -10,8 +10,10 @@ import numpy as np
 from pyop2.profiling import timed_stage
 from adjoint_test_data import get_coarse_mesh, data_dir, tmp_dir
 
-from firedrake_adjoint import *
+from firedrake.adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
+
+continue_annotation()
 
 def test_ice_shelf_coarse_adjoint():
     Kh = 0.25
