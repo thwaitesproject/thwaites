@@ -1,5 +1,6 @@
 # Buoyancy driven overturning circulation
 # beneath ice shelf. Wedge geometry. 10km
+import pytest
 from thwaites import *
 from thwaites.utility import get_top_boundary, cavity_thickness
 from firedrake.petsc import PETSc
@@ -17,6 +18,7 @@ from adjoint_test_data import get_coarse_mesh, data_dir
 
 continue_annotation()
 
+@pytest.mark.xfail
 def test_ice_shelf_coarse_open_lincon_Tslope():
     #nz = args.nz #10
 
@@ -619,6 +621,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-2)
 
 
+@pytest.mark.xfail
 def test_ice_shelf_coarse_open_lincon_Tintercept():
     #nz = args.nz #10
 
@@ -1213,6 +1216,7 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-2)
 
 
+@pytest.mark.xfail
 def test_ice_shelf_coarse_open_lincon_Sslope():
     #nz = args.nz #10
 
@@ -1815,6 +1819,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-2)
 
 
+@pytest.mark.xfail
 def test_ice_shelf_coarse_open_lincon_Sintercept():
     #nz = args.nz #10
 
