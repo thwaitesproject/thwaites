@@ -1,10 +1,11 @@
 from thwaites import *
 from thwaites.adjoint_utility import RieszL2BoundaryRepresentation
-from firedrake_adjoint import *
+from firedrake.adjoint import *
 import numpy
 import os.path
 from adjoint_test_data import tmp_dir
 
+continue_annotation()
 
 def test_L2_boundary():
     # tests RieszL2BoundaryRepresentation which converts a l2 adjoint gradient

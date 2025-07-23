@@ -17,6 +17,7 @@ from adjoint_test_data import data_dir
 from firedrake.adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
 
+continue_annotation()
 
 # Run test 3 times for no timesteps, 1 timestep and 10 timesteps
 @pytest.mark.parametrize("T", [(10.), (900.), (9000.)])
