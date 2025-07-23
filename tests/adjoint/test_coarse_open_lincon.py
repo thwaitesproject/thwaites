@@ -9,12 +9,13 @@ import argparse
 import numpy as np
 from pyop2.profiling import timed_stage
 
-from firedrake_adjoint import *
+from firedrake.adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
 from thwaites.adjoint_utility import DiagnosticConstantBlock
 from adjoint_test_data import get_coarse_mesh, data_dir
 ##########
 
+continue_annotation()
 
 def test_ice_shelf_coarse_open_lincon_Tslope():
     #nz = args.nz #10

@@ -6,6 +6,7 @@ import os.path
 
 continue_annotation()
 
+continue_annotation()
 
 def test_L2_boundary():
     # tests RieszL2BoundaryRepresentation which converts a l2 adjoint gradient
