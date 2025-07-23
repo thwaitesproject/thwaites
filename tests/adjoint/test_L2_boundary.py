@@ -1,9 +1,10 @@
 from thwaites import *
 from thwaites.adjoint_utility import RieszL2BoundaryRepresentation
-from firedrake_adjoint import *
+from firedrake.adjoint import *
 import numpy
 import os.path
-from adjoint_test_data import tmp_dir
+
+continue_annotation()
 
 
 def test_L2_boundary():
@@ -39,13 +40,10 @@ def test_L2_boundary():
 
     timestepper = DIRK33(eq, T, fields, dt, bcs, solver_parameters=mumps_solver_parameters)
 
-    #  f = File('test.pvd')
-
     t = 0.0
     while t < 1.2:
         timestepper.advance(t)
         t += dt
-        #  f.write(T)
 
     # define non-uniform functional
     x, y = SpatialCoordinate(mesh)
@@ -53,8 +51,7 @@ def test_L2_boundary():
 
     rf = ReducedFunctional(J, Control(Tbc))
 
-    # by default derivative() return the l2 representation of the gradient
-    grad_l2 = rf.derivative()
+    grad_l2 = rf.derivative(options={'riesz_representation': 'l2'})
     grad_l2.rename("l2 derivative")
     # the basis of the dual space is such that the coefficients of a cofunction
     # match those of its l2 representation
@@ -64,10 +61,11 @@ def test_L2_boundary():
     grad_L2 = grad_l2._ad_convert_type(grad_cof, options={'riesz_representation': 'L2'})
     grad_L2.rename("L2 derivative")
     converter = RieszL2BoundaryRepresentation(Q, 1)
-    grad_L2b = grad_l2._ad_convert_type(grad_cof, options={'riesz_representation': converter})
+    grad_L2b = rf.derivative(options={'riesz_representation': converter})
     grad_L2b.rename("L2 boundary derivative")
-    File(str(tmp_dir / 'grad.pvd')).write(grad_l2, grad_L2, grad_L2b)
+    VTKFile('grad.pvd').write(grad_l2, grad_L2, grad_L2b)
 
     yrange = numpy.linspace(0, 1, 100)
     gradvals = [grad_L2b.at([0, y]) for y in yrange]
+
     numpy.testing.assert_allclose(gradvals, yrange**2, atol=0.1)
