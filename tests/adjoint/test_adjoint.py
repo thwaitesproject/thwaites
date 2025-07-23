@@ -14,7 +14,7 @@ import rasterio
 from thwaites.interpolate import interpolate as interpolate_data
 from adjoint_test_data import data_dir
 
-from firedrake_adjoint import *
+from firedrake.adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
 
 
