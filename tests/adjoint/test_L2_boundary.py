@@ -3,8 +3,7 @@ from thwaites.adjoint_utility import RieszL2BoundaryRepresentation
 from firedrake.adjoint import *
 import numpy
 import os.path
-
-continue_annotation()
+from adjoint_test_data import tmp_dir
 
 continue_annotation()
 
@@ -64,9 +63,8 @@ def test_L2_boundary():
     converter = RieszL2BoundaryRepresentation(Q, 1)
     grad_L2b = rf.derivative(options={'riesz_representation': converter})
     grad_L2b.rename("L2 boundary derivative")
-    VTKFile('grad.pvd').write(grad_l2, grad_L2, grad_L2b)
+    VTKFile(str(tmp_dir / 'grad.pvd')).write(grad_l2, grad_L2, grad_L2b)
 
     yrange = numpy.linspace(0, 1, 100)
     gradvals = [grad_L2b.at([0, y]) for y in yrange]
-
     numpy.testing.assert_allclose(gradvals, yrange**2, atol=0.1)
