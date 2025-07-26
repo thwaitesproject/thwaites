@@ -7,6 +7,7 @@ from adjoint_test_data import tmp_dir
 
 continue_annotation()
 
+
 def test_L2_boundary():
     # tests RieszL2BoundaryRepresentation which converts a l2 adjoint gradient
     # into a L2-boundary Riesz representative
@@ -51,20 +52,27 @@ def test_L2_boundary():
 
     rf = ReducedFunctional(J, Control(Tbc))
 
-    grad_l2 = rf.derivative(options={'riesz_representation': 'l2'})
-    grad_l2.rename("l2 derivative")
+    derivative = rf.derivative(options={'riesz_representation': None})  # this is a cofunction
+    derivative.rename("derivative")
+
     # the basis of the dual space is such that the coefficients of a cofunction
     # match those of its l2 representation
-    grad_cof = Cofunction(Q.dual(), val=grad_l2.dat)
     # note that when using the X._ad_convert_type() method it returns the representation
     # in the space of X which should be a FunctionSpace, therefore we need: func._ad_convert_type(cofunc)
-    grad_L2 = grad_l2._ad_convert_type(grad_cof, options={'riesz_representation': 'L2'})
-    grad_L2.rename("L2 derivative")
+    func = Function(T)  # Arbitary function to get right shape for derivative output
+    # Convert (cofunction) derivative to l2 derivative for comparison
+    grad_l2 = func._ad_convert_type(derivative, options={'riesz_representation': 'l2'})
+    grad_l2.rename("l2 derivative")
+    # Convert (cofunction) derivative to L2 boundary derivative
     converter = RieszL2BoundaryRepresentation(Q, 1)
-    grad_L2b = rf.derivative(options={'riesz_representation': converter})
+    grad_L2b = func._ad_convert_type(derivative, options={'riesz_representation': converter})
     grad_L2b.rename("L2 boundary derivative")
-    VTKFile(str(tmp_dir / 'grad.pvd')).write(grad_l2, grad_L2, grad_L2b)
 
     yrange = numpy.linspace(0, 1, 100)
     gradvals = [grad_L2b.at([0, y]) for y in yrange]
     numpy.testing.assert_allclose(gradvals, yrange**2, atol=0.1)
+
+    # Convert (cofunction) derivative to (wrong) L2 derivative for comparison
+    grad_L2 = func._ad_convert_type(derivative, options={'riesz_representation': 'L2'})
+    grad_L2.rename("L2 derivative")
+    VTKFile(str(tmp_dir / 'grad.pvd')).write(grad_l2, grad_L2, grad_L2b)
