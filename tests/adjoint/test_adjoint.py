@@ -1432,7 +1432,6 @@ def test_conditional_melt_objective_wout_evaladj(T):
     
     print("J", J)
     print("rf(sal)", rf(sal))
-    print("peturb rf", rf(sal+h))
     tt = taylor_test(rf, sal, h)
     print("did tt")
     assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=1e-1)
