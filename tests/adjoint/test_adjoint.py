@@ -643,9 +643,9 @@ def test_2d_isomip_cavity_salfunctional(T):
         with timed_stage('salinity'):
             sal_timestepper.advance(t)
 
-
-        limiter.apply(sal)
-        limiter.apply(temp)
+        # limiter breaks the adjoint Issue #31
+        #limiter.apply(sal)
+        #limiter.apply(temp)
 
         rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
         gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
