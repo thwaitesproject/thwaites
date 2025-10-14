@@ -9,9 +9,12 @@ import argparse
 import numpy as np
 from pyop2.profiling import timed_stage
 
-from firedrake_adjoint import *
+from firedrake.adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
+from adjoint_test_data import get_coarse_mesh, data_dir
 ##########
+
+continue_annotation()
 
 def test_coarse_open_pdyn_mu():
 
@@ -34,7 +37,7 @@ def test_coarse_open_pdyn_mu():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -81,7 +84,7 @@ def test_coarse_open_pdyn_mu():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -102,12 +105,11 @@ def test_coarse_open_pdyn_mu():
     ##########
 
     # Define a dump file
-    dump_file = "tests/adjoint/17.02.23_dump_50days_open_qadv_TSconst"
-    #dump_file = "/data/2d_adjoint/27.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T864000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_consTS_adjoint_objTSprofweightscale_opt_cb_noreg_maxits1/dump.h5"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -366,7 +368,7 @@ def test_coarse_open_pdyn_mu():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = firedrake.interpolate(mesh.coordinates, W_vector)
+    X = firedrake.Function(W_vector).interpolate(mesh.coordinates)
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
 
@@ -508,7 +510,7 @@ def test_coarse_open_pdyn_mu():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -614,15 +616,6 @@ def test_coarse_open_pdyn_mu():
     #J.adj_value = 1.0
 
     J.block_variable.adj_value = 1.0
-    #tape.visualise()
-    # evaluate all adjoint blocks to ensure we get complete adjoint solution
-    # currently requires fix in dolfin_adjoint_common/blocks/solving.py:
-    #    meshtype derivative (line 204) is broken, so just return None instead
-    #with timed_stage('adjoint'):
-    #   tape.evaluate_adj()
-
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
 
     h = Function(mu)
     h.dat.data[:] = 0.01*np.random.random(h.dat.data_ro.shape) # 2* for temp... 
@@ -652,7 +645,7 @@ def test_coarse_open_pdyn_sal():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -699,7 +692,7 @@ def test_coarse_open_pdyn_sal():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -720,12 +713,11 @@ def test_coarse_open_pdyn_sal():
     ##########
 
     # Define a dump file
-    dump_file = "tests/adjoint/17.02.23_dump_50days_open_qadv_TSconst"
-    #dump_file = "/data/2d_adjoint/27.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T864000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_consTS_adjoint_objTSprofweightscale_opt_cb_noreg_maxits1/dump.h5"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -992,7 +984,7 @@ def test_coarse_open_pdyn_sal():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = firedrake.interpolate(mesh.coordinates, W_vector)
+    X = firedrake.Function(W_vector).interpolate(mesh.coordinates)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -1136,7 +1128,7 @@ def test_coarse_open_pdyn_sal():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -1251,9 +1243,6 @@ def test_coarse_open_pdyn_sal():
 
     print(len(T_restorefield.dat.data))
 
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
-
     h = Function(sal)
     h.dat.data[:] = np.random.random(h.dat.data_ro.shape) # 2* for temp... 
     tt = taylor_test(rf, sal, h)
@@ -1283,7 +1272,7 @@ def test_coarse_open_pdyn_temp():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -1330,7 +1319,7 @@ def test_coarse_open_pdyn_temp():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -1351,12 +1340,11 @@ def test_coarse_open_pdyn_temp():
     ##########
 
     # Define a dump file
-    dump_file = "tests/adjoint/17.02.23_dump_50days_open_qadv_TSconst"
-    #dump_file = "/data/2d_adjoint/27.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T864000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_consTS_adjoint_objTSprofweightscale_opt_cb_noreg_maxits1/dump.h5"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -1623,7 +1611,7 @@ def test_coarse_open_pdyn_temp():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = firedrake.interpolate(mesh.coordinates, W_vector)
+    X = firedrake.Function(W_vector).interpolate(mesh.coordinates)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -1767,7 +1755,7 @@ def test_coarse_open_pdyn_temp():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -1882,9 +1870,6 @@ def test_coarse_open_pdyn_temp():
 
     print(len(T_restorefield.dat.data))
 
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
-
     h = Function(temp)
     h.dat.data[:] = np.random.random(h.dat.data_ro.shape)  
     tt = taylor_test(rf, temp, h)
@@ -1915,7 +1900,7 @@ def test_coarse_open_pdyn_Tbc():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -1962,7 +1947,7 @@ def test_coarse_open_pdyn_Tbc():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -1983,12 +1968,11 @@ def test_coarse_open_pdyn_Tbc():
     ##########
 
     # Define a dump file
-    dump_file = "tests/adjoint/17.02.23_dump_50days_open_qadv_TSconst"
-    #dump_file = "/data/2d_adjoint/27.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T864000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_consTS_adjoint_objTSprofweightscale_opt_cb_noreg_maxits1/dump.h5"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -2255,7 +2239,7 @@ def test_coarse_open_pdyn_Tbc():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = firedrake.interpolate(mesh.coordinates, W_vector)
+    X = firedrake.Function(W_vector).interpolate(mesh.coordinates)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -2399,7 +2383,7 @@ def test_coarse_open_pdyn_Tbc():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -2514,9 +2498,6 @@ def test_coarse_open_pdyn_Tbc():
 
     print(len(T_restorefield.dat.data))
 
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
-
     h = Function(T_restorefield)
     h.dat.data[:] = np.random.random(h.dat.data_ro.shape)  
     tt = taylor_test(rf, T_restorefield, h)
@@ -2546,7 +2527,7 @@ def test_coarse_open_pdyn_Sbc():
     dz = 1.0
 
     # create mesh
-    mesh = Mesh("tests/adjoint/coarse.msh")
+    mesh = get_coarse_mesh()
 
     PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
 
@@ -2593,7 +2574,7 @@ def test_coarse_open_pdyn_Sbc():
 
     # Set up functions
     m = Function(M)
-    v_, p_ = m.split()  # function: y component of velocity, pressure
+    v_, p_ = m.subfunctions  # function: y component of velocity, pressure
     v, p = split(m)  # expression: y component of velocity, pressure
     v_._name = "v_velocity"
     p_._name = "perturbation pressure"
@@ -2614,12 +2595,11 @@ def test_coarse_open_pdyn_Sbc():
     ##########
 
     # Define a dump file
-    dump_file = "tests/adjoint/17.02.23_dump_50days_open_qadv_TSconst"
-    #dump_file = "/data/2d_adjoint/27.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T864000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_consTS_adjoint_objTSprofweightscale_opt_cb_noreg_maxits1/dump.h5"
+    dump_file = str(data_dir / "17.02.23_dump_50days_open_qadv_TSconst")
 
     DUMP = True
     if DUMP:
-        with DumbCheckpoint(dump_file, mode=FILE_UPDATE) as chk:
+        with DumbCheckpoint(dump_file, mode=FILE_READ) as chk:
             # Checkpoint file open for reading and writing
             chk.load(v_, name="v_velocity")
             chk.load(p_, name="perturbation_pressure")
@@ -2886,7 +2866,7 @@ def test_coarse_open_pdyn_Sbc():
     W_vector = VectorFunctionSpace(mesh, W.ufl_element())
 
     # Next, interpolate the coordinates onto the nodes of W.
-    X = firedrake.interpolate(mesh.coordinates, W_vector)
+    X = firedrake.Function(W_vector).interpolate(mesh.coordinates)
     print("X[:,1]", X.dat.data[:,1])
     # Make an output function.
     stress_open_boundary_dynamic = Function(W)
@@ -3030,7 +3010,7 @@ def test_coarse_open_pdyn_Sbc():
     ##### 
     # read linear simulations
     #target_folder = "/data/2d_adjoint/17.02.23_3_eq_param_ufric_dt300.0_dtOutput86400.0_T4320000.0_ip50.0_tres86400.0constant_Kh0.25_Kv0.001_structured_dy500_dz2_no_limiter_nosponge_open_qadvbc_pdyn_linTS/"
-    adjoint_profile7550m_target = pd.read_csv("tests/adjoint/TS_foradjoint_7550m_profile.csv")
+    adjoint_profile7550m_target = pd.read_csv(data_dir / "TS_foradjoint_7550m_profile.csv")
 
     temp_profile_target = adjoint_profile7550m_target['T_t_14400']
     sal_profile_target = adjoint_profile7550m_target['S_t_14400']
@@ -3144,9 +3124,6 @@ def test_coarse_open_pdyn_Sbc():
     #   tape.evaluate_adj()
 
     print(len(T_restorefield.dat.data))
-
-    #grad = rf.derivative()
-    #File(folder+'grad.pvd').write(grad)
 
     h = Function(S_restorefield)
     # 14.07.23 now h*5 seems to also have a problem... try h*30 # h*5 seems to get rid of a machine precision problem? most of the time it is fine but random faiure with just magnitude of h = 1 (and I am pretty sure inside taylor test there is a divide by 100... 

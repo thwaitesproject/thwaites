@@ -1,4 +1,5 @@
 pandas
 argparse
 rasterio 
-git+https://github.com/g-adopt/g-adopt#egg=gadopt
+git+https://github.com/g-adopt/g-adopt@angus-g/tpe-api#egg=gadopt
+flake8

@@ -99,7 +99,7 @@ PETSc.Sys.Print("scalar dofs:", S.dim())
 
 # Set up functions
 m = Function(M)
-v_, p_ = m.split()  # function: y component of velocity, pressure
+v_, p_ = m.subfunctions  # function: y component of velocity, pressure
 v, p = split(m)  # expression: y component of velocity, pressure
 v_._name = "v_velocity"
 p_._name = "perturbation pressure"

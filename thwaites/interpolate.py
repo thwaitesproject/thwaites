@@ -79,7 +79,7 @@ def interpolate(f, Q, method='linear', y_transect=None):
         as the data `f`
     """
     if isinstance(f, (ufl.core.expr.Expr, firedrake.Function)):
-        return firedrake.interpolate(f, Q)
+        return firedrake.Function(Q).interpolate(f)
 
     mesh = Q.mesh()
     element = Q.ufl_element()
@@ -87,7 +87,7 @@ def interpolate(f, Q, method='linear', y_transect=None):
         element = element.sub_elements[0]
 
     V = firedrake.VectorFunctionSpace(mesh, element)
-    X = firedrake.interpolate(mesh.coordinates, V).dat.data_ro
+    X = firedrake.Function(V).interpolate(mesh.coordinates).dat.data_ro
 
     q = firedrake.Function(Q)
 

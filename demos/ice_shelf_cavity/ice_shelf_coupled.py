@@ -51,7 +51,7 @@ M = MixedFunctionSpace([V,W,K,S])
 
 # Set up functions
 m = Function(M)
-u_, p_, T_, S_ = m.split()
+u_, p_, T_, S_ = m.subfunctions
 u, p, T, S = split(m)
 
 melt = Function(Q)

@@ -36,7 +36,7 @@ PETSc.Sys.Print("scalar dofs:", K.dim())
 
 # Set up functions
 m = Function(M)
-v_, p_ = m.split()  # function: velocity, pressure
+v_, p_ = m.subfunctions  # function: velocity, pressure
 v, p = split(m)  # expression: velocity, pressure
 v_.rename("velocity")
 p_.rename("pressure")

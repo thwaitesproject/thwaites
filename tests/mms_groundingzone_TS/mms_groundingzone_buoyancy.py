@@ -48,7 +48,7 @@ def error(mesh_name, nx):
     x, y = SpatialCoordinate(mesh)
     print(type(y))
     m = Function(M)
-    vel_, p_ = m.split()  # function: y component of velocity, pressure
+    vel_, p_ = m.subfunctions  # function: y component of velocity, pressure
     vel, p = split(m)  # expression: y component of velocity, pressure
     vel_._name = "velocity"
     p_._name = "perturbation pressure"
@@ -192,7 +192,7 @@ def error(mesh_name, nx):
             })
 
 #    vp_timestepper.dt_const.assign(0.6*L/nx)
-    v_old, p_old = vp_timestepper.solution_old.split()
+    v_old, p_old = vp_timestepper.solution_old.subfunctions
     u_prev = Function(V, name='u_old')
     v_prev = Function(V, name='v_old')
     p_prev = Function(W, name='p_old')
