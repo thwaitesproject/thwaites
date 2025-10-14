@@ -50,22 +50,23 @@ def test_L2_boundary():
     x, y = SpatialCoordinate(mesh)
     J = assemble(T*y**2*ds(2))
 
-    rf = ReducedFunctional(J, Control(Tbc))
+    converter = RieszL2BoundaryRepresentation(Q, 1)
+    rf = ReducedFunctional(J, Control(Tbc, riesz_map=converter))
 
-    derivative = rf.derivative(options={'riesz_representation': None})  # this is a cofunction
+    derivative = rf.derivative(apply_riesz=False)  # this is a cofunction
     derivative.rename("derivative")
 
     # the basis of the dual space is such that the coefficients of a cofunction
     # match those of its l2 representation
-    # note that when using the X._ad_convert_type() method it returns the representation
-    # in the space of X which should be a FunctionSpace, therefore we need: func._ad_convert_type(cofunc)
+    # note that when using the X._ad_convert_riesz() method it returns the representation
+    # in the space of X which should be a FunctionSpace, therefore we need: func._ad_convert_riesz(cofunc)
     func = Function(T)  # Arbitary function to get right shape for derivative output
     # Convert (cofunction) derivative to l2 derivative for comparison
-    grad_l2 = func._ad_convert_type(derivative, options={'riesz_representation': 'l2'})
+    grad_l2 = func._ad_convert_riesz(derivative, riesz_map='l2')
     grad_l2.rename("l2 derivative")
-    # Convert (cofunction) derivative to L2 boundary derivative
-    converter = RieszL2BoundaryRepresentation(Q, 1)
-    grad_L2b = func._ad_convert_type(derivative, options={'riesz_representation': converter})
+    # Recalculate derivative using L2 boundary derivative Riesz map
+    # using _ad_convert_riesz not currently working
+    grad_L2b = rf.derivative(apply_riesz=True)
     grad_L2b.rename("L2 boundary derivative")
 
     yrange = numpy.linspace(0, 1, 100)
@@ -73,6 +74,6 @@ def test_L2_boundary():
     numpy.testing.assert_allclose(gradvals, yrange**2, atol=0.1)
 
     # Convert (cofunction) derivative to (wrong) L2 derivative for comparison
-    grad_L2 = func._ad_convert_type(derivative, options={'riesz_representation': 'L2'})
+    grad_L2 = func._ad_convert_riesz(derivative, riesz_map='L2')
     grad_L2.rename("L2 derivative")
     VTKFile(str(tmp_dir / 'grad.pvd')).write(grad_l2, grad_L2, grad_L2b)
