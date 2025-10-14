@@ -56,7 +56,7 @@ class SaddlePointTimeIntegrator(CoupledTimeIntegrator):
     def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         assert len(equations) == 2
-        assert len(solution.function_space().subfunctions) == 2
+        assert len(solution.function_space().subspaces) == 2
 
 
 class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
