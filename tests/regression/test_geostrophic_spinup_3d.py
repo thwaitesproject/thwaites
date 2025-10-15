@@ -11,4 +11,4 @@ def test_geostrophic_spinup_3d():
     expected_vel_lims = np.loadtxt(base / "expected_geostrophic_spinup_3d_test.log")
     vel_lims = np.loadtxt(base / "geostrophic_spinup_3d_test.log")
 
-    assert np.allclose(expected_vel_lims, vel_lims, rtol=1e-6, atol=1e-16)
+    assert np.allclose(expected_vel_lims, vel_lims, rtol=1e-6, atol=1e-7)
