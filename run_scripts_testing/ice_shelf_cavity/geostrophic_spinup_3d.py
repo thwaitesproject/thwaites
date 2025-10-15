@@ -10,12 +10,16 @@ from firedrake import FacetNormal
 import numpy as np
 from pyop2.profiling import timed_stage
 import argparse
+from mpi4py import MPI
 ##########
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--nx", default=10, type=int, help="Number of horizontal cells", required=False)
 parser.add_argument("--nz", default=10, type=int, help="Number of vertical layers", required=False)
+parser.add_argument("--T", default=864000, type=float, help="End of simulation (s)", required=False)
 parser.add_argument("--friction", action='store_true', help="Apply friction drag at ice base")
+parser.add_argument("--output", action='store_true', help="Apply friction drag at ice base")
+parser.add_argument("--testing", action='store_true', help="Write limits of u for testing")
 args = parser.parse_args()
 
 mesh = BoxMesh(args.nx, args.nx, args.nz, 5e3, 5e3, 100)
@@ -189,7 +193,7 @@ p_b_solver_parameters = predictor_solver_parameters_tight
 
 # define time steps
 dt = 3600
-T = 864000
+T = args.T
 output_dt = 86400
 output_step = output_dt/dt
 
@@ -224,18 +228,21 @@ folder = f"geostrophic_balance_friction{args.friction}/"
 ###########
 
 # Output files for velocity, pressure, temperature and salinity
-v_file = File(folder+"vw_velocity.pvd")
-v_file.write(v_)
+if args.output:
+    v_file = VTKFile(folder+"vw_velocity.pvd")
+    v_file.write(v_)
 
-p_file = File(folder+"pressure.pvd")
-p_file.write(p_)
+    p_file = VTKFile(folder+"pressure.pvd")
+    p_file.write(p_)
 
-p_b_file = File(folder+"balance_pressure.pvd")
-p_b_file.write(p_b)
+    p_b_file = VTKFile(folder+"balance_pressure.pvd")
+    p_b_file.write(p_b)
 ########
 
 # Add limiter for DG functions
 limiter = VertexBasedP1DGLimiter(K)
+
+    
 
 # Begin time stepping
 t = 0.0
@@ -257,21 +264,41 @@ while t < T - 0.5*dt:
 
     if t <= 86400:
         ramp.assign(t/(86400))
-    with timed_stage('output'):
-       if step % output_step == 0:
-           # dumb checkpoint for starting from last timestep reached
-           with CheckpointFile(folder+"dump.h5", 'w') as chk:
-               # Checkpoint file open for reading and writing
-               chk.save_mesh(mesh)
-               chk.save_function(v_, name="velocity")
-               chk.save_function(p_, name="pressure")
-               chk.save_function(temp, name="temperature")
-               chk.save_function(sal, name="salinity")
+    if args.output:
+        with timed_stage('output'):
+           if step % output_step == 0:
+               # dumb checkpoint for starting from last timestep reached
+               with CheckpointFile(folder+"dump.h5", 'w') as chk:
+                   # Checkpoint file open for reading and writing
+                   chk.save_mesh(mesh)
+                   chk.save_function(v_, name="velocity")
+                   chk.save_function(p_, name="pressure")
+                   chk.save_function(temp, name="temperature")
+                   chk.save_function(sal, name="salinity")
+        
+               # Write out files
+               v_file.write(v_)
+               p_file.write(p_)
+               p_b_file.write(p_b)
+               time_str = str(step)
+        
+               PETSc.Sys.Print("t=", t)
     
-           # Write out files
-           v_file.write(v_)
-           p_file.write(p_)
-           p_b_file.write(p_b)
-           time_str = str(step)
+# Write out final vel max,min limits to check geostrophic balance
+def ui_lims(u, i):
+    ui_data = u.dat.data_ro[:, i]
+    ui_max =  u.comm.allreduce(ui_data.max(initial=-np.inf), MPI.MAX)
+    ui_min =  u.comm.allreduce(ui_data.min(initial=np.inf), MPI.MIN)
+
+    return ui_max, ui_min
+
+if args.testing:
+    u_max, u_min = ui_lims(v_, 0)
+    v_max, v_min = ui_lims(v_, 1)
+    w_max, w_min = ui_lims(v_, 2)
+
+    test = [u_max, u_min, v_max, v_min, w_max, w_min]
     
-           PETSc.Sys.Print("t=", t)
+    with open('geostrophic_spinup_3d_test.log', 'w') as f:
+        for line in test:
+            f.write(f"{line}\n")
