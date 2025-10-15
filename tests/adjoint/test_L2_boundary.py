@@ -50,31 +50,28 @@ def test_L2_boundary():
     x, y = SpatialCoordinate(mesh)
     J = assemble(T*y**2*ds(2))
 
-    converter = RieszL2BoundaryRepresentation(Q, 1)
-    rf = ReducedFunctional(J, Control(Tbc, riesz_map=converter))
+    with stop_annotating():
+        converter = RieszL2BoundaryRepresentation(Q, 1)
+        rf = ReducedFunctional(J, Control(Tbc))
 
-    derivative = rf.derivative(apply_riesz=False)  # this is a cofunction
-    derivative.rename("derivative")
+        derivative = rf.derivative(apply_riesz=False)  # this is a cofunction
+        derivative.rename("derivative")
 
-    # the basis of the dual space is such that the coefficients of a cofunction
-    # match those of its l2 representation
-    # note that when using the X._ad_convert_riesz() method it returns the representation
-    # in the space of X which should be a FunctionSpace, therefore we need: func._ad_convert_riesz(cofunc)
-    func = Function(T)  # Arbitary function to get right shape for derivative output
-    # Convert (cofunction) derivative to l2 derivative for comparison
-    grad_l2 = derivative.riesz_representation(riesz_map='l2')
-    grad_l2.rename("l2 derivative")
-    # Recalculate derivative using L2 boundary derivative Riesz map
-    # using _ad_convert_riesz not currently working
-    grad_L2b = rf.derivative(apply_riesz=True)
-#    grad_L2b = derivative.riesz_representation(riesz_map=converter)
-    grad_L2b.rename("L2 boundary derivative")
+        # the basis of the dual space is such that the coefficients of a cofunction
+        # match those of its l2 representation
 
-    yrange = numpy.linspace(0, 1, 100)
-    gradvals = [grad_L2b.at([0, y]) for y in yrange]
-    numpy.testing.assert_allclose(gradvals, yrange**2, atol=0.1)
+        # Convert (cofunction) derivative to l2 derivative for comparison
+        grad_l2 = derivative.riesz_representation(riesz_map='l2')
+        grad_l2.rename("l2 derivative")
+        # Recalculate derivative using L2 boundary derivative Riesz map
+        grad_L2b = derivative.riesz_representation(riesz_map=converter)
+        grad_L2b.rename("L2 boundary derivative")
 
-    # Convert (cofunction) derivative to (wrong) L2 derivative for comparison
-    grad_L2 = derivative.riesz_representation(riesz_map='L2')
-    grad_L2.rename("L2 derivative")
-    VTKFile(str(tmp_dir / 'grad.pvd')).write(grad_l2, grad_L2, grad_L2b)
+        yrange = numpy.linspace(0, 1, 100)
+        gradvals = [grad_L2b.at([0, y]) for y in yrange]
+        numpy.testing.assert_allclose(gradvals, yrange**2, atol=0.1)
+
+        # Convert (cofunction) derivative to (wrong) L2 derivative for comparison
+        grad_L2 = derivative.riesz_representation(riesz_map='L2')
+        grad_L2.rename("L2 derivative")
+        VTKFile(str(tmp_dir / 'grad.pvd')).write(grad_l2, grad_L2, grad_L2b)
