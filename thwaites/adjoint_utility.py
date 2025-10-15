@@ -1,6 +1,7 @@
 from pyadjoint import Block
 from firedrake import DirichletBC, TestFunction, TrialFunction, utils, assemble, solve, dot, ds, Function
 import numpy
+import collections
 
 
 class DiagnosticBlock(Block):
@@ -45,7 +46,7 @@ class InteriorBC(DirichletBC):
         return numpy.array(list(set(range(self._function_space.node_count)) - set(super().nodes)))
 
 
-class RieszL2BoundaryRepresentation:
+class RieszL2BoundaryRepresentation(collections.abc.Callable):
     """Callable that Converts l2-representatives to L2-boundary representatives"""
     def __init__(self, Q, bids):
         self.Q = Q
