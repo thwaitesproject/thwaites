@@ -3,6 +3,7 @@ from firedrake import DirichletBC, TestFunction, TrialFunction, utils, assemble,
 import numpy
 import collections
 
+
 class DiagnosticBlock(Block):
     def __init__(self, f, function, riesz_options={'riesz_representation': 'L2'}):
         super().__init__()
