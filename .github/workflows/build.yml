@@ -53,6 +53,8 @@ jobs:
           . venv-thwaites/bin/activate
           : # Run 3d isomip plus for 5 time steps
           make -C thwaites-repo/run_scripts_testing/ice_shelf_cavity/isomip_plus/
+          : # Run geostrophic_spinup_3d in 2 cores for two days (tests assembled schur)
+          make -C thwaites-repo/run_scripts_testing/ice_shelf_cavity/
           python -m pytest -n 2 -v thwaites-repo/tests/regression
 
       - name: Test Thwaites adjoint

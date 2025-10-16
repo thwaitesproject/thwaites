@@ -56,19 +56,24 @@ class AssembledSchurPC(PCBase):
     def update(self, pc):
         self.A01 = assemble(self.a01, tensor=self.A01)
         self.A10 = assemble(self.a10, tensor=self.A10)
-        self.A11 = assemble(self.a11, tensor=self.A11)
         A01 = self.A01.M.handle
         A10 = self.A10.M.handle
-        A11 = self.A11.M.handle
+        if not isinstance(self.a11, firedrake.ZeroBaseForm):
+            self.A11 = assemble(self.a11, tensor=self.A11)
+            A11 = self.A11.M.handle
+        else:
+            A11 = None
 
         self.A10_A00_inv = A10.matMult(self.A00_inv, self.A10_A00_inv, 2.0)
         self.schur = self.A10_A00_inv.matMult(A01, self.schur, 2.0)
         if self.schur_plus is None:
             self.schur_plus = self.schur.duplicate(copy=True)
-            self.schur_plus.aypx(-1.0, A11, PETSc.Mat.Structure.DIFFERENT_NONZERO_PATTERN)
         else:
             self.schur_plus = self.schur.copy(self.schur_plus, PETSc.Mat.Structure.DIFFERENT_NONZERO_PATTERN)
-            self.schur_plus.aypx(-1.0, A11, PETSc.Mat.Structure.SAME_NONZERO_PATTERN)
+        if A11:
+            self.schur_plus.aypx(-1.0, A11, PETSc.Mat.Structure.DIFFERENT_NONZERO_PATTERN)
+        else:
+            self.schur_plus.scale(-1.0)
 
         if self.schur_nullspace is not None:
             self.schur_plus.setNullSpace(self.schur_nullspace.nullspace())
