@@ -138,7 +138,7 @@ def test_2d_isomip_cavity_salfunctional(T):
 
     ds = CombinedSurfaceMeasure(mesh, 5)
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # Set ocean surface
     #mesh.coordinates.dat.data[:, 1] -= bathmetry
@@ -259,8 +259,8 @@ def test_2d_isomip_cavity_salfunctional(T):
 
     else:
         # Assign Initial conditions
-        #v_init = zero(mesh.geometric_dimension())
-        v_init = as_vector((0., 0.))#zero(mesh.geometric_dimension())
+        #v_init = zero(mesh.geometric_dimension)
+        v_init = as_vector((0., 0.))#zero(mesh.geometric_dimension)
         print("v_init", v_init)
         print(v_)
 
@@ -337,7 +337,7 @@ def test_2d_isomip_cavity_salfunctional(T):
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
 
     gradrho = Function(P1)  # vertical component of gradient of density anomaly units m^-1
-    gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
+    gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension - 1))
 
 
     # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
@@ -356,7 +356,7 @@ def test_2d_isomip_cavity_salfunctional(T):
             
             test = TestFunction(self.fs)
             tri = TrialFunction(self.fs)
-            vert_dim = self.mesh.geometric_dimension()-1
+            vert_dim = self.mesh.geometric_dimension-1
             
             a = test*tri*dx
             L = -Dx(test, vert_dim)*self.rho*dx + test*self.n[vert_dim]*self.rho*ds_tb #+ avg(rho) * jump(gradrho_test, n[dim]) * dS_h (this is zero because jump(phi,n) = 0 for continuous P1 test function!)
@@ -614,7 +614,7 @@ def test_2d_isomip_cavity_salfunctional(T):
     # test stress open_boundary
     #sop = Function(W)
     #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    vdg_file = File("vdgcheck.pvd")
+    vdg_file = VTKFile("vdgcheck.pvd")
     vdg_file.write(vdg)
     ####################
 
@@ -648,7 +648,7 @@ def test_2d_isomip_cavity_salfunctional(T):
         #limiter.apply(temp)
 
         rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
-        gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
+        gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension - 1))
         #kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
         step += 1
         t += dt
@@ -859,7 +859,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
 
     ds = CombinedSurfaceMeasure(mesh, 5)
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # Set ocean surface
     #mesh.coordinates.dat.data[:, 1] -= bathmetry
@@ -883,7 +883,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
     print("ds_v",assemble(avg(dot(n,n))*dS_v(domain=mesh)))
 
 
-    mesh_file = File("ocean_thickness_icedraftfile.pvd")
+    mesh_file = VTKFile("ocean_thickness_icedraftfile.pvd")
     mesh_file.write(ocean_thickness)
 
 
@@ -984,7 +984,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
 
     else:
         # Assign Initial conditions
-        v_init = as_vector((0., 0.))#zero(mesh.geometric_dimension())
+        v_init = as_vector((0., 0.))#zero(mesh.geometric_dimension)
         v_.assign(0.0)
 
 
@@ -1059,7 +1059,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
     rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
 
     gradrho = Function(P1)  # vertical component of gradient of density anomaly units m^-1
-    gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
+    gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension - 1))
 
 
     # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
@@ -1078,7 +1078,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
             
             test = TestFunction(self.fs)
             tri = TrialFunction(self.fs)
-            vert_dim = self.mesh.geometric_dimension()-1
+            vert_dim = self.mesh.geometric_dimension-1
             
             a = test*tri*dx
             L = -Dx(test, vert_dim)*self.rho*dx + test*self.n[vert_dim]*self.rho*ds_tb #+ avg(rho) * jump(gradrho_test, n[dim]) * dS_h (this is zero because jump(phi,n) = 0 for continuous P1 test function!)
@@ -1371,7 +1371,7 @@ def run_isomip(T, dump_flag=False, init_p_flag=True, mumps_pressure_projection=T
         limiter.apply(temp)
 
         rho_anomaly.project(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
-        gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension() - 1))
+        gradrho.project(Dx(rho_anomaly, mesh.geometric_dimension - 1))
         #kappa_v.assign(conditional((gradrho / gradrho_scale) < 1e-1, 1e-3, 1e-1))
         step += 1
         t += dt
