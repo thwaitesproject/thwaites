@@ -39,7 +39,7 @@ def test_coarse_open_pdyn_mu():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -138,7 +138,7 @@ def test_coarse_open_pdyn_mu():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)
@@ -378,7 +378,7 @@ def test_coarse_open_pdyn_mu():
     # test stress open_boundary
     #sop = Function(W)
     #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
+    #sop_file = VTKFile(folder+"boundary_stress.pvd")
     #sop_file.write(sop)
 
 
@@ -647,7 +647,7 @@ def test_coarse_open_pdyn_sal():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -746,7 +746,7 @@ def test_coarse_open_pdyn_sal():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)
@@ -995,7 +995,7 @@ def test_coarse_open_pdyn_sal():
     # test stress open_boundary
     #sop = Function(W)
     #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
+    #sop_file = VTKFile(folder+"boundary_stress.pvd")
     #sop_file.write(sop)
 
 
@@ -1274,7 +1274,7 @@ def test_coarse_open_pdyn_temp():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -1373,7 +1373,7 @@ def test_coarse_open_pdyn_temp():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)
@@ -1622,7 +1622,7 @@ def test_coarse_open_pdyn_temp():
     # test stress open_boundary
     #sop = Function(W)
     #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
+    #sop_file = VTKFile(folder+"boundary_stress.pvd")
     #sop_file.write(sop)
 
 
@@ -1902,7 +1902,7 @@ def test_coarse_open_pdyn_Tbc():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -2001,7 +2001,7 @@ def test_coarse_open_pdyn_Tbc():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)
@@ -2250,7 +2250,7 @@ def test_coarse_open_pdyn_Tbc():
     # test stress open_boundary
     #sop = Function(W)
     #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
+    #sop_file = VTKFile(folder+"boundary_stress.pvd")
     #sop_file.write(sop)
 
 
@@ -2529,7 +2529,7 @@ def test_coarse_open_pdyn_Sbc():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -2628,7 +2628,7 @@ def test_coarse_open_pdyn_Sbc():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)
@@ -2877,7 +2877,7 @@ def test_coarse_open_pdyn_Sbc():
     # test stress open_boundary
     #sop = Function(W)
     #sop.interpolate(-g*(Temperature_term + Salinity_term))
-    #sop_file = File(folder+"boundary_stress.pvd")
+    #sop_file = VTKFile(folder+"boundary_stress.pvd")
     #sop_file.write(sop)
 
 
