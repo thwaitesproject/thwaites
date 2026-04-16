@@ -26,13 +26,13 @@ mesh = BoxMesh(args.nx, args.nx, args.nz, 5e3, 5e3, 100)
 mesh.coordinates.dat.data[:, 2] -= 500
 
 x, y, z = SpatialCoordinate(mesh)
-PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 # Set up function spaces
 V = VectorFunctionSpace(mesh, "DG", 1)  # velocity space
 W = FunctionSpace(mesh, "CG", 2)  # pressure space
 M = MixedFunctionSpace([V, W])
 
-K = FunctionSpace(mesh, "DG", 1)    # temperature space
+K = FunctionSpace(mesh, "DG", 1, variant='equispaced')    # temperature space
 PETSc.Sys.Print("velocity dofs:", V.dim())
 PETSc.Sys.Print("Pressure dofs:", W.dim())
 PETSc.Sys.Print("scalar dofs:", K.dim())
@@ -54,7 +54,7 @@ ramp = Constant(0.0)
 horizontal_stress = -f * 0.01  # geostrophic stress ~ |f v| drives a flow of 0.01 m/s
 
 # Assign Initial conditions
-v_init = zero(mesh.geometric_dimension())
+v_init = zero(mesh.geometric_dimension)
 v_.interpolate(v_init)
 T_restore = -2.0
 S_restore = 34.5
