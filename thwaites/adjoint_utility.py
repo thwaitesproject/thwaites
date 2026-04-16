@@ -1,5 +1,6 @@
 from pyadjoint import Block
 from firedrake import DirichletBC, TestFunction, TrialFunction, utils, assemble, solve, dot, ds, Function
+from gadopt import InteriorBC
 import numpy
 import collections
 
@@ -37,13 +38,6 @@ class DiagnosticConstantBlock(Block):
         out = inputs[0]._ad_convert_type(adj_inputs[0])
         print("Adjoint ", self.name, out.values()[0])
         return 0
-
-
-class InteriorBC(DirichletBC):
-    """DirichletBC applied to anywhere that is *not* on the specified boundary"""
-    @utils.cached_property
-    def nodes(self):
-        return numpy.array(list(set(range(self._function_space.node_count)) - set(super().nodes)))
 
 
 class RieszL2BoundaryRepresentation(collections.abc.Callable):
