@@ -47,7 +47,7 @@ def cell_edge_integral_ratio(mesh, p):
 
     See eqn. (3.7) ad table 3.1 from Hillewaert's thesis: https://www.researchgate.net/publication/260085826
     and its appendix C for derivation."""
-    cell_type = mesh.ufl_cell().cellname()
+    cell_type = mesh.ufl_cell().cellname
     if cell_type == "triangle":
         return (p+1)*(p+2)/2.
     elif cell_type == "quadrilateral" or cell_type == "interval * interval":
@@ -165,7 +165,7 @@ def get_functionspace(mesh, h_family, h_degree, v_family=None, v_degree=None,
             v_family = h_family
         if v_degree is None:
             v_degree = h_degree
-        h_cell, v_cell = mesh.ufl_cell().sub_cells()
+        h_cell, v_cell = mesh.ufl_cell().sub_cells
         h_elt = FiniteElement(h_family, h_cell, h_degree, variant=variant)
         v_elt = FiniteElement(v_family, v_cell, v_degree, variant=v_variant)
         elt = TensorProductElement(h_elt, v_elt)

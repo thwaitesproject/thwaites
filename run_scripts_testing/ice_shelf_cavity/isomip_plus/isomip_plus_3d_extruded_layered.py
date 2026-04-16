@@ -188,7 +188,7 @@ mesh.coordinates.assign(f)
 #x, y, z = SpatialCoordinate(mesh)
 
 #mesh_pre_refinement = Function(P1_extruded).assign(0)
-#mesh_pr_file = File("mesh_pre_refinement.pvd")
+#mesh_pr_file = VTKFile("mesh_pre_refinement.pvd")
 #mesh_pr_file.write(mesh_pre_refinement)
 ## Stretch the mesh to get higher res at ice base.
 ## wavelength of the step = x distance that fucntion goes from zero to 1.
@@ -205,7 +205,7 @@ mesh.coordinates.assign(f)
 #x, y, z = SpatialCoordinate(mesh)
 
 #mesh_refine = Function(P1_extruded).assign(0)
-#mesh_r_file = File("mesh_refinement_smooth.pvd")
+#mesh_r_file = VTKFile("mesh_refinement_smooth.pvd")
 #mesh_r_file.write(mesh_refine)
 
 ##scale mesh to make ice shelf slope
@@ -214,9 +214,9 @@ mesh.coordinates.assign(f)
 #print ("rank", rank,"after applying bathy/icedraft mesh.coordinates.dat.data", mesh.coordinates.dat.data[:])
 ds = CombinedSurfaceMeasure(mesh, 5)
 
-PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 #mesh_final = Function(P1_extruded).assign(0)
-#mesh_f_file = File("mesh_final.pvd")
+#mesh_f_file = VTKFile("mesh_final.pvd")
 #mesh_f_file.write(mesh_final)
 
 print("You have Comm WORLD size = ", mesh.comm.size)
@@ -236,17 +236,17 @@ PETSc.Sys.Print("Area of iceslope: should be {:.0f}m^2: ".format(sqrt(shelf_leng
 n = FacetNormal(mesh)
 print(assemble(avg(dot(n,n))*dS_v(domain=mesh)))
 print(assemble(avg(dot(n,n))*dS_h(domain=mesh)))
-mesh_file = File("ocean_thickness_icedraftfile.pvd")
+mesh_file = VTKFile("ocean_thickness_icedraftfile.pvd")
 mesh_file.write(ocean_thickness)
-mesh_file = File("bathy_icedraftfile.pvd")
+mesh_file = VTKFile("bathy_icedraftfile.pvd")
 mesh_file.write(bathymetry)
-mesh_file = File("icedraft_icedraftfile.pvd")
+mesh_file = VTKFile("icedraft_icedraftfile.pvd")
 mesh_file.write(ice_draft)
 
 p0mesh_cells.interpolate(CellVolume(mesh))
 print("rank", rank, "max cell volume:", p0mesh_cells.dat.data[:].max())
 print("rank", rank, "min cell volume:", p0mesh_cells.dat.data[:].min())
-mesh_cellvol_file = File("mesh_cell_vol.pvd")
+mesh_cellvol_file = VTKFile("mesh_cell_vol.pvd")
 mesh_cellvol_file.write(p0mesh_cells)
 ##########
 PETSc.Sys.Print("mesh cell type", mesh.ufl_cell())
@@ -391,7 +391,7 @@ rho.interpolate(rho0*(1.0-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref))
 rho_anomaly_projector = Projector(-beta_temp * (temp - T_ref) + beta_sal * (sal - S_ref), rho_anomaly)
 
 gradrho = Function(P0_extruded)  # vertical component of gradient of density anomaly units m^-1
-gradrho_projector = Projector(Dx(rho_anomaly, mesh.geometric_dimension() - 1), gradrho)
+gradrho_projector = Projector(Dx(rho_anomaly, mesh.geometric_dimension - 1), gradrho)
 
 
 # coriolis frequency f-plane assumption at 75deg S. f = 2 omega sin (lat) = 2 * 7.2921E-5 * sin (-75 *2pi/360)
@@ -410,7 +410,7 @@ class VerticalDensityGradientSolver:
         
         test = TestFunction(self.fs)
         tri = TrialFunction(self.fs)
-        vert_dim = self.mesh.geometric_dimension()-1
+        vert_dim = self.mesh.geometric_dimension-1
         
         a = test*tri*dx
         L = -Dx(test, vert_dim)*self.rho*dx + test*self.n[vert_dim]*self.rho*ds_tb #+ avg(rho) * jump(gradrho_test, n[dim]) * dS_h (this is zero because jump(phi,n) = 0 for continuous P1 test function!)
@@ -666,7 +666,7 @@ no_normal_flow = 0.
 # test stress open_boundary
 #sop = Function(W)
 #sop.interpolate(-g*(Temperature_term + Salinity_term))
-#sop_file = File(folder+"boundary_stress.pvd")
+#sop_file = VTKFile(folder+"boundary_stress.pvd")
 #sop_file.write(sop)
 
 
@@ -817,58 +817,58 @@ folder = './'
 ###########
 
 # Output files for velocity, pressure, temperature and salinity
-#v_file = File(folder+"velocity.pvd")  # for some reason velocity doesn't work in paraview - to do with squeezed triangles/wedges?
+#v_file = VTKFile(folder+"velocity.pvd")  # for some reason velocity doesn't work in paraview - to do with squeezed triangles/wedges?
 #v_file.write(v_)
 
 # Output files for velocity, pressure, temperature and salinity
 #vdg.project(v_) # DQ2 velocity for output
 vdg_projector = Projector(v_, vdg)
 vdg_projector.project()
-vdg_file = File(folder+"dg_velocity.pvd")
+vdg_file = VTKFile(folder+"dg_velocity.pvd")
 vdg_file.write(vdg)
 
 #vdg1.project(v_) # DQ1 velocity 
-#vdg1_file = File(folder+"P1dg_velocity_lim.pvd")
+#vdg1_file = VTKFile(folder+"P1dg_velocity_lim.pvd")
 #vdg1_file.write(vdg1)
 
-p_file = File(folder+"pressure.pvd")
+p_file = VTKFile(folder+"pressure.pvd")
 p_file.write(p_)
 
-t_file = File(folder+"temperature.pvd")
+t_file = VTKFile(folder+"temperature.pvd")
 t_file.write(temp)
 
-s_file = File(folder+"salinity.pvd")
+s_file = VTKFile(folder+"salinity.pvd")
 s_file.write(sal)
 
-rho_file = File(folder+"density.pvd")
+rho_file = VTKFile(folder+"density.pvd")
 rho_file.write(rho)
 
-rhograd_file = File(folder+"density_anomaly_grad.pvd")
+rhograd_file = VTKFile(folder+"density_anomaly_grad.pvd")
 rhograd_file.write(gradrho)
 
-smag_visc_file = File(folder+"smag_visc.pvd")
+smag_visc_file = VTKFile(folder+"smag_visc.pvd")
 smag_visc_file.write(smag_visc)
-kappav_file = File(folder+"kappav.pvd")
+kappav_file = VTKFile(folder+"kappav.pvd")
 kappav_file.write(kappa_v)
 ##########
 
 # Output files for melt functions
-#Q_ice_file = File(folder+"Q_ice.pvd")
+#Q_ice_file = VTKFile(folder+"Q_ice.pvd")
 #Q_ice_file.write(Q_ice)
 
-#Q_mixed_file = File(folder+"Q_mixed.pvd")
+#Q_mixed_file = VTKFile(folder+"Q_mixed.pvd")
 #Q_mixed_file.write(Q_mixed)
 
-#Qs_file = File(folder+"Q_s.pvd")
+#Qs_file = VTKFile(folder+"Q_s.pvd")
 #Qs_file.write(Q_s)
 
-m_file = File(folder+"melt.pvd")
+m_file = VTKFile(folder+"melt.pvd")
 m_file.write(melt)
 
-#full_pressure_file = File(folder+"full_pressure.pvd")
+#full_pressure_file = VTKFile(folder+"full_pressure.pvd")
 #full_pressure_file.write(full_pressure)
 
-#u_pred_star_file = File(folder+"u_star.pvd")
+#u_pred_star_file = VTKFile(folder+"u_star.pvd")
 #u_pred_dg.project(vp_timestepper.u_star) # DQ2 velocity for output
 #u_pred_star_file.write(u_pred_dg)
 

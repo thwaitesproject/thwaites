@@ -2,7 +2,6 @@ from firedrake import *
 from petsc4py import PETSc
 from firedrake.dmhooks import get_function_space
 
-
 class VerticallyLumpedPC(PCBase):
     """
     Preconditioner that implements vertical lumping approach
@@ -34,7 +33,7 @@ class VerticallyLumpedPC(PCBase):
 
         # create vertically constant version of functionspace
         mesh = V.mesh()
-        hcell, vcell = mesh.ufl_cell().sub_cells()
+        hcell, vcell = mesh.ufl_cell().sub_cells
         hele, _ = V.ufl_element().factor_elements
         vele = FiniteElement("R", vcell, 0)
         ele = TensorProductElement(hele, vele)
@@ -42,8 +41,9 @@ class VerticallyLumpedPC(PCBase):
 
         # create interpolation matrix Prol from V_1layer to V
         v = TestFunction(V_1layer)
-        interp = Interpolator(v, V)
-        Prol = interp.callable().handle
+        R = assemble(interpolate(v, V), mat_type='aij').petscmat
+
+        Prol = R.transpose()
 
         self.pc = PETSc.PC().create(comm=pc.comm)
         self.pc.setOptionsPrefix(options_prefix + 'lumped_')
