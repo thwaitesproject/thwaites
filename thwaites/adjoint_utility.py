@@ -1,7 +1,6 @@
 from pyadjoint import Block
-from firedrake import DirichletBC, TestFunction, TrialFunction, utils, assemble, solve, dot, ds, Function
+from firedrake import TestFunction, TrialFunction, assemble, solve, dot, ds, Function
 from gadopt import InteriorBC
-import numpy
 import collections
 
 

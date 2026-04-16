@@ -2,6 +2,7 @@ from firedrake import *
 from petsc4py import PETSc
 from firedrake.dmhooks import get_function_space
 
+
 class VerticallyLumpedPC(PCBase):
     """
     Preconditioner that implements vertical lumping approach
