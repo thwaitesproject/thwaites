@@ -161,6 +161,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         div_term = [term for term in self.equations[1]._terms if isinstance(term, DivergenceTerm)][0]
         div_fields = self.fields.copy()
         div_fields['velocity'] = u
+        div_fields['dt'] = self.dt_const  # used for free surface
         self.F -= self.dt_const*div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
 
         W = self.solution.function_space()

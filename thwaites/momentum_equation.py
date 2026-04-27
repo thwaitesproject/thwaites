@@ -251,6 +251,20 @@ class DivergenceTerm(BaseTerm):
                 F += psi*dot(n, bc['u']-u)*self.ds(id)
             elif 'un' in bc:
                 F += psi*(bc['un'] - dot(n, u))*self.ds(id)
+            elif 'free_surface' in bc:
+                g = 9.81
+                eta = trial / g  # already divided by rho earlier.
+                eta_lagged = trial_lagged / g
+                dt = fields['dt']
+                k = as_vector((0, 0, 1)) # should update for sphere
+
+                N_s = as_vector((-Dx(eta, 0], -Dx(eta, 1), 1)
+                N_s_norm = N_s / norm(N_s)
+                N_s_lagged = as_vector((-Dx(eta_lagged, 0], -Dx(eta_lagged, 1), 1)
+                N_s_lagged_norm = N_s_lagged / norm(N_s_lagged)
+
+                # free surface term  
+                F += psi*(1/dt)*dot(k, (N_s * trial - N_s_lagged * trial_lagged))*self.ds(id)
 
         return -F
 
