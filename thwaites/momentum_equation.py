@@ -1,6 +1,6 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor, sign
-from firedrake import avg, Identity
+from firedrake import avg, Identity, as_vector, Dx, norm
 from .utility import is_continuous, normal_is_continuous, tensor_jump, cell_edge_integral_ratio
 from firedrake import FacetArea, CellVolume
 r"""
@@ -25,8 +25,6 @@ class MomentumAdvectionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         u_adv = trial_lagged
-        if 'mesh_velocity' in fields:
-            u_adv = u_adv - fields['mesh_velocity']
         phi = test
         n = self.n
         u = trial
@@ -92,6 +90,8 @@ class ViscosityTerm(BaseTerm):
             assert 'grid_resolution' in fields
             mu_background = fields['background_viscosity']
             grid_dx = fields['grid_resolution'][0]
+            grid_dz = fields['grid_resolution'][1]
+            mu_h = 0.5*abs(trial[0]) * grid_dx + mu_background
             grid_dz = fields['grid_resolution'][1]
             mu_h = 0.5*abs(trial[0]) * grid_dx + mu_background
             mu_v = 0.5*abs(trial[1]) * grid_dz + mu_background
@@ -170,8 +170,6 @@ class ViscosityTerm(BaseTerm):
                     # part is assumed to be zero stress (i.e. free slip), or prescribed via 'stress'
                     F += -dot(n, phi)*dot(n, dot(stress, n)) * self.ds(id)
             if 'stress' in bc:  # a momentum flux, a.k.a. "force"
-                # here we need only the third term, because we assume jump_u=0 (u_ext=u)
-                # the provided stress = n.(mu.stress_tensor)
                 F += dot(-phi, bc['stress']) * self.ds(id)
             if 'drag' in bc:  # (bottom) drag of the form tau = -C_D u |u|
                 C_D = bc['drag']
@@ -213,7 +211,7 @@ class PressureGradientTerm(BaseTerm):
         # for those boundaries where the normal component of u is specified
         # we take it out again
         for id, bc in bcs.items():
-            if 'u' in bc or 'un' in bc:
+            if 'u' in bc or 'un' in bc or 'free_surface' in bc:
                 F += dot(phi, n)*p*self.ds(id)
 
         return -F
@@ -260,13 +258,16 @@ class DivergenceTerm(BaseTerm):
                 dt = fields['dt']
                 k = as_vector((0, 0, 1)) # should update for sphere
 
-                N_s = as_vector((-Dx(eta, 0], -Dx(eta, 1), 1)
+                N_s = as_vector((-Dx(eta, 0), -Dx(eta, 1), 1))
                 N_s_norm = N_s / norm(N_s)
-                N_s_lagged = as_vector((-Dx(eta_lagged, 0], -Dx(eta_lagged, 1), 1)
+                N_s_lagged = as_vector((-Dx(eta_lagged, 0), -Dx(eta_lagged, 1), 1))
                 N_s_lagged_norm = N_s_lagged / norm(N_s_lagged)
 
                 # free surface term  
                 F += psi*(1/dt)*dot(k, (N_s * trial - N_s_lagged * trial_lagged))*self.ds(id)
+                
+                # take out u term
+                F -= psi*dot(n, u)*self.ds(id)
 
         return -F
 
