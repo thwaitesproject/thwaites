@@ -1,6 +1,8 @@
 from firedrake import *
-from petsc4py import PETSc
+from firedrake.assemble import assemble
 from firedrake.dmhooks import get_function_space
+from firedrake.interpolation import interpolate
+from petsc4py import PETSc
 
 
 class VerticallyLumpedPC(PCBase):
@@ -34,16 +36,15 @@ class VerticallyLumpedPC(PCBase):
 
         # create vertically constant version of functionspace
         mesh = V.mesh()
-        hcell, vcell = mesh.ufl_cell().sub_cells()
+        hcell, vcell = mesh.ufl_cell().sub_cells
         hele, _ = V.ufl_element().factor_elements
         vele = FiniteElement("R", vcell, 0)
         ele = TensorProductElement(hele, vele)
         V_1layer = FunctionSpace(mesh, ele)
 
         # create interpolation matrix Prol from V_1layer to V
-        v = TestFunction(V_1layer)
-        interp = Interpolator(v, V)
-        Prol = interp.callable().handle
+        trial = TrialFunction(V_1layer)
+        Prol = assemble(interpolate(trial, V)).petscmat
 
         self.pc = PETSc.PC().create(comm=pc.comm)
         self.pc.setOptionsPrefix(options_prefix + 'lumped_')
