@@ -1,6 +1,6 @@
 from .equations import BaseTerm, BaseEquation
 from firedrake import dot, inner, outer, transpose, div, grad, nabla_grad, conditional, as_tensor, sign
-from firedrake import avg, Identity, as_vector, Dx, norm
+from firedrake import avg, Identity
 from .utility import is_continuous, normal_is_continuous, tensor_jump, cell_edge_integral_ratio
 from firedrake import FacetArea, CellVolume
 r"""
@@ -252,21 +252,11 @@ class DivergenceTerm(BaseTerm):
             elif 'un' in bc:
                 F += psi*(bc['un'] - dot(n, u))*self.ds(id)
             elif 'free_surface' in bc:
-                g = 9.81
-                eta = trial / g  # already divided by rho earlier.
-                eta_lagged = trial_lagged / g
+                g = fields.get('gravity', 9.81)
                 dt = fields['dt']
-                k = as_vector((0, 0, 1)) # should update for sphere
+                old_pressure = fields['old_pressure']
+                F += psi*(trial-old_pressure)/(g*dt)*self.ds(id)
 
-                N_s = as_vector((-Dx(eta, 0), -Dx(eta, 1), 1))
-                N_s_norm = N_s / norm(N_s)
-                N_s_lagged = as_vector((-Dx(eta_lagged, 0), -Dx(eta_lagged, 1), 1))
-                N_s_lagged_norm = N_s_lagged / norm(N_s_lagged)
-
-                # free surface term  
-                F += psi*(1/dt)*dot(k, (N_s * trial - N_s_lagged * trial_lagged))*self.ds(id)
-                
-                # take out u term
                 F -= psi*dot(n, u)*self.ds(id)
 
         return -F
