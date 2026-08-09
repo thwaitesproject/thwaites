@@ -98,7 +98,7 @@ def run_standing_wave(
     solver_parameters=None,
     predictor_solver_parameters=None,
     picard_iterations=1,
-    theta=1
+    theta=1,
     period_fraction=0.5,
     ):
     """Run half a standing-wave period and return dimensionless diagnostics."""
@@ -253,7 +253,7 @@ def run_standing_wave(
         ),
     ],
 )
-def test_fixed_mesh_standing_wave(solver_parameters=DIRECT_SOLVER_PARAMETERS, theta=1):
+def test_fixed_mesh_standing_wave(solver_parameters, theta=1):
     steps = [64*2**i for i in range(4)]
     all_diagnostics = []
     for step_count in steps:
@@ -311,7 +311,7 @@ def test_fixed_mesh_standing_wave_crank_nicolson():
     # Use a phase at which both pressure and velocity are non-zero; evaluating
     # either variable at one of its extrema would give a superconvergent error
     # and obscure the expected second-order temporal convergence.
-    steps = [8*2**i for i in range(3)]
+    steps = [8*2**i for i in range(4)]
     all_diagnostics = []
     for step_count in steps:
         diagnostics = run_standing_wave(
