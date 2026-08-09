@@ -11,6 +11,7 @@ At half a period the free-surface elevation should have reversed sign and the
 velocity should be zero again.  Backward Euler pressure projection damps the
 wave slightly, so the assertions allow a modest time-discretisation error.
 """
+import pytest
 
 import numpy as np
 
@@ -52,8 +53,51 @@ DIRECT_SOLVER_PARAMETERS = {
     "mat_type": "aij",
 }
 
+ASSEMBLED_SCHUR_SOLVER_PARAMETERS = {
+        'snes_type': 'ksponly',
+        'snes_monitor': None,
+        'ksp_type': 'preonly',  # we solve the full schur complement exactly, so no need for outer krylov
+        'mat_type': 'matfree',
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'pc_fieldsplit_schur_fact_type': 'full',
+        # velocity mass block:
+        'fieldsplit_0': {
+            'ksp_type': 'gmres',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.AssembledPC',
+            'ksp_converged_reason': None,
+            'assembled_ksp_type': 'preonly',
+            'assembled_pc_type': 'bjacobi',
+            'assembled_sub_pc_type': 'ilu',
+            },
+        # schur system: explicitly assemble the schur system
+        # this only works with pressureprojectionicard if the velocity block is just the mass matrix
+        # and if the velocity is DG so that this mass matrix can be inverted explicitly
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'thwaites.AssembledSchurPC',
+            'schur_ksp_type': 'cg',
+            'schur_ksp_max_it': 1000,
+            'schur_ksp_rtol': 1e-8,
+            'schur_ksp_atol': 1e-10,
+            'schur_ksp_converged_reason': None,
+            'schur_pc_type': 'gamg',
+            'schur_pc_gamg_threshold': 0.01
+            },
+        }
 
-def run_standing_wave(nx=16, nz=2, steps_per_period=128):
+
+def run_standing_wave(
+    nx=16,
+    nz=2,
+    steps_per_period=128,
+    solver_parameters=None,
+    predictor_solver_parameters=None,
+    picard_iterations=1,
+    theta=1
+    ):
     """Run half a standing-wave period and return dimensionless diagnostics."""
 
     length = 10_000.0
@@ -107,6 +151,10 @@ def run_standing_wave(nx=16, nz=2, steps_per_period=128):
         4: {"free_surface": None},
     }
 
+    if solver_parameters is None:
+        solver_parameters = DIRECT_SOLVER_PARAMETERS
+
+
     timestepper = PressureProjectionTimeIntegrator(
         [momentum_equation, continuity_equation],
         solution,
@@ -114,9 +162,10 @@ def run_standing_wave(nx=16, nz=2, steps_per_period=128):
         coupling,
         dt,
         boundary_conditions,
-        solver_parameters=DIRECT_SOLVER_PARAMETERS,
+        solver_parameters=solver_parameters,
         predictor_solver_parameters=DIRECT_SOLVER_PARAMETERS,
-        picard_iterations=1,
+        picard_iterations=picard_iterations,
+        theta=theta,
     )
 
     top = 4
@@ -178,16 +227,68 @@ def run_standing_wave(nx=16, nz=2, steps_per_period=128):
     PETSc.Sys.Print("fixed-mesh standing-wave diagnostics:", diagnostics)
     return diagnostics
 
+@pytest.mark.parametrize(
+    "solver_parameters",
+    [
+        pytest.param(DIRECT_SOLVER_PARAMETERS, id="direct-lu"),
+        pytest.param(
+            ASSEMBLED_SCHUR_SOLVER_PARAMETERS,
+            id="assembled-schur",
+        ),
+    ],
+)
+def test_fixed_mesh_standing_wave(solver_parameters=DIRECT_SOLVER_PARAMETERS, theta=1):
+    steps = [64*2**i for i in range(4)]
+    all_diagnostics = []
+    for step_count in steps:
+        diagnostics = run_standing_wave(steps_per_period=step_count, solver_parameters=solver_parameters, theta=theta)
+        all_diagnostics.append(diagnostics)
 
-def test_fixed_mesh_standing_wave():
-    diagnostics = run_standing_wave()
+        assert diagnostics["coordinate_change"] == 0.0
+        assert abs(diagnostics["mean_surface_elevation"]) < 1.0e-10
+        assert diagnostics["surface_l2_error"] < 0.15
+        assert diagnostics["mode_amplitude_error"] < 0.15
+        assert diagnostics["velocity_error"] < 0.15
 
-    assert diagnostics["coordinate_change"] == 0.0
-    assert abs(diagnostics["mean_surface_elevation"]) < 1.0e-10
-    assert diagnostics["surface_l2_error"] < 0.15
-    assert diagnostics["mode_amplitude_error"] < 0.15
-    assert diagnostics["velocity_error"] < 0.15
+    surface_errors = np.array([
+        diagnostics["surface_l2_error"] for diagnostics in all_diagnostics
+    ])
+    mode_errors = np.array([
+        diagnostics["mode_amplitude_error"]
+        for diagnostics in all_diagnostics
+    ])
+    surface_orders = np.log2(surface_errors[:-1]/surface_errors[1:])
+    mode_orders = np.log2(mode_errors[:-1]/mode_errors[1:])
 
+    PETSc.Sys.Print("surface convergence orders:", surface_orders)
+    PETSc.Sys.Print("mode-amplitude convergence orders:", mode_orders)
+
+    # Backward Euler should converge at first order as dt is halved.
+    assert np.all(np.abs(surface_orders-1.0) < 0.1), surface_orders
+    assert np.all(np.abs(mode_orders-1.0) < 0.1), mode_orders
+
+
+def test_fixed_mesh_standing_wave_picard_invariance(
+):
+    one_picard = run_standing_wave(
+        picard_iterations=1,
+    )
+    two_picard = run_standing_wave(
+        picard_iterations=2,
+    )
+
+    for diagnostic in [
+        "surface_l2_error",
+        "mode_amplitude_error",
+        "velocity_error",
+        "mean_surface_elevation",
+    ]:
+        np.testing.assert_allclose(
+            two_picard[diagnostic],
+            one_picard[diagnostic],
+            rtol=1.0e-8,
+            atol=1.0e-12,
+        )
 
 if __name__ == "__main__":
     test_fixed_mesh_standing_wave()
