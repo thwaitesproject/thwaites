@@ -7,9 +7,11 @@ For a tank with depth H and horizontal wavenumber k, linear wave theory gives
 
     omega**2 = g*k*tanh(k*H).
 
-At half a period the free-surface elevation should have reversed sign and the
-velocity should be zero again.  Backward Euler pressure projection damps the
-wave slightly, so the assertions allow a modest time-discretisation error.
+The backward-Euler test ends at half a period, where the free-surface
+elevation should have reversed sign and the velocity should be zero again.
+The Crank-Nicolson test ends at three eighths of a period, where both
+elevation and velocity are non-zero and therefore exhibit the expected 
+second-order error.
 """
 import pytest
 
@@ -97,6 +99,7 @@ def run_standing_wave(
     predictor_solver_parameters=None,
     picard_iterations=1,
     theta=1
+    period_fraction=0.5,
     ):
     """Run half a standing-wave period and return dimensionless diagnostics."""
 
@@ -190,24 +193,35 @@ def run_standing_wave(
         inner(quarter_period_velocity, quarter_period_velocity)*volume_measure
     ))
 
-    number_of_steps = steps_per_period//2
+    requested_steps = steps_per_period*period_fraction
+    number_of_steps = int(round(requested_steps))
+    if not np.isclose(requested_steps, number_of_steps):
+        raise ValueError(
+            "steps_per_period*period_fraction must be an integer"
+        )
     time = 0.0
+    
     for _ in range(number_of_steps):
         timestepper.advance(time)
         time += dt
 
+    phase = frequency*time
     eta_numerical = pressure/gravity
-    eta_exact = -amplitude*cos(wavenumber*x)
+    eta_exact = amplitude*cos(wavenumber*x)*np.cos(phase)
+    velocity_exact = quarter_period_velocity*np.sin(phase)
     eta_error = np.sqrt(assemble(
         (eta_numerical-eta_exact)**2*surface_measure
     ))/eta_scale
     velocity_error = np.sqrt(assemble(
-        inner(velocity, velocity)*volume_measure
+        inner(velocity-velocity_exact, velocity-velocity_exact)*volume_measure
     ))/velocity_scale
     mode_amplitude = (
         2.0/length*assemble(eta_numerical*surface_mode*surface_measure)
     )
-    mode_amplitude_error = abs(mode_amplitude+amplitude)/amplitude
+    exact_mode_amplitude = amplitude*np.cos(phase)
+    mode_amplitude_error = (
+        abs(mode_amplitude-exact_mode_amplitude)/amplitude
+    )
     mean_surface_elevation = (
         assemble(eta_numerical*surface_measure)/length
     )
@@ -218,6 +232,8 @@ def run_standing_wave(
     diagnostics = {
         "period": period,
         "dt": dt,
+        "final_time": time,
+        "theta": theta,
         "surface_l2_error": float(eta_error),
         "velocity_error": float(velocity_error),
         "mode_amplitude_error": float(mode_amplitude_error),
@@ -289,6 +305,51 @@ def test_fixed_mesh_standing_wave_picard_invariance(
             rtol=1.0e-8,
             atol=1.0e-12,
         )
+
+
+def test_fixed_mesh_standing_wave_crank_nicolson():
+    # Use a phase at which both pressure and velocity are non-zero; evaluating
+    # either variable at one of its extrema would give a superconvergent error
+    # and obscure the expected second-order temporal convergence.
+    steps = [8*2**i for i in range(3)]
+    all_diagnostics = []
+    for step_count in steps:
+        diagnostics = run_standing_wave(
+            nx=32,
+            nz=4,
+            steps_per_period=step_count,
+            theta=0.5,
+            period_fraction=3/8,
+        )
+        all_diagnostics.append(diagnostics)
+
+        assert diagnostics["coordinate_change"] == 0.0
+        assert abs(diagnostics["mean_surface_elevation"]) < 1.0e-10
+        assert diagnostics["surface_l2_error"] < 0.15
+        assert diagnostics["mode_amplitude_error"] < 0.15
+        assert diagnostics["velocity_error"] < 0.15
+
+    surface_errors = np.array([
+        diagnostics["surface_l2_error"] for diagnostics in all_diagnostics
+    ])
+    mode_errors = np.array([
+        diagnostics["mode_amplitude_error"]
+        for diagnostics in all_diagnostics
+    ])
+    velocity_errors = np.array([
+        diagnostics["velocity_error"] for diagnostics in all_diagnostics
+    ])
+    surface_orders = np.log2(surface_errors[:-1]/surface_errors[1:])
+    mode_orders = np.log2(mode_errors[:-1]/mode_errors[1:])
+    velocity_orders = np.log2(velocity_errors[:-1]/velocity_errors[1:])
+
+    PETSc.Sys.Print("CN surface convergence orders:", surface_orders)
+    PETSc.Sys.Print("CN mode-amplitude convergence orders:", mode_orders)
+    PETSc.Sys.Print("CN velocity convergence orders:", velocity_orders)
+
+    assert np.all(np.abs(surface_orders-2.0) < 0.25), surface_orders
+    assert np.all(np.abs(mode_orders-2.0) < 0.25), mode_orders
+    assert np.all(np.abs(velocity_orders-2.0) < 0.25), velocity_orders
 
 if __name__ == "__main__":
     test_fixed_mesh_standing_wave()

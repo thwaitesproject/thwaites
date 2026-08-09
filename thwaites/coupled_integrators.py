@@ -107,7 +107,10 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
                  predictor_solver_parameters={}, picard_iterations=1, pressure_nullspace=None):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         self.theta = firedrake.Constant(theta)
-        self.theta_p = 1  # should not be used for now - maybe revisit with free surface terms
+        # Use the same theta time level for velocity and pressure.  This is
+        # required for a consistent theta method when pressure is prognostic
+        # at a free surface; theta=0.5 then gives implicit midpoint/Crank-Nicolson.
+        self.theta_p = self.theta
         self.predictor_solver_parameters = predictor_solver_parameters
         self.picard_iterations = picard_iterations
         self.pressure_nullspace = pressure_nullspace
@@ -130,7 +133,6 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         u_old, p_old = self.solution_old.subfunctions
         u_star_theta = (1-self.theta)*u_old + self.theta*self.u_star
         u_theta = (1-self.theta)*u_old + self.theta*u
-        p_theta = (1-self.theta_p)*p_old + self.theta_p*p
         u_lag, p_lag = self.solution_lag.subfunctions
         u_lag_theta = (1-self.theta)*u_old + self.theta*u_lag
         p_lag_theta = (1-self.theta_p)*p_old + self.theta_p*p_lag
@@ -149,7 +151,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         # the correction solve, solving the coupled system:
         #   u1 = u* - dt*G ( p_theta - p_lag_theta)
-        #   div(u1) = 0
+        #   div(u_theta) = 0, with the full p1-p_old surface tendency
         self.F = self.equations[0].mass_term(self.u_test, u-self.u_star)
 
         pg_term = [term for term in self.equations[0]._terms if isinstance(term, PressureGradientTerm)][0]
@@ -160,10 +162,14 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         div_term = [term for term in self.equations[1]._terms if isinstance(term, DivergenceTerm)][0]
         div_fields = self.fields.copy()
-        div_fields['velocity'] = u
+        div_fields['velocity'] = u_theta
         div_fields['dt'] = self.dt_const  # used for free surface
         div_fields['old_pressure'] = p_old  # fixed over all Picard iterations
-        self.F -= self.dt_const*div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
+        # The divergence is imposed at the theta velocity time level, but the
+        # free-surface tendency is the complete p1-p_old time increment.  Do
+        # not pass p_theta here: that would spuriously multiply p1-p_old by
+        # theta in the surface mass term.
+        self.F -= self.dt_const*div_term.residual(self.p_test, p, p_lag, div_fields, bcs=self.bcs)
 
         W = self.solution.function_space()
         if self.pressure_nullspace is None:
