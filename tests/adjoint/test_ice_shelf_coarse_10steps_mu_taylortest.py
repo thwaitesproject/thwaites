@@ -514,6 +514,8 @@ def test_ice_shelf_coarse_adjoint():
     J.block_variable.adj_value = 1.0
 
     h = Function(mu)
-    h.dat.data[:] = 0.01*np.random.random(h.dat.data_ro.shape)
+    random_seed=12345
+    rng = np.random.default_rng(random_seed)
+    h.dat.data[:] = 0.01 * rng.uniform(low=-1.0, high=1.0,size=h.dat.data.shape)
     tt = taylor_test(rf, mu, h)
     assert np.allclose(tt, [2.0, 2.0, 2.0], rtol=5e-2)
