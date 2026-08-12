@@ -71,7 +71,7 @@ class BaseTerm(ABC):
         self.ds = ds
         self.dS = dS
         self.mesh = test_space.mesh()
-        self.dim = self.mesh.geometric_dimension()
+        self.dim = self.mesh.geometric_dimension
         self.n = firedrake.FacetNormal(self.mesh)
 
     @abstractmethod

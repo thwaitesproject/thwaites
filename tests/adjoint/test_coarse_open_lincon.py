@@ -40,7 +40,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -153,7 +153,7 @@ def test_ice_shelf_coarse_open_lincon_Tslope():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)
@@ -643,7 +643,7 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -756,7 +756,7 @@ def test_ice_shelf_coarse_open_lincon_Tintercept():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)
@@ -1238,7 +1238,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -1351,7 +1351,7 @@ def test_ice_shelf_coarse_open_lincon_Sslope():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)
@@ -1841,7 +1841,7 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
     # create mesh
     mesh = get_coarse_mesh()
 
-    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension())
+    PETSc.Sys.Print("Mesh dimension ", mesh.geometric_dimension)
 
     # shift z = 0 to surface of ocean. N.b z = 0 is outside domain.
     PETSc.Sys.Print("Length of lhs", assemble(Constant(1.0)*ds(1, domain=mesh)))
@@ -1954,7 +1954,7 @@ def test_ice_shelf_coarse_open_lincon_Sintercept():
 
     else:
         # Assign Initial conditions
-        v_init = zero(mesh.geometric_dimension())
+        v_init = zero(mesh.geometric_dimension)
         v_.assign(v_init)
 
         #u_init = Constant(0.0)

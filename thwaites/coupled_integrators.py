@@ -117,7 +117,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         self.u_test, self.p_test = firedrake.TestFunctions(self.solution.function_space())
 
         # the predictor space is the same as the first sub-space of the solution space, but indexed independently
-        mesh = self.solution.function_space().mesh()
+        mesh = self.solution.subfunctions[0].function_space().mesh()
         self.u_space = firedrake.FunctionSpace(mesh, self.solution.subfunctions[0].ufl_element())
         self.u_star_test = firedrake.TestFunction(self.u_space)
         self.u_star = firedrake.Function(self.u_space)

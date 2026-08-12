@@ -129,7 +129,7 @@ class ViscosityTerm(BaseTerm):
             # probably only works for orthog. quads and hexes
             sigma = 1.0
         else:
-            nf = self.mesh.ufl_cell().num_facets()
+            nf = self.mesh.ufl_cell().num_facets
             family = self.trial_space.ufl_element().family()
             if family in ['DQ', 'TensorProductElement', 'EnrichedElement']:
                 degree_gradient = degree

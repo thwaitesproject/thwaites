@@ -1,5 +1,5 @@
 pandas
 argparse
 rasterio 
-git+https://github.com/g-adopt/g-adopt@release#egg=gadopt
+git+https://github.com/g-adopt/g-adopt
 flake8
