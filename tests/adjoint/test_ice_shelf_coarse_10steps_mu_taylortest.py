@@ -9,7 +9,7 @@ import argparse
 import numpy as np
 from pyop2.profiling import timed_stage
 from adjoint_test_data import get_coarse_mesh, data_dir, tmp_dir
-
+import pytest
 from firedrake.adjoint import *
 from thwaites.adjoint_utility import DiagnosticBlock
 
