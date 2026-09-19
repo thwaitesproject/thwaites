@@ -25,6 +25,8 @@ class MomentumAdvectionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         u_adv = trial_lagged
+        if 'mesh_velocity' in fields:
+            u_adv = u_adv - fields['mesh_velocity']
         phi = test
         n = self.n
         u = trial

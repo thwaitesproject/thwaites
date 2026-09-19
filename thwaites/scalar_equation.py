@@ -25,6 +25,8 @@ class ScalarAdvectionTerm(BaseTerm):
     """
     def residual(self, test, trial, trial_lagged, fields, bcs):
         u = fields['velocity']
+        if 'mesh_velocity' in fields:
+            u = u - fields['mesh_velocity']
         phi = test
         n = self.n
         q = trial
