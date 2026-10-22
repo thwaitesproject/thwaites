@@ -80,12 +80,19 @@ SOLVER_CASES = [
 
 
 class SurfaceVolumeBalance:
-    """Check stepwise and accumulated volume per unit width in the 2-D tank."""
+    """Check reference volume; default absolute limits suit the 2-D tank.
 
-    def __init__(self, pressure, gravity, surface_measure, dt):
+    Integrals and tolerances have units m^2 per unit width in 2-D and m^3
+    in 3-D. Three-dimensional callers should supply their own limits.
+    """
+
+    def __init__(self, pressure, gravity, surface_measure, dt, *,
+                 step_tolerance=1.0e-8, total_tolerance=1.0e-6):
         self.eta = pressure/gravity
         self.ds = surface_measure
         self.dt = dt
+        self.step_tolerance = step_tolerance
+        self.total_tolerance = total_tolerance
         self.initial_volume = assemble(self.eta*self.ds)
         self.volume = self.initial_volume
         self.integrated_input = 0.0
@@ -104,10 +111,10 @@ class SurfaceVolumeBalance:
         self.max_step_error = max(self.max_step_error, abs(step_error))
         self.max_total_error = max(self.max_total_error, abs(total_error))
         self.volume = volume
-        # With the existing Schur tolerances, measured maxima across forced
-        # and unforced runs are 7.8e-9 per step and 1.6e-7 cumulative (m^2).
-        assert abs(step_error) < 1.0e-8, self.diagnostics()
-        assert abs(total_error) < 1.0e-6, self.diagnostics()
+        # The default 2-D limits retain the measured Schur maxima across
+        # forced/unforced runs: 7.8e-9 per step and 1.6e-7 cumulative (m^2).
+        assert abs(step_error) < self.step_tolerance, self.diagnostics()
+        assert abs(total_error) < self.total_tolerance, self.diagnostics()
 
     def diagnostics(self):
         return {
