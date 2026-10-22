@@ -22,8 +22,7 @@ import numpy as np
 import pytest
 
 from firedrake import (
-    NonlinearVariationalProblem, NonlinearVariationalSolver, TestFunctions,
-    TestFunction, div, grad, split,
+    TestFunctions, TestFunction, div, grad,
 )
 from firedrake.petsc import PETSc
 from thwaites import (
@@ -32,18 +31,11 @@ from thwaites import (
     SpatialCoordinate, VectorFunctionSpace, as_vector, assemble, cos, cosh,
     inner, sin, sinh,
 )
-from thwaites.equations import BaseEquation
-from thwaites.momentum_equation import CoriolisTerm, PressureGradientTerm
 from free_surface_helpers import (
     ASSEMBLED_SCHUR_SOLVER_PARAMETERS, DIRECT_SOLVER_PARAMETERS, SOLVER_CASES,
     SurfaceVolumeBalance,
 )
-
-
-class RotatingMomentumEquation(BaseEquation):
-    """Only physical pressure and Coriolis; no balancing force."""
-
-    terms = [PressureGradientTerm, CoriolisTerm]
+from rotating_wave_helpers import CoupledThetaReference, RotatingMomentumEquation
 
 
 def rotating_channel(nx=16, nz=4):
@@ -94,40 +86,6 @@ def initial_state(c):
                          c.shapes[2]*np.sin(c.phase0))),
               solver_parameters=DIRECT_SOLVER_PARAMETERS)
     return state
-
-
-class CoupledThetaReference:
-    """Independent monolithic weak theta equations, with direct LU.
-
-    No predictor, pressure increment, lagged pressure or projection call.
-    Only the physical equation residuals are shared with production.
-    """
-
-    def __init__(self, c, state, dt, theta):
-        self.old = Function(c.W)
-        self.state = state
-        u, p = split(state)
-        un, pn = split(self.old)
-        v, q = TestFunctions(c.W)
-        ut = (1-theta)*un+theta*u
-        pt = (1-theta)*pn+theta*p
-        F = c.momentum.mass_term(v, u-un)-dt*c.momentum.residual(
-            v, ut, ut, {**c.fields, "pressure": pt}, c.bcs,
-        )
-        F -= dt*c.continuity.residual(q, p, p, {
-            **c.fields, "velocity": ut, "old_pressure": pn,
-            "dt": dt, "theta": theta,
-        }, c.bcs)
-        self.form = F
-        self.solver = NonlinearVariationalSolver(
-            NonlinearVariationalProblem(F, state),
-            solver_parameters=DIRECT_SOLVER_PARAMETERS,
-            options_prefix="rotating_coupled_reference",
-        )
-
-    def advance(self, time):
-        self.old.assign(self.state)
-        self.solver.solve()
 
 
 def integrator(c, state, dt, theta, picard, solver_parameters):
