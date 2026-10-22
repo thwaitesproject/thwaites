@@ -253,12 +253,17 @@ class DivergenceTerm(BaseTerm):
                 F += psi*(bc['un'] - dot(n, u))*self.ds(id)
             elif 'free_surface' in bc:
                 # Linearised kinematic condition on a flat, fixed surface:
-                # u.n = eta_t = (p_new-p_old)/(g*dt). The old pressure is the
-                # beginning-of-step value supplied by pressure projection.
+                # eta_t = u.n + F_theta, with freshwater flux F in m/s,
+                # positive into the water. The old pressure is fixed at the
+                # beginning of the step by pressure projection.
                 g = fields.get('gravity', 9.81)
                 dt = fields['dt']
                 old_pressure = fields['old_pressure']
-                F += psi*(trial-old_pressure)/(g*dt)*self.ds(id)
+                flux = bc.get('freshwater_flux', 0.0)
+                old_flux = bc.get('freshwater_flux_old', flux)
+                theta = fields['theta']
+                flux_theta = (1-theta)*old_flux + theta*flux
+                F += psi*((trial-old_pressure)/(g*dt) - flux_theta)*self.ds(id)
                 F -= psi*dot(n, u)*self.ds(id)
 
         return -F

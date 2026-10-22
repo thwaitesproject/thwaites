@@ -110,6 +110,18 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
     to 9.81. Do not supply a constant pressure nullspace for a free-surface run.
     The surface evolves with the selected theta method; rigid-lid runs retain
     their existing pressure weighting and end-of-step continuity constraint.
+
+    A free-surface boundary may also prescribe ``'freshwater_flux': F_new``
+    in m/s, positive for water input, using a scalar, Constant, Function or
+    scalar UFL expression on the fixed reference surface. The linear condition
+    is ``eta_t = u.n + F``. For time-dependent input, also provide
+    ``'freshwater_flux_old': F_old``. Before each ``advance(t)``, assign these
+    coefficients their values at ``t + dt`` and ``t`` respectively; keep the
+    coefficient objects in place. The solver uses
+    ``F_theta = (1-theta)*F_old + theta*F_new``, fixed across Picard iterations.
+    Without an old value, the flux is treated as constant over that step.
+    Omitting both values gives zero input. Forcing callbacks are not evaluated
+    by this integrator. This source affects surface kinematics only.
     """
 
     def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}, theta=1.0,
@@ -161,7 +173,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         # the correction solve, solving the coupled system:
         #   u1 = u* - dt*G ( p_theta - p_lag_theta)
         #   div(u1) = 0 for a rigid lid; the free surface uses u_theta and
-        #   replaces the surface flux with (p1-p_old)/(g*dt).
+        #   replaces the surface flux with (p1-p_old)/(g*dt) - F_theta.
         self.F = self.equations[0].mass_term(self.u_test, u-self.u_star)
 
         pg_term = [term for term in self.equations[0]._terms if isinstance(term, PressureGradientTerm)][0]
@@ -177,6 +189,7 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
             div_fields['velocity'] = u_theta
             div_fields['dt'] = self.dt_const
             div_fields['old_pressure'] = p_old  # fixed over all Picard iterations
+            div_fields['theta'] = self.theta
         # A free surface uses u_theta in the divergence, but the complete
         # p1-p_old increment in the surface tendency. Passing p_theta here
         # would spuriously multiply that increment by theta.
