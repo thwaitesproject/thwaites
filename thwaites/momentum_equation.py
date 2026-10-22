@@ -208,10 +208,10 @@ class PressureGradientTerm(BaseTerm):
         # do nothing should be zero (normal) stress:
         F += -dot(phi, n)*p*self.ds
 
-        # for those boundaries where the normal component of u is specified
-        # we take it out again
+        # Retain the pressure trace where normal velocity is prescribed or
+        # coupled to the free-surface elevation, rather than setting p=0.
         for id, bc in bcs.items():
-            if 'u' in bc or 'un' in bc:
+            if 'u' in bc or 'un' in bc or 'free_surface' in bc:
                 F += dot(phi, n)*p*self.ds(id)
 
         return -F
@@ -251,6 +251,15 @@ class DivergenceTerm(BaseTerm):
                 F += psi*dot(n, bc['u']-u)*self.ds(id)
             elif 'un' in bc:
                 F += psi*(bc['un'] - dot(n, u))*self.ds(id)
+            elif 'free_surface' in bc:
+                # Linearised kinematic condition on a flat, fixed surface:
+                # u.n = eta_t = (p_new-p_old)/(g*dt). The old pressure is the
+                # beginning-of-step value supplied by pressure projection.
+                g = fields.get('gravity', 9.81)
+                dt = fields['dt']
+                old_pressure = fields['old_pressure']
+                F += psi*(trial-old_pressure)/(g*dt)*self.ds(id)
+                F -= psi*dot(n, u)*self.ds(id)
 
         return -F
 

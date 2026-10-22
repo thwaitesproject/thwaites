@@ -103,11 +103,23 @@ class CrankNicolsonSaddlePointTimeIntegrator(SaddlePointTimeIntegrator):
 
 
 class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
+    """Pressure projection with an optional linear, fixed-mesh free surface.
+
+    Mark a flat surface with ``{'free_surface': None}`` in ``bcs``. Its pressure
+    trace gives elevation as ``eta = p / g``, where ``fields['gravity']`` defaults
+    to 9.81. Do not supply a constant pressure nullspace for a free-surface run.
+    The surface evolves with the selected theta method; rigid-lid runs retain
+    their existing pressure weighting and end-of-step continuity constraint.
+    """
+
     def __init__(self, equations, solution, fields, coupling, dt, bcs=None, solver_parameters={}, theta=1.0,
                  predictor_solver_parameters={}, picard_iterations=1, pressure_nullspace=None):
         super().__init__(equations, solution, fields, coupling, dt, bcs=bcs, solver_parameters=solver_parameters)
         self.theta = firedrake.Constant(theta)
-        self.theta_p = 1  # should not be used for now - maybe revisit with free surface terms
+        self.free_surface = any('free_surface' in bc for bc in (bcs or {}).values())
+        # Pressure is prognostic at a free surface and needs the same time
+        # weighting as velocity. Retain the existing weighting otherwise.
+        self.theta_p = self.theta if self.free_surface else 1
         self.predictor_solver_parameters = predictor_solver_parameters
         self.picard_iterations = picard_iterations
         self.pressure_nullspace = pressure_nullspace
@@ -130,7 +142,6 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         u_old, p_old = self.solution_old.subfunctions
         u_star_theta = (1-self.theta)*u_old + self.theta*self.u_star
         u_theta = (1-self.theta)*u_old + self.theta*u
-        p_theta = (1-self.theta_p)*p_old + self.theta_p*p
         u_lag, p_lag = self.solution_lag.subfunctions
         u_lag_theta = (1-self.theta)*u_old + self.theta*u_lag
         p_lag_theta = (1-self.theta_p)*p_old + self.theta_p*p_lag
@@ -149,7 +160,8 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
 
         # the correction solve, solving the coupled system:
         #   u1 = u* - dt*G ( p_theta - p_lag_theta)
-        #   div(u1) = 0
+        #   div(u1) = 0 for a rigid lid; the free surface uses u_theta and
+        #   replaces the surface flux with (p1-p_old)/(g*dt).
         self.F = self.equations[0].mass_term(self.u_test, u-self.u_star)
 
         pg_term = [term for term in self.equations[0]._terms if isinstance(term, PressureGradientTerm)][0]
@@ -161,7 +173,14 @@ class PressureProjectionTimeIntegrator(SaddlePointTimeIntegrator):
         div_term = [term for term in self.equations[1]._terms if isinstance(term, DivergenceTerm)][0]
         div_fields = self.fields.copy()
         div_fields['velocity'] = u
-        self.F -= self.dt_const*div_term.residual(self.p_test, p_theta, p_lag_theta, div_fields, bcs=self.bcs)
+        if self.free_surface:
+            div_fields['velocity'] = u_theta
+            div_fields['dt'] = self.dt_const
+            div_fields['old_pressure'] = p_old  # fixed over all Picard iterations
+        # A free surface uses u_theta in the divergence, but the complete
+        # p1-p_old increment in the surface tendency. Passing p_theta here
+        # would spuriously multiply that increment by theta.
+        self.F -= self.dt_const*div_term.residual(self.p_test, p, p_lag, div_fields, bcs=self.bcs)
 
         W = self.solution.function_space()
         if self.pressure_nullspace is None:
